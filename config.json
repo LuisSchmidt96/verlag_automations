@@ -1,0 +1,11 @@
+{
+  "verlag_knr_booxpress": "068249",
+  "kommliste_pfad": "kommliste.xlsx",
+  "absender_name": "verlag regionalkultur",
+  "absender_adresse": "Bahnhofstr. 2, 76698 Ubstadt-Weiher",
+  "libri_pattern": "^Libri",
+  "libri_strasse": "Europaallee 1",
+  "libri_plz_ort": "36244 Bad Hersfeld",
+  "output_dir": "etiketten_output",
+  "last_input_dir": "/home/cornholius/Projects/verlag_automations"
+}
