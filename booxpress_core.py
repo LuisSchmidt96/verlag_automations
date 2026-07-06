@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -54,6 +55,10 @@ DEFAULT_CONFIG = {
     "libri_plz_ort": "36244 Bad Hersfeld",
     "output_dir": "etiketten_output",
     "last_input_dir": "",
+    # Pfad zur fortlaufenden Paketnummer. Relativ = neben der .exe.
+    # Für gemeinsame Nutzung mehrerer PCs einen Netzlaufwerk-/UNC-Pfad
+    # eintragen, z. B. "\\\\SERVER\\Freigabe\\booxpress\\paketnr.txt".
+    "paketnr_pfad": "paketnr.txt",
 }
 
 
@@ -78,18 +83,45 @@ def speichere_config(cfg: dict) -> None:
 # Paketnummer-Counter
 # ---------------------------------------------------------------------
 
-def lade_paketnr() -> int:
-    if not PAKETNR_PFAD.exists():
-        PAKETNR_PFAD.write_text("1\n", encoding="utf-8")
+def paketnr_pfad(cfg: dict | None = None) -> Path:
+    """Löst den (evtl. in config.json gesetzten) Pfad zur paketnr.txt auf.
+
+    Relative Pfade zählen ab dem App-Ordner (neben der .exe), absolute und
+    UNC-Pfade (\\\\SERVER\\Freigabe\\...) werden unverändert genutzt – so
+    können mehrere PCs denselben Counter im Netzlaufwerk teilen.
+    """
+    raw = (cfg or {}).get("paketnr_pfad") or "paketnr.txt"
+    p = Path(os.path.expandvars(str(raw))).expanduser()
+    if not p.is_absolute():
+        p = APP_DIR / p
+    return p
+
+
+def _schreibe_atomar(pfad: Path, inhalt: str) -> None:
+    """Erst in Temp-Datei schreiben, dann umbenennen – verhindert eine
+    halb geschriebene/kaputte Datei bei gemeinsamer Netzwerknutzung."""
+    pfad.parent.mkdir(parents=True, exist_ok=True)
+    tmp = pfad.parent / f".{pfad.name}.{os.getpid()}.tmp"
+    tmp.write_text(inhalt, encoding="utf-8")
+    os.replace(tmp, pfad)
+
+
+def lade_paketnr(cfg: dict | None = None) -> int:
+    pfad = paketnr_pfad(cfg)
+    if not pfad.exists():
+        try:
+            _schreibe_atomar(pfad, "1\n")
+        except OSError:
+            pass
         return 1
     try:
-        return int(PAKETNR_PFAD.read_text(encoding="utf-8").strip())
+        return int(pfad.read_text(encoding="utf-8").strip())
     except (ValueError, OSError):
         return 1
 
 
-def speichere_paketnr(n: int) -> None:
-    PAKETNR_PFAD.write_text(f"{n}\n", encoding="utf-8")
+def speichere_paketnr(n: int, cfg: dict | None = None) -> None:
+    _schreibe_atomar(paketnr_pfad(cfg), f"{n}\n")
 
 
 # ---------------------------------------------------------------------
@@ -97,14 +129,20 @@ def speichere_paketnr(n: int) -> None:
 # ---------------------------------------------------------------------
 
 class Etikett:
-    __slots__ = ("name", "strasse", "plz_ort", "barcode_data", "belegnr")
+    __slots__ = ("name", "strasse", "plz_ort", "vd", "belegnr",
+                 "matchcode", "gematcht", "paketnr", "barcode_data")
 
-    def __init__(self, name, strasse, plz_ort, barcode_data, belegnr):
+    def __init__(self, name, strasse, plz_ort, vd, belegnr,
+                 matchcode="", gematcht=False):
         self.name = name
         self.strasse = strasse
         self.plz_ort = plz_ort
-        self.barcode_data = barcode_data
+        self.vd = vd              # Kundennummer (VD) — geht in den Barcode
         self.belegnr = belegnr
+        self.matchcode = matchcode  # Kurzname aus dem Auftrag (Anzeige)
+        self.gematcht = gematcht    # in Komm-Liste gefunden?
+        self.paketnr = None       # wird erst nach der Auswahl vergeben
+        self.barcode_data = ""    # wird von setze_barcodes() gefüllt
 
 
 def lade_auftraege(pfad: Path) -> pd.DataFrame:
@@ -141,58 +179,87 @@ def _clean(value) -> str:
 # Matching & Etikett-Erzeugung
 # ---------------------------------------------------------------------
 
-def generiere_etiketten(auftraege, kommliste, cfg, start_paketnr):
-    bx_by_vd = {str(row["VD"]).strip(): row for _, row in kommliste.iterrows()}
-    verlag_knr = cfg["verlag_knr_booxpress"]
+def generiere_etiketten(auftraege, kommliste, cfg):
+    """Liefert ein Etikett je Auftrag — ALLE Aufträge, ungefiltert.
+
+    Der Abgleich mit der Komm-Liste dient nur noch dazu, Name und Adresse
+    vorzubelegen (die Auftragsdatei selbst enthält keine Adresse). Wo kein
+    Komm-Listen-Treffer vorliegt, bleibt die Adresse leer und der Matchcode
+    dient als Anhaltspunkt — der Nutzer wählt aus und ergänzt von Hand.
+
+    Paketnummer und Barcode werden hier NOCH NICHT vergeben — das passiert
+    erst nach der Auswahl durch setze_barcodes(), damit die fortlaufenden
+    Nummern lückenlos nur an die tatsächlich gedruckten Etiketten gehen.
+    """
+    if kommliste is None or len(kommliste) == 0 or "VD" not in kommliste.columns:
+        bx_by_vd = {}
+    else:
+        bx_by_vd = {str(row["VD"]).strip(): row
+                    for _, row in kommliste.iterrows()}
     libri_re = re.compile(cfg["libri_pattern"], re.IGNORECASE)
 
-    etiketten, warnungen = [], []
-    paketnr = start_paketnr
+    etiketten = []
 
     for _, auftrag in auftraege.iterrows():
         kd_nr = _clean(auftrag.get("Kd.-Nr.", ""))
-        if not kd_nr:
-            continue
         matchcode = _clean(auftrag.get("Matchcode", ""))
         belegnr = _clean(auftrag.get("Belegnr.", ""))
+        if not kd_nr and not belegnr and not matchcode:
+            continue  # komplett leere Zeile
 
-        if not kd_nr.startswith("1"):
-            warnungen.append({"belegnr": belegnr, "kd_nr": kd_nr,
-                              "matchcode": matchcode, "grund": "Endkunde — kein BOOXpress"})
-            continue
-
-        vd = _strip_leading_one(kd_nr)
+        vd = _strip_leading_one(kd_nr) if kd_nr else ""
         bx_row = bx_by_vd.get(vd)
-        if bx_row is None:
-            warnungen.append({"belegnr": belegnr, "kd_nr": kd_nr,
-                              "matchcode": matchcode,
-                              "grund": f"VD {vd} nicht in Komm-Liste (vmtl. GLS)"})
-            continue
+        if bx_row is not None:
+            name1 = _clean(bx_row.get("Name1"))
+            name2 = _clean(bx_row.get("Name2"))
+            strasse = _clean(bx_row.get("Strasse"))
+            hausnr = _clean(bx_row.get("Hausnummer"))
+            plz = _clean(bx_row.get("PLZ"))
+            ort = _clean(bx_row.get("Ort"))
 
-        name1 = _clean(bx_row.get("Name1"))
-        name2 = _clean(bx_row.get("Name2"))
-        strasse = _clean(bx_row.get("Strasse"))
-        hausnr = _clean(bx_row.get("Hausnummer"))
-        plz = _clean(bx_row.get("PLZ"))
-        ort = _clean(bx_row.get("Ort"))
-
-        if libri_re.match(name1):
-            empf_name = f"Libri_{vd}"
-            empf_strasse = cfg["libri_strasse"]
-            empf_plz_ort = cfg["libri_plz_ort"]
+            if libri_re.match(name1):
+                empf_name = f"Libri_{vd}"
+                empf_strasse = cfg["libri_strasse"]
+                empf_plz_ort = cfg["libri_plz_ort"]
+            else:
+                empf_name = name1 + (f"\n{name2}" if name2 else "")
+                empf_strasse = f"{strasse} {hausnr}".strip()
+                empf_plz_ort = f"{plz} {ort}".strip()
+            gematcht = True
         else:
-            empf_name = name1 + (f"\n{name2}" if name2 else "")
-            empf_strasse = f"{strasse} {hausnr}".strip()
-            empf_plz_ort = f"{plz} {ort}".strip()
-
-        barcode_data = f"{verlag_knr}{paketnr:06d}{vd.zfill(6)}"
-        assert len(barcode_data) == 18 and barcode_data.isdigit()
+            # kein Komm-Listen-Treffer: Matchcode als Namensvorschlag,
+            # Adresse leer — vom Nutzer zu ergänzen
+            empf_name = matchcode
+            empf_strasse = ""
+            empf_plz_ort = ""
+            gematcht = False
 
         etiketten.append(Etikett(empf_name, empf_strasse, empf_plz_ort,
-                                  barcode_data, belegnr))
-        paketnr += 1
+                                  vd, belegnr, matchcode=matchcode,
+                                  gematcht=gematcht))
 
-    return etiketten, warnungen
+    return etiketten
+
+
+def setze_barcodes(etiketten, cfg, start_paketnr: int) -> int:
+    """Vergibt fortlaufende Paketnummern ab start_paketnr an die (bereits
+    ausgewählten/bearbeiteten) Etiketten und baut die Barcode-Daten.
+    Gibt die nächste freie Paketnummer zurück."""
+    verlag_knr = str(cfg["verlag_knr_booxpress"])
+    pkt = int(start_paketnr)
+    for et in etiketten:
+        vd = str(et.vd).strip()
+        barcode = f"{verlag_knr}{pkt:06d}{vd.zfill(6)}"
+        if len(barcode) != 18 or not barcode.isdigit():
+            raise ValueError(
+                f"Ungültige Barcode-Daten '{barcode}' (Beleg {et.belegnr}).\n"
+                f"Verlag-K-Nr. ({verlag_knr}) und Kundennummer ({vd}) müssen "
+                f"zusammen 18 Ziffern ergeben."
+            )
+        et.paketnr = pkt
+        et.barcode_data = barcode
+        pkt += 1
+    return pkt
 
 
 # ---------------------------------------------------------------------
@@ -262,14 +329,30 @@ ETIKETTEN_PRO_SEITE = 8
 
 
 def baue_docx(etiketten, output_pfad: Path, cfg: dict,
-              start_position: int = 1) -> None:
-    """start_position: 1..8 (Pos. auf der ersten Seite, von oben links nach
-    unten rechts gezählt). Erlaubt das Weiterverwenden teilbedruckter Bögen.
-    Vorausgegangene Positionen werden als leere Zellen erzeugt."""
-    if not 1 <= start_position <= ETIKETTEN_PRO_SEITE:
+              positionen) -> None:
+    """Erzeugt einen einzelnen A4-Etikettenbogen (4×2 = 8 Plätze).
+
+    positionen: Liste der zu bedruckenden Plätze (1..8, von oben links nach
+    unten rechts gezählt). Die Etiketten werden der Reihe nach in die
+    aufsteigend sortierten ausgewählten Plätze gelegt; alle übrigen Plätze
+    bleiben leer. So lassen sich teilbedruckte Bögen weiterverwenden.
+    """
+    positionen = sorted({int(p) for p in positionen})
+    for p in positionen:
+        if not 1 <= p <= ETIKETTEN_PRO_SEITE:
+            raise ValueError(
+                f"Platz muss 1..{ETIKETTEN_PRO_SEITE} sein, war {p}"
+            )
+    if len(etiketten) > len(positionen):
         raise ValueError(
-            f"start_position muss 1..{ETIKETTEN_PRO_SEITE} sein, war {start_position}"
+            f"{len(etiketten)} Etiketten, aber nur {len(positionen)} "
+            f"ausgewählte Plätze auf dem Bogen."
         )
+
+    # Platz-Nummer (1-basiert) → Etikett; Rest bleibt None
+    slots = [None] * ETIKETTEN_PRO_SEITE
+    for et, pos in zip(etiketten, positionen):
+        slots[pos - 1] = et
 
     doc = Document()
 
@@ -284,11 +367,7 @@ def baue_docx(etiketten, output_pfad: Path, cfg: dict,
     sec.left_margin = Cm(0)
     sec.right_margin = Cm(0)
 
-    etiketten = [None] * (start_position - 1) + list(etiketten)
-    if len(etiketten) % 2 == 1:
-        etiketten = etiketten + [None]
-
-    zeilen = len(etiketten) // 2
+    zeilen = ETIKETTEN_PRO_SEITE // 2
     table = doc.add_table(rows=zeilen, cols=2)
     table.autofit = False
     _tabelle_konfig(table)
@@ -299,7 +378,7 @@ def baue_docx(etiketten, output_pfad: Path, cfg: dict,
         for ci in range(2):
             cell = row.cells[ci]
             _zelle_konfig(cell)
-            _zelle_fuellen(cell, etiketten[ri * 2 + ci], cfg)
+            _zelle_fuellen(cell, slots[ri * 2 + ci], cfg)
 
     output_pfad.parent.mkdir(parents=True, exist_ok=True)
     doc.save(output_pfad)

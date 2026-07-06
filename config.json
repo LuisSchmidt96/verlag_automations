@@ -7,5 +7,6 @@
   "libri_strasse": "Europaallee 1",
   "libri_plz_ort": "36244 Bad Hersfeld",
   "output_dir": "etiketten_output",
-  "last_input_dir": "/home/cornholius/Projects/verlag_automations"
+  "last_input_dir": "/home/cornholius/Projects/verlag_automations",
+  "paketnr_pfad": "paketnr.txt"
 }
