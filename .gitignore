@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# PyInstaller build output
+build/
+dist/
+*.manifest
+
+# Generated label output
+etiketten_output/
+
+# Runtime state (app-mutated)
+config.json
+paketnr.txt
+
+# LibreOffice / Office lock files
+.~lock.*#
+~$*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
