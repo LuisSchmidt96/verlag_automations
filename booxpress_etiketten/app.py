@@ -29,7 +29,7 @@ from tkinter import (Tk, Canvas, filedialog, messagebox,
 from tkinter import ttk
 from tkinter.simpledialog import askinteger
 
-import booxpress_core as core
+from booxpress_etiketten import core
 
 
 class App(Tk):
@@ -417,5 +417,9 @@ class App(Tk):
             os.system(f'xdg-open "{pfad}"')
 
 
-if __name__ == "__main__":
+def main():
     App().mainloop()
+
+
+if __name__ == "__main__":
+    main()

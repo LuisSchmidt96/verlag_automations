@@ -26,17 +26,20 @@ from docx.shared import Cm, Pt
 
 
 # ---------------------------------------------------------------------
-# App-Ordner (für Config, Counter, Komm-Liste)
+# Daten-Ordner (Config, Counter, Komm-Liste, Ausgabe)
 # ---------------------------------------------------------------------
 
-def app_dir() -> Path:
-    """Ordner neben der .exe (bei PyInstaller-Build) bzw. neben dem Skript."""
+def _base_dir() -> Path:
+    """Ordner neben der .exe (PyInstaller-Build) bzw. neben dem Tool-Code."""
     if getattr(sys, "frozen", False):
         return Path(sys.executable).parent
     return Path(__file__).parent
 
 
-APP_DIR = app_dir()
+# Sämtliche Laufzeitdateien liegen im Unterordner "data" neben der .exe,
+# damit Programm und Daten sauber getrennt sind.
+APP_DIR = _base_dir() / "data"
+APP_DIR.mkdir(parents=True, exist_ok=True)
 CONFIG_PFAD = APP_DIR / "config.json"
 PAKETNR_PFAD = APP_DIR / "paketnr.txt"
 

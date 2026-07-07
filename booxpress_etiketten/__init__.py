@@ -1,0 +1,1 @@
+"""BOOXpress-Etiketten-Generator."""

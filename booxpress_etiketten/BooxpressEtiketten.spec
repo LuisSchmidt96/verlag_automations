@@ -1,5 +1,10 @@
 # -*- mode: python ; coding: utf-8 -*-
+import os
 from PyInstaller.utils.hooks import collect_all
+
+# Repo-Wurzel (ein Ordner über diesem Spec) muss auf den Suchpfad, damit die
+# Pakete `booxpress_etiketten` und `shared` importierbar sind.
+REPO_ROOT = os.path.dirname(SPECPATH)
 
 datas = []
 binaries = []
@@ -9,8 +14,8 @@ datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
 
 a = Analysis(
-    ['booxpress_app.py'],
-    pathex=[],
+    [os.path.join(SPECPATH, 'main.py')],
+    pathex=[REPO_ROOT],
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
