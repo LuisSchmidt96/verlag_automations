@@ -47,6 +47,8 @@ class App(Tk):
             self.cfg = dict(core.DEFAULT_CONFIG)
 
         self.paketnr_var = StringVar(value=str(core.lade_paketnr(self.cfg)))
+        self.paketnr_pfad_var = StringVar(
+            value=str(core.paketnr_pfad(self.cfg)))
         self.auftraege_pfad = StringVar(value="")
         # 8 Etikettenplätze auf dem Bogen (1=o.links … 8=u.rechts).
         # True = Platz ist frei und soll bedruckt werden.
@@ -83,11 +85,21 @@ class App(Tk):
         frm_pkt = ttk.LabelFrame(top, text="Nächste Paketnummer")
         frm_pkt.pack(side="left", fill="both", expand=True)
         inner = ttk.Frame(frm_pkt)
-        inner.pack(fill="x", padx=8, pady=8)
+        inner.pack(fill="x", padx=8, pady=(8, 2))
         ttk.Label(inner, textvariable=self.paketnr_var,
                   font=("Segoe UI", 18, "bold")).pack(side="left")
         ttk.Button(inner, text="Zurücksetzen…",
                    command=self._reset_paketnr).pack(side="right")
+
+        # Speicherort der paketnr.txt (z. B. Netzlaufwerk für mehrere PCs)
+        pfad_row = ttk.Frame(frm_pkt)
+        pfad_row.pack(fill="x", padx=8, pady=(0, 8))
+        ttk.Label(pfad_row, text="Datei:").pack(side="left")
+        ttk.Entry(pfad_row, textvariable=self.paketnr_pfad_var,
+                  state="readonly").pack(side="left", fill="x", expand=True,
+                                         padx=6)
+        ttk.Button(pfad_row, text="Auswählen…",
+                   command=self._waehle_paketnr_pfad).pack(side="left")
 
         # Freie Etikettenplätze auf dem Bogen
         frm_grid = ttk.LabelFrame(
@@ -297,6 +309,30 @@ class App(Tk):
             core.speichere_paketnr(neu, self.cfg)
             self.paketnr_var.set(str(neu))
             self._log(f"Paketnummer manuell auf {neu} gesetzt.")
+
+    def _waehle_paketnr_pfad(self):
+        aktuell = core.paketnr_pfad(self.cfg)
+        pfad = filedialog.asksaveasfilename(
+            title="Speicherort für die Paketnummer wählen "
+                  "(z. B. auf dem Netzlaufwerk)",
+            initialfile=aktuell.name or "paketnr.txt",
+            initialdir=(str(aktuell.parent)
+                        if aktuell.parent.is_dir() else None),
+            defaultextension=".txt",
+            filetypes=[("Textdatei", "*.txt"), ("Alle Dateien", "*.*")],
+            confirmoverwrite=False,  # vorhandenen gemeinsamen Zähler nutzen
+        )
+        if not pfad:
+            return
+        self.cfg["paketnr_pfad"] = pfad
+        try:
+            core.speichere_config(self.cfg)
+        except Exception as e:
+            self._log(f"⚠ Konnte Pfad nicht speichern: {e}")
+        self.paketnr_pfad_var.set(str(core.paketnr_pfad(self.cfg)))
+        # Nächste Nummer aus dem (evtl. schon vorhandenen) Zähler übernehmen
+        self.paketnr_var.set(str(core.lade_paketnr(self.cfg)))
+        self._log(f"Paketnr-Datei: {core.paketnr_pfad(self.cfg)}")
 
     def _set_alle_plaetze(self, wert: bool):
         for var in self.pos_vars:
