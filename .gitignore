@@ -15,12 +15,21 @@ build/
 dist/
 *.manifest
 
-# Generated label output
+# Generated output
 etiketten_output/
+pi_bi_output/
+pi_bi_generator/data/cover_cache/
 
 # Runtime state (app-mutated)
 config.json
 paketnr.txt
+
+# PI/BI: heavy sample binaries (keep xml + reference docx/html only)
+pi_bi_generator/beispiele/**/*.pdf
+pi_bi_generator/beispiele/**/*.xlsx
+pi_bi_generator/beispiele/**/2D_300_*.jpg
+pi_bi_generator/beispiele/**/3D_300_*.jpg
+pi_bi_generator/beispiele/**/.~lock.*
 
 # LibreOffice / Office lock files
 .~lock.*#
