@@ -3,6 +3,10 @@
 openpyxl==3.1.5
 pandas==3.0.3
 pillow==12.2.0
+pymupdf==1.28.0
 python-barcode==0.16.1
 python-docx==1.2.0
 pyinstaller==6.20.0
+
+# cover_previews 3D-Schritt steuert Photoshop per COM — nur unter Windows.
+pywin32==306 ; sys_platform == "win32"

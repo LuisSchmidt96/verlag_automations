@@ -8,7 +8,7 @@ gebaut und ist unabhängig von den anderen (kein geteilter Code – bewusst).
 
 ```
 verlag_automations/
-├── booxpress_etiketten/        ← ein Tool (BOOXpress-Versandetiketten)
+├── booxpress_etiketten/        ← BOOXpress-Versandetiketten (Lexware → Etiketten-docx)
 │   ├── core.py                 ← reine Logik, ohne UI
 │   ├── app.py                  ← Tkinter-GUI
 │   ├── main.py                 ← Einstiegspunkt für den .exe-Build
@@ -21,11 +21,17 @@ verlag_automations/
 │   ├── core.py, app.py, main.py, PiBiGenerator.spec, README.md
 │   ├── vorlagen/               ← docx-/html-Vorlagen (in die .exe gebündelt)
 │   └── beispiele/              ← Beispiel-XML + Referenzdokumente
+├── cover_previews/             ← Cover-Previews (Umschlag-PDF → 2D-/3D-Vorschau-PNGs)
+│   ├── core.py, app.py, main.py, CoverPreviews.spec, README.md
+│   └── mockups/                ← Photoshop-Mockup-PSDs (lokal, nicht eingecheckt)
 ├── tools/
 │   └── update_and_build.ps1    ← zieht Git-Änderungen & baut alle Tools neu
 ├── requirements.txt            ← gemeinsame Python-Abhängigkeiten
 └── README.md
 ```
+
+Alle Tools folgen demselben Muster (`core.py` / `app.py` / `main.py` /
+`<Name>.spec` / `data/`).
 
 ## Ein neues Tool hinzufügen
 

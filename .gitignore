@@ -19,6 +19,7 @@ dist/
 etiketten_output/
 pi_bi_output/
 cover_cache/
+cover_output/
 
 # Runtime state (app-mutated)
 config.json
@@ -30,6 +31,10 @@ pi_bi_generator/beispiele/**/*.xlsx
 pi_bi_generator/beispiele/**/2D_300_*.jpg
 pi_bi_generator/beispiele/**/3D_300_*.jpg
 pi_bi_generator/beispiele/**/.~lock.*
+
+# Cover-Previews: heavy local-only inputs (sample PDFs, mockup PSDs)
+cover_previews/beispiele/*.pdf
+cover_previews/mockups/*.psd
 
 # LibreOffice / Office lock files
 .~lock.*#
