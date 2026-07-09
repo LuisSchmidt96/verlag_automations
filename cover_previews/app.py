@@ -31,7 +31,9 @@ from PIL import Image, ImageTk
 
 from cover_previews import core
 
-PREVIEW_MAX_W = 820          # Breite der Vorschau in Pixeln
+PREVIEW_MAX_W = 820          # max. Breite der Vorschau in Pixeln
+PREVIEW_MAX_H = 460          # max. Höhe der Vorschau (damit die Bedienelemente
+                             # unten sichtbar bleiben)
 PREVIEW_RENDER_DPI = 96      # Rasterung fürs Vorschaubild
 
 
@@ -57,9 +59,10 @@ class App(Tk):
         self._drag = None               # (orientierung, index) beim Ziehen
 
         self.pdf_pfad = StringVar()
-        self.psd_pfad = StringVar(value=self.cfg.get("mockup_psd_pfad", ""))
-        self.layer_name = StringVar(
-            value=(self.cfg.get("mockup_slots") or [{}])[0].get("layer", "COVER"))
+        self.vorlagen_dir_var = StringVar(
+            value=str(core.vorlagen_dir(self.cfg)))
+        self.vorlage_var = StringVar()          # gewählte Vorlagen-Datei
+        self.vorlage_info = StringVar(value="—")
         self.out_2d = BooleanVar(value=True)
         self.out_3d = BooleanVar(value=True)
         self.info_var = StringVar(value="Bitte ein Umschlag-PDF wählen.")
@@ -87,20 +90,24 @@ class App(Tk):
         ttk.Button(frm_pdf, text="Neu erkennen", command=self._erkenne).pack(
             side="left", padx=(0, 8), pady=8)
 
-        # Vorschau
+        # Bedienelemente unten zuerst verankern, damit sie nie verdeckt werden.
+        unten = ttk.Frame(self)
+        unten.pack(side="bottom", fill="x")
+
+        # Vorschau füllt den verbleibenden Platz darüber.
         frm_prev = ttk.LabelFrame(
             self, text="Vorschau — blaue Linien mit der Maus justieren "
                        "(grün=Rückseite, orange=Rücken, rot=Vorderseite)")
-        frm_prev.pack(fill="both", expand=True, **pad)
+        frm_prev.pack(side="top", fill="both", expand=True, **pad)
         self.canvas = Canvas(frm_prev, background="#2b2b2b",
-                             highlightthickness=0, height=430)
+                             highlightthickness=0, height=300)
         self.canvas.pack(fill="both", expand=True, padx=6, pady=6)
         self.canvas.bind("<Button-1>", self._greife_linie)
         self.canvas.bind("<B1-Motion>", self._ziehe_linie)
         self.canvas.bind("<ButtonRelease-1>", self._lasse_linie)
 
         # Ausgaben + Mockup
-        bottom = ttk.Frame(self)
+        bottom = ttk.Frame(unten)
         bottom.pack(fill="x", **pad)
 
         frm_out = ttk.LabelFrame(bottom, text="Ausgaben")
@@ -110,26 +117,31 @@ class App(Tk):
         ttk.Checkbutton(frm_out, text="3D-Mockup (Photoshop)",
                         variable=self.out_3d).pack(anchor="w", padx=8, pady=(0, 6))
         ttk.Label(frm_out,
-                  text=f"Auflösungen: {self.cfg['dpi_print']} dpi (Druck) + "
-                       f"{self.cfg['dpi_web']} dpi (Web, ~{self.cfg['web_max_px']} px)",
+                  text=f"2D als JPEG, 3D als PNG+JPEG — je {self.cfg['dpi_print']} "
+                       f"& {self.cfg['dpi_web']} dpi",
                   foreground="gray").pack(anchor="w", padx=8, pady=(0, 6))
 
-        frm_ps = ttk.LabelFrame(bottom, text="3D-Mockup (Photoshop-PSD)")
+        frm_ps = ttk.LabelFrame(bottom, text="3D-Mockup-Vorlage (nach Buchformat)")
         frm_ps.pack(side="left", fill="both", expand=True, padx=(10, 0))
         row = ttk.Frame(frm_ps)
         row.pack(fill="x", padx=8, pady=(8, 2))
-        ttk.Entry(row, textvariable=self.psd_pfad).pack(
-            side="left", fill="x", expand=True)
-        ttk.Button(row, text="…", width=3, command=self._waehle_psd).pack(
-            side="left", padx=(4, 0))
+        ttk.Label(row, text="Vorlagen-Ordner:").pack(side="left")
+        ttk.Entry(row, textvariable=self.vorlagen_dir_var).pack(
+            side="left", fill="x", expand=True, padx=4)
+        ttk.Button(row, text="…", width=3, command=self._waehle_vorlagen_dir).pack(
+            side="left")
         row2 = ttk.Frame(frm_ps)
         row2.pack(fill="x", padx=8, pady=(0, 8))
-        ttk.Label(row2, text="Smart-Object-Ebene:").pack(side="left")
-        ttk.Entry(row2, textvariable=self.layer_name, width=18).pack(
-            side="left", padx=6)
+        ttk.Label(row2, text="Vorlage:").pack(side="left")
+        self.vorlage_box = ttk.Combobox(row2, textvariable=self.vorlage_var,
+                                        state="readonly", width=16)
+        self.vorlage_box.pack(side="left", padx=6)
+        ttk.Label(row2, textvariable=self.vorlage_info,
+                  foreground="gray").pack(side="left")
+        self._fuelle_vorlagen()
 
         # Aktionen
-        act = ttk.Frame(self)
+        act = ttk.Frame(unten)
         act.pack(fill="x", **pad)
         ttk.Label(act, textvariable=self.info_var).pack(side="left")
         self.btn_run = ttk.Button(act, text="Erstellen", command=self._run)
@@ -167,6 +179,7 @@ class App(Tk):
                 self.info_var.set(
                     f"Nur {n} vertikale Marken erkannt — Linien bitte prüfen.")
             else:
+                self._auto_vorlage()
                 self.info_var.set(f"Erkannt. Kurzcode: {self.sc}. "
                                   "Linien bei Bedarf justieren, dann Erstellen.")
         except Exception as e:
@@ -175,14 +188,15 @@ class App(Tk):
 
     def _zeichne_vorschau(self):
         img = core.rendere_seite(self.doc, PREVIEW_RENDER_DPI)
-        W_px = img.width
-        # Vorschau auf PREVIEW_MAX_W begrenzen; _pt2px = Canvas-Pixel je Punkt.
-        disp_w = min(W_px, PREVIEW_MAX_W)
-        disp = img.resize((disp_w, int(img.height * disp_w / img.width)),
-                          Image.LANCZOS)
+        # Vorschau in Breite UND Höhe begrenzen (Seitenverhältnis erhalten), damit
+        # die Bedienelemente unten immer sichtbar bleiben.
+        f = min(PREVIEW_MAX_W / img.width, PREVIEW_MAX_H / img.height, 1.0)
+        disp_w = max(1, int(img.width * f))
+        disp_h = max(1, int(img.height * f))
+        disp = img.resize((disp_w, disp_h), Image.LANCZOS)
         self._pt2px = disp_w / self.reg.seite_pt[0]     # Punkt -> Canvas-Pixel
         self._preview_img = ImageTk.PhotoImage(disp)
-        self.canvas.configure(width=disp.width, height=disp.height)
+        self.canvas.configure(width=disp_w, height=disp_h)
         self._redraw()
 
     def _redraw(self):
@@ -245,15 +259,36 @@ class App(Tk):
         self._drag = None
 
     # ------------------------------------------------------------------
-    # Mockup-Auswahl
+    # Vorlagen-Auswahl
     # ------------------------------------------------------------------
-    def _waehle_psd(self):
-        pfad = filedialog.askopenfilename(
-            title="Mockup-PSD wählen",
-            filetypes=[("Photoshop-Dateien", "*.psd *.psb"),
-                       ("Alle Dateien", "*.*")])
+    def _fuelle_vorlagen(self):
+        """Befüllt die Vorlagen-Combobox aus dem Vorlagen-Ordner."""
+        self.cfg["vorlagen_dir"] = self.vorlagen_dir_var.get().strip()
+        namen = [e["name"] for e in core.vorlagen_liste(self.cfg)]
+        self.vorlage_box.configure(values=namen)
+
+    def _waehle_vorlagen_dir(self):
+        pfad = filedialog.askdirectory(title="Vorlagen-Ordner (_NEU_Vorlage) wählen")
         if pfad:
-            self.psd_pfad.set(pfad)
+            self.vorlagen_dir_var.set(pfad)
+            self.cfg["vorlagen_dir"] = pfad
+            core.speichere_config(self.cfg)
+            self._fuelle_vorlagen()
+            if self.reg is not None:
+                self._auto_vorlage()
+
+    def _auto_vorlage(self):
+        """Wählt anhand des erkannten Formats automatisch die passende Vorlage."""
+        treffer = core.waehle_vorlage(self.reg, self.cfg)
+        masse = core.front_masse_cm(self.reg)
+        if masse:
+            self.vorlage_info.set(f"erkannt: {masse[0]:.1f}×{masse[1]:.1f} cm")
+        if treffer:
+            self.vorlage_var.set(treffer["name"])
+            hinweis = "" if treffer["im_toleranz"] else "  ⚠ prüfen"
+            self.vorlage_info.set(
+                f"{masse[0]:.1f}×{masse[1]:.1f} cm → {treffer['name']}"
+                f" (Δ {treffer['dist_cm']} cm){hinweis}")
 
     # ------------------------------------------------------------------
     # Erstellen
@@ -268,12 +303,7 @@ class App(Tk):
                 "Vorder-/Rückseite/Rücken sind nicht bestimmt. Bitte die "
                 "blauen Linien justieren (mind. 4 senkrechte Schnitte).")
             return
-        # Config aus GUI übernehmen
-        self.cfg["mockup_psd_pfad"] = self.psd_pfad.get().strip()
-        slot_region = (self.cfg.get("mockup_slots") or
-                       [{"region": "front_spine"}])[0].get("region", "front_spine")
-        self.cfg["mockup_slots"] = [{"layer": self.layer_name.get().strip() or "COVER",
-                                     "region": slot_region}]
+        self.cfg["vorlagen_dir"] = self.vorlagen_dir_var.get().strip()
         core.speichere_config(self.cfg)
 
         self.btn_run.configure(state="disabled")
@@ -293,19 +323,17 @@ class App(Tk):
                 erzeugt += core.speichere_2d(front, out_dir, self.sc, self.cfg)
 
             if self.out_3d.get():
-                if not self.cfg["mockup_psd_pfad"]:
-                    fehler.append("3D übersprungen: kein Mockup-PSD gewählt.")
-                elif sys.platform != "win32":
-                    # kein Photoshop/COM -> Dry-Run (Slot-PNG + JSX zum Prüfen)
-                    erzeugt += core.erzeuge_3d_photoshop(
-                        self.reg, img_hi, self.cfg, out_dir, self.sc,
-                        dry_run=True, log=lambda m: None)
-                    fehler.append("3D: kein Windows/Photoshop — Dry-Run "
-                                  "(JSX + Slot-PNG) geschrieben.")
+                vorlage = self.vorlage_var.get().strip()
+                if not vorlage:
+                    fehler.append("3D übersprungen: keine Vorlage gewählt.")
                 else:
+                    dry = sys.platform != "win32"
                     erzeugt += core.erzeuge_3d_photoshop(
-                        self.reg, img_hi, self.cfg, out_dir, self.sc,
-                        dry_run=False, log=lambda m: None)
+                        self.reg, img_hi, self.cfg, out_dir, self.sc, vorlage,
+                        dry_run=dry, log=lambda m: None)
+                    if dry:
+                        fehler.append("3D: kein Windows/Photoshop — Dry-Run "
+                                      "(JSX + Slot-PNGs) geschrieben.")
         except Exception as e:
             fehler.append(f"{e}")
             traceback.print_exc()

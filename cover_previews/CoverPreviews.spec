@@ -5,11 +5,13 @@ import os
 # Paket `cover_previews` importierbar ist.
 REPO_ROOT = os.path.dirname(SPECPATH)
 
-# Es gibt keine zwingend zu bündelnden Nur-Lese-Assets: das Mockup-PSD wählt
-# der Nutzer zur Laufzeit (Pfad in config.json). Liegt in mockups/ eine
-# Standard-Vorlage, kann sie hier ergänzt werden, z. B.:
-#   datas = [(os.path.join(SPECPATH, 'mockups', 'standard.psd'), 'cover_previews/mockups')]
-datas = []
+# Die Format->Layer-Zuordnung der Mockup-Vorlagen MUSS mitgebündelt werden
+# (core._asset_pfad erwartet sie unter cover_previews/). Die eigentlichen PSDs
+# (~480 MB) werden NICHT gebündelt — sie liegen im per config gewählten
+# _NEU_Vorlage-Ordner (Netzpfad) und werden zur Laufzeit von dort geöffnet.
+datas = [
+    (os.path.join(SPECPATH, 'vorlagen_map.json'), 'cover_previews'),
+]
 binaries = []
 
 # PyMuPDF (fitz) wird von pyinstaller-hooks-contrib abgedeckt. pywin32 (COM)

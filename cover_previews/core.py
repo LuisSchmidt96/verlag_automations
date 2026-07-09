@@ -70,10 +70,17 @@ DEFAULT_CONFIG = {
     # Marken-Erkennung
     "kante_tol_pt": 3.0,       # wie nah muss eine Marke am Blattrand liegen
     "cluster_tol_pt": 4.0,     # Marken mit ~gleicher Position zusammenfassen
-    # Photoshop-3D
-    "mockup_psd_pfad": "",
-    "mockup_slots": [{"layer": "COVER", "region": "front_spine"}],
-    "dateiname_muster": "{typ}_{dpi}_{sc}.png",
+    # Dateinamen-Muster (Konvention des Verlags)
+    "muster_2d": "2D_{dpi}_{sc}.jpeg",
+    "muster_3d": "3D_{dpi}_{sc}.jpg",
+    "muster_3d_png": "{sc}.png",
+    "jpeg_qualitaet": 95,
+    # 3D-Mockup-Vorlagen (ein PSD je Buchformat, im Ordner _NEU_Vorlage)
+    "vorlagen_dir": "",            # leer -> mitgelieferter/lokaler _NEU_Vorlage-Ordner
+    "vorlagen_tol_cm": 1.0,        # Toleranz beim Format-Abgleich
+    "rand_cm": 1.5,               # Rand ums Buch beim transparenten Zuschnitt
+    # weißer Umschlag: Anteil heller, blasser Randpixel, ab dem korrigiert wird
+    "weiss_schwellwert": 0.85,
 }
 
 
@@ -92,6 +99,82 @@ def lade_config() -> dict:
 def speichere_config(cfg: dict) -> None:
     with open(CONFIG_PFAD, "w", encoding="utf-8") as f:
         json.dump(cfg, f, indent=2, ensure_ascii=False)
+
+
+# ---------------------------------------------------------------------
+# 3D-Vorlagen-Registry (Buchformat -> Mockup-PSD)
+# ---------------------------------------------------------------------
+
+def _asset_pfad(name: str) -> Path:
+    """Nur-Lese-Asset (z. B. vorlagen_map.json) neben dem Modul bzw. im
+    PyInstaller-Bundle (sys._MEIPASS)."""
+    if getattr(sys, "frozen", False):
+        p = Path(getattr(sys, "_MEIPASS", "")) / "cover_previews" / name
+        if p.exists():
+            return p
+    return Path(__file__).parent / name
+
+
+def lade_vorlagen_map() -> dict:
+    """Vorab erzeugte Zuordnung Vorlage -> {format_cm, spine, slots, hide_bg}.
+    Die Layer-IDs darin stammen aus einer einmaligen PSD-Analyse."""
+    p = _asset_pfad("vorlagen_map.json")
+    if not p.exists():
+        return {}
+    with open(p, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def vorlagen_dir(cfg: dict) -> Path:
+    """Ordner mit den Mockup-PSDs (_NEU_Vorlage). Per config einstellbar, sonst
+    neben der .exe/dem Modul."""
+    raw = (cfg or {}).get("vorlagen_dir") or ""
+    if raw:
+        return Path(os.path.expandvars(raw)).expanduser()
+    basis = _base_dir() if getattr(sys, "frozen", False) else Path(__file__).parent
+    return basis / "_NEU_Vorlage"
+
+
+def vorlagen_liste(cfg: dict) -> list[dict]:
+    """Alle bekannten Vorlagen mit Format + Pfad (inkl. Nicht-Auto wie EBOOK)."""
+    vd = vorlagen_dir(cfg)
+    liste = []
+    for name, t in lade_vorlagen_map().items():
+        liste.append({
+            "name": name, "pfad": vd / name, "format_cm": t.get("format_cm"),
+            "auto": bool(t.get("auto")), "spine": bool(t.get("spine")),
+        })
+    return liste
+
+
+def front_masse_cm(reg: "Regionen") -> tuple[float, float] | None:
+    if reg.front is None:
+        return None
+    x0, y0, x1, y1 = reg.front
+    return ((x1 - x0) / PT_PRO_ZOLL * 2.54, (y1 - y0) / PT_PRO_ZOLL * 2.54)
+
+
+def waehle_vorlage(reg: "Regionen", cfg: dict) -> dict | None:
+    """Wählt anhand des erkannten Vorderseiten-Trims (in cm) die nächstliegende
+    Auto-Vorlage. Rückgabe: Listeneintrag ergänzt um 'dist_cm' und
+    'im_toleranz' — oder None, wenn keine Auto-Vorlage vorhanden ist."""
+    masse = front_masse_cm(reg)
+    if masse is None:
+        return None
+    w_cm, h_cm = masse
+    tol = float(cfg.get("vorlagen_tol_cm", 1.0)) * (2 ** 0.5)
+    best, best_d = None, None
+    for eintrag in vorlagen_liste(cfg):
+        if not eintrag["auto"] or not eintrag["format_cm"]:
+            continue
+        fw, fh = eintrag["format_cm"]
+        d = ((fw - w_cm) ** 2 + (fh - h_cm) ** 2) ** 0.5
+        if best_d is None or d < best_d:
+            best, best_d = dict(eintrag), d
+    if best is not None:
+        best["dist_cm"] = round(best_d, 2)
+        best["im_toleranz"] = best_d <= tol
+    return best
 
 
 # ---------------------------------------------------------------------
@@ -271,36 +354,53 @@ def overlay_marken(bild: Image.Image, reg: Regionen, dpi: int) -> Image.Image:
 
 
 # ---------------------------------------------------------------------
-# 2D-Ausgabe
+# Weißer-Umschlag-Erkennung
 # ---------------------------------------------------------------------
 
-def _skaliere_lange_kante(bild: Image.Image, max_px: int) -> Image.Image:
-    w, h = bild.size
-    lang = max(w, h)
-    if lang <= max_px:
-        return bild
-    f = max_px / lang
-    return bild.resize((round(w * f), round(h * f)), Image.LANCZOS)
+def ist_weisser_umschlag(front: Image.Image, cfg: dict | None = None) -> bool:
+    """Heuristik: ist die Vorderseite überwiegend (nahezu) weiß? Dann braucht
+    das 3D-Mockup eine leichte Grau-Korrektur, damit sich das Buch vom weißen
+    Hintergrund abhebt. Gemessen wird ein Randstreifen der Vorderseite: hohe
+    Helligkeit + geringe Sättigung = weiß."""
+    cfg = cfg or DEFAULT_CONFIG
+    schwelle = float(cfg.get("weiss_schwellwert", 0.85))
+    im = front.convert("RGB")
+    w, h = im.size
+    klein = im.resize((max(1, w // 4), max(1, h // 4)), Image.BILINEAR)
+    w2, h2 = klein.size
+    r2 = max(1, int(min(w2, h2) * 0.06))
+    px = klein.load()
+    hell = n = 0
+    for y in range(h2):
+        for x in range(w2):
+            if x < r2 or x >= w2 - r2 or y < r2 or y >= h2 - r2:
+                r, g, b = px[x, y]
+                mx, mn = max(r, g, b), min(r, g, b)
+                sat = 0.0 if mx == 0 else (mx - mn) / mx
+                if mx >= 235 and sat <= 0.06:
+                    hell += 1
+                n += 1
+    return n > 0 and (hell / n) >= schwelle
 
+
+# ---------------------------------------------------------------------
+# 2D-Ausgabe (JPEG; 300 & 72 dpi = gleiche Pixel, nur DPI-Eintrag)
+# ---------------------------------------------------------------------
 
 def speichere_2d(front: Image.Image, out_dir: Path, sc: str, cfg: dict) -> list[Path]:
-    """Speichert die 2D-Vorderseite in Druck- und Web-Auflösung."""
+    """Speichert die 2D-Vorderseite als JPEG in Druck- und Web-DPI. Wie im
+    manuellen Ablauf ('neu berechnen aus') sind beide Dateien pixelgleich —
+    nur der eingebettete DPI-Wert unterscheidet sich."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    muster = cfg.get("dateiname_muster", "{typ}_{dpi}_{sc}.png")
-    dpi_print = int(cfg.get("dpi_print", 300))
-    dpi_web = int(cfg.get("dpi_web", 72))
-    web_max = int(cfg.get("web_max_px", 800))
-
+    muster = cfg.get("muster_2d", "2D_{dpi}_{sc}.jpeg")
+    q = int(cfg.get("jpeg_qualitaet", 95))
+    rgb = front.convert("RGB")
     pfade = []
-    p_print = out_dir / muster.format(typ="2D", dpi=dpi_print, sc=sc)
-    front.save(p_print, dpi=(dpi_print, dpi_print))
-    pfade.append(p_print)
-
-    web = _skaliere_lange_kante(front, web_max)
-    p_web = out_dir / muster.format(typ="2D", dpi=dpi_web, sc=sc)
-    web.save(p_web, dpi=(dpi_web, dpi_web))
-    pfade.append(p_web)
+    for dpi in (int(cfg.get("dpi_print", 300)), int(cfg.get("dpi_web", 72))):
+        p = out_dir / muster.format(dpi=dpi, sc=sc)
+        rgb.save(p, "JPEG", quality=q, dpi=(dpi, dpi))
+        pfade.append(p)
     return pfade
 
 
@@ -347,103 +447,169 @@ def region_box(reg: Regionen, name: str) -> tuple:
     raise ValueError(f"Unbekannte Region: {name}")
 
 
-def _staging_pngs(reg: Regionen, bild_hi: Image.Image, cfg: dict,
-                  out_dir: Path, sc: str) -> list[tuple[str, Path]]:
-    """Schneidet je Slot die passende Region aus und legt sie als PNG ab.
-    Rückgabe: Liste (layer_name, png_pfad) für das JSX."""
-    dpi = int(cfg.get("dpi_print", 300))
-    slots = cfg.get("mockup_slots") or []
-    ergebnis = []
-    for slot in slots:
-        layer = slot["layer"]
-        box_pt = region_box(reg, slot.get("region", "front"))
-        s = dpi / PT_PRO_ZOLL
-        box_px = tuple(round(c * s) for c in box_pt)
-        img = extrahiere(bild_hi, box_px)
-        p = Path(out_dir) / f"_slot_{sc}_{layer}.png"
-        img.save(p, dpi=(dpi, dpi))
-        ergebnis.append((layer, p))
-    return ergebnis
+def _stage_region(reg: Regionen, bild_hi: Image.Image, region: str, dpi: int,
+                  out_dir: Path, sc: str) -> Path:
+    """Schneidet eine Region (front/spine) aus und legt sie als PNG ab."""
+    s = dpi / PT_PRO_ZOLL
+    box_px = tuple(round(c * s) for c in region_box(reg, region))
+    img = extrahiere(bild_hi, box_px)
+    p = Path(out_dir) / f"_slot_{sc}_{region}.png"
+    img.save(p, dpi=(dpi, dpi))
+    return p
 
 
-def _baue_jsx(psd_pfad: str, slots: list[tuple[str, Path]], out_png: Path) -> str:
-    """ExtendScript, das im Mockup-PSD die benannten Smart-Objekte durch die
-    Slot-PNGs ersetzt und das Ergebnis als PNG exportiert. Das Original-PSD
-    wird nur geöffnet und ohne Speichern geschlossen (bleibt unverändert)."""
-    def jp(p) -> str:                       # Pfad für ExtendScript (Forward-Slash)
-        return str(p).replace("\\", "/").replace('"', '\\"')
+def _jp(p) -> str:
+    """Pfad für ExtendScript (Forward-Slashes, Anführungszeichen escapen)."""
+    return str(p).replace("\\", "/").replace('"', '\\"')
 
-    ersetzen = "\n".join(
-        f'  replaceSO("{layer}", "{jp(png)}");' for layer, png in slots)
+
+def _baue_jsx(psd_pfad, eintrag: dict, cover_png, spine_png, weiss: bool,
+              png_transp, jpg_pfade: list[tuple[int, Path]], rand_cm: float) -> str:
+    """ExtendScript für das 3D-Mockup:
+    - Smart-Objekte per Layer-ID durch Cover/Rücken ersetzen (Reflexion ist mit
+      derselben SO-Quelle verknüpft und aktualisiert sich mit);
+    - optional Weiß-Korrektur (Selektive Farbkorrektur: Weiß +10 % Schwarz);
+    - Hintergrund ausblenden, transparent zuschneiden -> PNG;
+    - Hintergrund wieder ein, flach, JPEG in 300 & 72 dpi (nur DPI-Tag).
+    Original-PSD wird nur geöffnet und ohne Speichern geschlossen.
+    """
+    ersetzungen = []
+    for slot in eintrag.get("slots", []):
+        datei = cover_png if slot["role"] == "cover" else spine_png
+        if datei is None:
+            continue
+        ersetzungen.append(f'  replaceById({slot["layer_id"]}, '
+                           f'new File("{_jp(datei)}"));')
+    ersetzen = "\n".join(ersetzungen)
+    hide_ids = ", ".join(str(i) for i in eintrag.get("hide_bg", []))
+    jpg_zeilen = "\n".join(
+        f'  saveJpg("{_jp(p)}", {dpi});' for dpi, p in jpg_pfade)
+
     return f'''#target photoshop
+app.preferences.rulerUnits = Units.PIXELS;
 (function () {{
-  var doc = app.open(new File("{jp(psd_pfad)}"));
-  function find(container, name) {{
-    for (var i = 0; i < container.layers.length; i++) {{
-      var l = container.layers[i];
-      if (l.name == name) return l;
-      if (l.typename == "LayerSet") {{ var r = find(l, name); if (r) return r; }}
-    }}
-    return null;
-  }}
-  function replaceSO(name, file) {{
-    var l = find(doc, name);
-    if (!l) {{ throw new Error("Smart-Object-Ebene nicht gefunden: " + name); }}
-    doc.activeLayer = l;
+  var doc = app.open(new File("{_jp(psd_pfad)}"));
+  var HIDE = [{hide_ids}];
+
+  function selectById(id) {{
+    var ref = new ActionReference();
+    ref.putIdentifier(charIDToTypeID("Lyr "), id);
     var d = new ActionDescriptor();
-    d.putPath(charIDToTypeID("null"), new File(file));
+    d.putReference(charIDToTypeID("null"), ref);
+    executeAction(charIDToTypeID("slct"), d, DialogModes.NO);
+  }}
+  function replaceById(id, file) {{
+    selectById(id);
+    var d = new ActionDescriptor();
+    d.putPath(charIDToTypeID("null"), file);
     executeAction(stringIDToTypeID("placedLayerReplaceContents"), d, DialogModes.NO);
   }}
+  function setVis(id, vis) {{ selectById(id); doc.activeLayer.visible = vis; }}
+  function weissKorrektur(pct) {{
+    var desc = new ActionDescriptor();
+    var ref = new ActionReference();
+    ref.putClass(stringIDToTypeID("adjustmentLayer"));
+    desc.putReference(charIDToTypeID("null"), ref);
+    var adj = new ActionDescriptor();
+    adj.putEnumerated(charIDToTypeID("Mthd"), charIDToTypeID("CrMthd"), charIDToTypeID("Rltv"));
+    var list = new ActionList();
+    var c = new ActionDescriptor();
+    c.putEnumerated(charIDToTypeID("Clrs"), charIDToTypeID("Clrs"), charIDToTypeID("Whts"));
+    c.putUnitDouble(charIDToTypeID("Blck"), charIDToTypeID("#Prc"), pct);
+    list.putObject(charIDToTypeID("Clrs"), c);
+    adj.putList(charIDToTypeID("Clrs"), list);
+    desc.putObject(charIDToTypeID("Usng"), stringIDToTypeID("selectiveColor"), adj);
+    executeAction(charIDToTypeID("Mk  "), desc, DialogModes.NO);
+  }}
+  function saveJpg(path, dpi) {{
+    doc.resizeImage(undefined, undefined, dpi, ResampleMethod.NONE);
+    var jo = new JPEGSaveOptions(); jo.quality = 12;
+    doc.saveAs(new File(path), jo, true, Extension.LOWERCASE);
+  }}
+
+  // 1) Cover/Rücken einsetzen
 {ersetzen}
-  var opts = new ExportOptionsSaveForWeb();
-  opts.format = SaveDocumentType.PNG; opts.PNG8 = false; opts.quality = 100;
-  doc.exportDocument(new File("{jp(out_png)}"), ExportType.SAVEFORWEB, opts);
+
+  // 2) Weiß-Korrektur (nur bei weißem Umschlag)
+  {"weissKorrektur(10);" if weiss else "// keine Weiß-Korrektur"}
+
+  // 3) Transparent zuschneiden und als PNG exportieren
+  for (var i = 0; i < HIDE.length; i++) {{ try {{ setVis(HIDE[i], false); }} catch (e) {{}} }}
+  doc.trim(TrimType.TRANSPARENT);
+  var m = Math.round({rand_cm} / 2.54 * doc.resolution);
+  doc.resizeCanvas(new UnitValue(doc.width.value + 2 * m, "px"),
+                   new UnitValue(doc.height.value + 2 * m, "px"),
+                   AnchorPosition.MIDDLECENTER);
+  var o = new ExportOptionsSaveForWeb();
+  o.format = SaveDocumentType.PNG; o.PNG8 = false; o.transparency = true;
+  doc.exportDocument(new File("{_jp(png_transp)}"), ExportType.SAVEFORWEB, o);
+
+  // 4) Hintergrund wieder ein, flach, JPEG in 300 & 72 dpi (gleiche Pixel)
+  for (var i = 0; i < HIDE.length; i++) {{ try {{ setVis(HIDE[i], true); }} catch (e) {{}} }}
+  doc.flatten();
+{jpg_zeilen}
   doc.close(SaveOptions.DONOTSAVECHANGES);
 }})();
 '''
 
 
 def erzeuge_3d_photoshop(reg: Regionen, bild_hi: Image.Image, cfg: dict,
-                         out_dir: Path, sc: str, dry_run: bool = False,
+                         out_dir: Path, sc: str, vorlage_name: str,
+                         weiss: bool | None = None, dry_run: bool = False,
                          log=print) -> list[Path]:
-    """Erzeugt das 3D-Mockup, indem Photoshop (per COM) im Mockup-PSD die
-    Cover-Smart-Objekte austauscht und exportiert.
+    """Erzeugt das 3D-Mockup: Photoshop (per COM) ersetzt im format-passenden
+    Mockup-PSD die Cover-/Rücken-Smart-Objekte und exportiert transparentes PNG
+    + flache 3D-JPEGs (300 & 72 dpi).
 
-    dry_run=True schreibt nur die Slot-PNGs + das erzeugte .jsx (zum Prüfen,
-    ohne Photoshop). Rückgabe: Liste erzeugter Dateien.
+    ``vorlage_name`` ist der Dateiname der Vorlage (Schlüssel in vorlagen_map).
+    dry_run=True schreibt nur Slot-PNGs + das .jsx (ohne Photoshop).
     """
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    psd = cfg.get("mockup_psd_pfad") or ""
-    if not psd:
-        raise ValueError("Kein Mockup-PSD in der Konfiguration hinterlegt.")
 
-    slots = _staging_pngs(reg, bild_hi, cfg, out_dir, sc)
-    muster = cfg.get("dateiname_muster", "{typ}_{dpi}_{sc}.png")
+    eintrag = lade_vorlagen_map().get(vorlage_name)
+    if eintrag is None:
+        raise ValueError(f"Unbekannte Vorlage: {vorlage_name}")
+    if not eintrag.get("slots"):
+        raise ValueError(f"Vorlage '{vorlage_name}' hat keine Smart-Objekte "
+                         "— sie muss manuell in Photoshop befüllt werden.")
+    psd = vorlagen_dir(cfg) / vorlage_name
+    if not dry_run and not psd.exists():
+        raise FileNotFoundError(f"Vorlage nicht gefunden: {psd}")
+
     dpi_print = int(cfg.get("dpi_print", 300))
-    out_png = out_dir / muster.format(typ="3D", dpi=dpi_print, sc=sc)
-    jsx = _baue_jsx(psd, slots, out_png)
+    dpi_web = int(cfg.get("dpi_web", 72))
+    braucht_spine = eintrag.get("spine") and reg.spine is not None
+    cover_png = _stage_region(reg, bild_hi, "front", dpi_print, out_dir, sc)
+    spine_png = (_stage_region(reg, bild_hi, "spine", dpi_print, out_dir, sc)
+                 if braucht_spine else None)
+    if weiss is None:
+        weiss = ist_weisser_umschlag(extrahiere(
+            bild_hi, tuple(round(c * dpi_print / PT_PRO_ZOLL)
+                           for c in region_box(reg, "front"))), cfg)
+
+    png_transp = out_dir / cfg.get("muster_3d_png", "{sc}.png").format(sc=sc)
+    muster_3d = cfg.get("muster_3d", "3D_{dpi}_{sc}.jpg")
+    jpg_pfade = [(dpi_print, out_dir / muster_3d.format(dpi=dpi_print, sc=sc)),
+                 (dpi_web, out_dir / muster_3d.format(dpi=dpi_web, sc=sc))]
+
+    jsx = _baue_jsx(psd, eintrag, cover_png, spine_png, bool(weiss),
+                    png_transp, jpg_pfade, float(cfg.get("rand_cm", 1.5)))
     jsx_pfad = out_dir / f"_mockup_{sc}.jsx"
     jsx_pfad.write_text(jsx, encoding="utf-8")
 
     if dry_run:
-        log(f"Dry-Run: {len(slots)} Slot-PNG(s) + {jsx_pfad.name} geschrieben.")
-        return [jsx_pfad, *[p for _, p in slots]]
+        log(f"Dry-Run: Slot-PNG(s) + {jsx_pfad.name} geschrieben "
+            f"(Vorlage {vorlage_name}, weiß={bool(weiss)}).")
+        return [jsx_pfad, cover_png] + ([spine_png] if spine_png else [])
 
-    log("Starte Photoshop (COM) …")
+    log(f"Starte Photoshop (COM) — Vorlage {vorlage_name} …")
     import win32com.client  # nur unter Windows verfügbar; bewusst lokal importiert
     ps = win32com.client.Dispatch("Photoshop.Application")
     ps.DoJavaScript(jsx)
-    if not out_png.exists():
-        raise RuntimeError("Photoshop hat keine Ausgabedatei erzeugt — "
-                           "Smart-Object-Ebenenname prüfen.")
-    erzeugt = [out_png]
-
-    # Web-Fassung aus dem 3D-Export herunterrechnen.
-    dpi_web = int(cfg.get("dpi_web", 72))
-    web = _skaliere_lange_kante(Image.open(out_png).convert("RGB"),
-                                int(cfg.get("web_max_px", 800)))
-    p_web = out_dir / muster.format(typ="3D", dpi=dpi_web, sc=sc)
-    web.save(p_web, dpi=(dpi_web, dpi_web))
-    erzeugt.append(p_web)
-    return erzeugt
+    fehlend = [p for _, p in jpg_pfade if not p.exists()] + \
+              ([png_transp] if not png_transp.exists() else [])
+    if fehlend:
+        raise RuntimeError("Photoshop hat nicht alle Ausgaben erzeugt: "
+                           + ", ".join(p.name for p in fehlend))
+    return [png_transp, *[p for _, p in jpg_pfade]]

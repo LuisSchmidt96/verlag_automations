@@ -33,8 +33,11 @@ pi_bi_generator/beispiele/**/3D_300_*.jpg
 pi_bi_generator/beispiele/**/.~lock.*
 
 # Cover-Previews: heavy local-only inputs (sample PDFs, mockup PSDs)
-cover_previews/beispiele/*.pdf
+cover_previews/**/*.pdf
+cover_previews/*.pdf
 cover_previews/mockups/*.psd
+# 3D-Mockup-Vorlagen (~480 MB PSDs) — per config referenziert, nicht eingecheckt
+cover_previews/_NEU_Vorlage/
 
 # LibreOffice / Office lock files
 .~lock.*#
