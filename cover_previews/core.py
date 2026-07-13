@@ -93,7 +93,9 @@ DEFAULT_CONFIG = {
     # 3D-Mockup-Vorlagen (ein PSD je Buchformat, im Ordner _NEU_Vorlage)
     "vorlagen_dir": "",            # leer -> mitgelieferter/lokaler _NEU_Vorlage-Ordner
     "vorlagen_tol_cm": 1.0,        # Toleranz beim Format-Abgleich
-    "rand_cm": 1.5,               # Rand ums Buch beim transparenten Zuschnitt
+    "rand_cm": 1.5,               # Rand oben/links/rechts ums Buch
+    "rand_unten_cm": 0.0,         # unten: 0 = das Bild endet, wo die Spiegelung
+                                  # ausläuft (sonst schwebt das Buch über Weiß)
     # weißer Umschlag: Anteil heller, blasser Randpixel, ab dem korrigiert wird
     "weiss_schwellwert": 0.85,
 }
@@ -742,7 +744,8 @@ def _jp(p) -> str:
 
 def _baue_jsx(psd_pfad, eintrag: dict, slot_pngs: list[tuple[int, Path]],
               weiss: bool, png_transp, jpg_pfade: list[tuple[int, Path]],
-              rand_cm: float, hardcover: bool = True) -> str:
+              rand_cm: float, rand_unten_cm: float = 0.0,
+              hardcover: bool = True) -> str:
     """ExtendScript für das 3D-Mockup:
     - Smart-Objekte per Layer-ID ersetzen; ``slot_pngs`` ist die Liste
       (layer_id, PNG) — jedes PNG exakt in der Größe seines Slots, sodass der
@@ -836,15 +839,22 @@ app.preferences.rulerUnits = Units.PIXELS;
     // als harter Block zurück. Auf der hellen Vorlage sieht man das nicht, bei
     // einem dunklen Umschlag klebt ein grauer Klotz unter dem Buch.
     // Das neue Dokument enthält nur die sichtbaren Pixel — außerhalb ist nichts.
+    // Rand oben/links/rechts, unten aber nur so viel wie gewünscht: das Bild soll
+    // dort enden, wo die Spiegelung ausläuft — sonst schwebt das Buch über einer
+    // leeren weißen Fläche. Der Zuschnitt oben endet ohnehin genau am Motiv.
     var m = Math.round({rand_cm} / 2.54 * doc.resolution);
-    var W = doc.width.value + 2 * m, H = doc.height.value + 2 * m;
+    var mu = Math.round({rand_unten_cm} / 2.54 * doc.resolution);
+    var W = doc.width.value + 2 * m, H = doc.height.value + m + mu;
     doc.selection.selectAll();
     doc.selection.copy(true);             // auf Basis aller sichtbaren Ebenen
     doc.selection.deselect();
 
     fertig = app.documents.add(W, H, doc.resolution, "cover_3d",
                                NewDocumentMode.RGB, DocumentFill.TRANSPARENT);
-    fertig.paste();                       // wird mittig eingefügt
+    fertig.paste();                       // wird mittig eingefügt ...
+    // ... darum nach oben schieben, bis oben genau m Rand steht.
+    var dy = m - (m + mu) / 2;
+    if (dy) fertig.activeLayer.translate(0, dy);
     fertig.selection.deselect();
 
     var o = new ExportOptionsSaveForWeb();
@@ -915,7 +925,8 @@ def erzeuge_3d_photoshop(reg: Regionen, bild_hi: Image.Image, cfg: dict,
 
     hardcover = str(cfg.get("einband", "hardcover")).lower() != "softcover"
     jsx = _baue_jsx(psd, eintrag, slot_pngs, bool(weiss), png_transp, jpg_pfade,
-                    float(cfg.get("rand_cm", 1.5)), hardcover=hardcover)
+                    float(cfg.get("rand_cm", 1.5)),
+                    float(cfg.get("rand_unten_cm", 0.0)), hardcover=hardcover)
     jsx_pfad = out_dir / f"_mockup_{sc}.jsx"
     jsx_pfad.write_text(jsx, encoding="utf-8")
 

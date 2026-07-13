@@ -124,6 +124,10 @@ werden (bei `16x16` und `29x22` ist die Falz aus, sonst an). `EBOOK` hat keine.
    (`finally`, also auch bei einem Fehler) — die Vorlagen-PSD auf der Platte
    bleibt unberührt.
 
+Die 3D-Bilder bekommen oben/links/rechts `rand_cm` Rand (Standard 1,5 cm), unten
+`rand_unten_cm` (Standard **0**): das Bild endet dort, wo die Spiegelung ausläuft,
+sonst schwebt das Buch über einer leeren weißen Fläche.
+
 ## 3D / Photoshop-Voraussetzungen
 
 - Läuft der 3D-Schritt, muss **Photoshop auf demselben Windows-PC** installiert
