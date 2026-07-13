@@ -58,13 +58,28 @@ zwei Cover-Größen) und werden beide befüllt.
 
 ## So funktioniert die Marken-Erkennung
 
-Die Schnitt-/Falzmarken stehen im PDF als Vektor-Striche. Regel: Eine
-**vertikale** Marke, die den **oberen oder unteren Blattrand** berührt, markiert
-eine senkrechte Schnittlinie (Rückseite | Rücken | Vorderseite); eine
-**horizontale** Marke am **linken/rechten Rand** die Ober-/Unterkante. Marken,
-die keinen Blattrand berühren (z. B. Logo-Rahmen im Innenbereich), werden
-ignoriert. Aus den senkrechten Schnitten sind die **zwei breitesten Felder** die
-beiden Buchdeckel, das Feld dazwischen der Rücken.
+Die Schnitt-/Falzmarken stehen im PDF als Vektor-Striche. Die Setzer machen das
+allerdings **unterschiedlich**: mal sind die Marken bis an die Blattkante gezogen
+(`US_Kleindenkmale`), mal mit Abstand davor abgesetzt (`US_Kellerkinder` — dort
+beginnt die Marke erst 9 pt unter der Kante). Auf „berührt den Blattrand“ ist
+also kein Verlass.
+
+Erkannt wird deshalb so:
+
+1. Nur **kurze** Striche (unter 15 % der Seitenkante) — lange sind Rahmen, kein
+   Marken.
+2. Sie müssen im **äußeren Rand** liegen (`marken_band_pt`, Standard 60 pt), also
+   außerhalb des Anschnitts.
+3. Entscheidend: sie müssen **paarweise** auftreten — dieselbe x-Position oben
+   *und* unten (bzw. y links *und* rechts). Motiv im Umschlag tut das praktisch
+   nie. Ohne diese Bedingung würde z. B. der **Barcode** von `US_Kellerkinder`
+   mitgezählt: er sitzt rund 100 pt über der Unterkante und ist ebenfalls kurz.
+
+Findet das keine vier senkrechten Schnitte, greift die alte, strengere Regel
+(Marke berührt die Kante) als Rückfall.
+
+Aus den senkrechten Schnitten sind die **zwei breitesten Felder** die beiden
+Buchdeckel, das Feld dazwischen der Rücken.
 
 In der GUI werden die erkannten Linien blau über die Vorschau gelegt und lassen
 sich vor dem Rendern **mit der Maus nachjustieren**.

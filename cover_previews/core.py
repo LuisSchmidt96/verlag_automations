@@ -77,7 +77,11 @@ DEFAULT_CONFIG = {
     # rechts (deutscher Standard). "front_back" spiegelt die Zuordnung.
     "spread_reihenfolge": "back_front",
     # Marken-Erkennung
-    "kante_tol_pt": 3.0,       # wie nah muss eine Marke am Blattrand liegen
+    "marken_band_pt": 60.0,    # wie weit reicht der äußere Rand, in dem Marken
+                               # liegen dürfen (manche Setzer setzen sie versetzt
+                               # ab statt bis an die Blattkante zu ziehen)
+    "marken_max_rel": 0.15,    # eine Marke ist kurz gegenüber der Seite
+    "kante_tol_pt": 3.0,       # nur noch für den Rückfall: Marke berührt die Kante
     "cluster_tol_pt": 4.0,     # Marken mit ~gleicher Position zusammenfassen
     # Dateinamen-Muster (Konvention des Verlags — auf dem Artikeldaten-Share
     # sind 344 von 345 2D-Bildern .jpg, nicht .jpeg; mit .jpeg würden die
@@ -286,35 +290,98 @@ def _breiteste_luecken(cuts: list[float]) -> list[int]:
     return [i for _, i in luecken]
 
 
-def finde_schnittlinien(doc: fitz.Document, cfg: dict | None = None) -> Regionen:
-    """Wertet die Schnitt-/Falzmarken aus und leitet die Regionen ab.
+def _gepaart(a: list[float], b: list[float], tol: float) -> list[float]:
+    """Positionen, die in BEIDEN Listen vorkommen (gemittelt).
 
-    Regel: eine Marke zählt nur, wenn sie den zugehörigen Blattrand berührt
-    (vertikale Marke oben/unten, horizontale Marke links/rechts). Dadurch
-    fallen innenliegende Element-Marken (z. B. Logo-Rahmen) heraus.
+    Eine echte Schnittmarke steht immer doppelt: oben und unten (bzw. links und
+    rechts) auf derselben Höhe. Grafik im Umschlag tut das so gut wie nie —
+    darum ist die Paarung das Merkmal, das Marken von Motiv trennt.
     """
-    cfg = cfg or DEFAULT_CONFIG
-    tol = float(cfg.get("kante_tol_pt", 3.0))
+    treffer = []
+    for v in a:
+        partner = [w for w in b if abs(v - w) <= tol]
+        if partner:
+            treffer.append((v + sum(partner) / len(partner)) / 2)
+    return treffer
+
+
+def _marken(segs, W: float, H: float, cfg: dict) -> tuple[list[float], list[float]]:
+    """Schnittmarken aus den Vektor-Strichen lesen.
+
+    Marken liegen im äußeren Rand des Blattes (außerhalb des Anschnitts) und sind
+    kurz. Ob sie den Blattrand berühren, ist NICHT verlässlich: manche Setzer
+    ziehen sie bis an die Kante (US_Kleindenkmale), andere setzen sie versetzt ab
+    (US_Kellerkinder — dort beginnt die Marke erst 9 pt unter der Blattkante).
+
+    Es reicht aber auch nicht, einfach alles am Rand zu nehmen: der Barcode sitzt
+    bei US_Kellerkinder rund 100 pt über der Unterkante und bestünde diese Prüfung.
+    Ausschlaggebend ist die Paarung oben/unten (siehe _gepaart).
+    """
+    band = float(cfg.get("marken_band_pt", 60.0))
+    max_rel = float(cfg.get("marken_max_rel", 0.15))
     ctol = float(cfg.get("cluster_tol_pt", 4.0))
 
-    page = doc[0]
-    W, H = page.rect.width, page.rect.height
-    segs = _liniensegmente(page)
+    oben, unten, links, rechts = [], [], [], []
+    for x0, y0, x1, y1 in segs:
+        senkrecht = abs(x0 - x1) < 0.5 and abs(y0 - y1) >= 0.5
+        waagerecht = abs(y0 - y1) < 0.5 and abs(x0 - x1) >= 0.5
+        if senkrecht:
+            a, b = min(y0, y1), max(y0, y1)
+            if b - a > H * max_rel:
+                continue                       # langer Strich: Rahmen, keine Marke
+            if b <= band:
+                oben.append(x0)
+            elif a >= H - band:
+                unten.append(x0)
+        elif waagerecht:
+            a, b = min(x0, x1), max(x0, x1)
+            if b - a > W * max_rel:
+                continue
+            if b <= band:
+                links.append(y0)
+            elif a >= W - band:
+                rechts.append(y0)
 
+    x_cuts = _gepaart(_cluster(oben, ctol), _cluster(unten, ctol), ctol)
+    y_cuts = _gepaart(_cluster(links, ctol), _cluster(rechts, ctol), ctol)
+    return x_cuts, y_cuts
+
+
+def _marken_am_blattrand(segs, W: float, H: float,
+                         cfg: dict) -> tuple[list[float], list[float]]:
+    """Rückfall: nur Marken, die den Blattrand wirklich berühren."""
+    tol = float(cfg.get("kante_tol_pt", 3.0))
+    ctol = float(cfg.get("cluster_tol_pt", 4.0))
     x_marks, y_marks = [], []
     for x0, y0, x1, y1 in segs:
         senkrecht = abs(x0 - x1) < 0.5
         waagerecht = abs(y0 - y1) < 0.5
         if senkrecht and not waagerecht:
-            # vertikale Marke: zählt, wenn sie oben ODER unten den Rand berührt
             if min(y0, y1) <= tol or max(y0, y1) >= H - tol:
                 x_marks.append(x0)
         elif waagerecht and not senkrecht:
             if min(x0, x1) <= tol or max(x0, x1) >= W - tol:
                 y_marks.append(y0)
+    return _cluster(x_marks, ctol), _cluster(y_marks, ctol)
 
-    x_cuts = _cluster(x_marks, ctol)
-    y_cuts = _cluster(y_marks, ctol)
+
+def finde_schnittlinien(doc: fitz.Document, cfg: dict | None = None) -> Regionen:
+    """Wertet die Schnitt-/Falzmarken aus und leitet die Regionen ab.
+
+    Zwei Setzweisen kommen vor: Marken bis an die Blattkante gezogen, oder mit
+    Abstand davor abgesetzt. _marken() deckt beide ab; findet es keine vier
+    senkrechten Schnitte, greift die alte, strengere Regel als Rückfall.
+    """
+    cfg = cfg or DEFAULT_CONFIG
+    page = doc[0]
+    W, H = page.rect.width, page.rect.height
+    segs = _liniensegmente(page)
+
+    x_cuts, y_cuts = _marken(segs, W, H, cfg)
+    if len(x_cuts) < 4 or len(y_cuts) < 2:
+        alt_x, alt_y = _marken_am_blattrand(segs, W, H, cfg)
+        if len(alt_x) >= len(x_cuts) and len(alt_y) >= len(y_cuts):
+            x_cuts, y_cuts = alt_x, alt_y
     return regionen_aus_cuts(x_cuts, y_cuts, (W, H), cfg)
 
 
@@ -485,15 +552,16 @@ def ordner_name(sc: str, titel: str = "") -> str:
 
 
 def ziel_ordner(sc: str, titel: str, cfg: dict) -> tuple[Path, bool]:
-    """Zielordner + ob er schon existiert.
+    """Zielordner aus Kurzcode + Titel + ob er schon existiert.
 
-    Bevorzugt einen vorhandenen Ordner zum Kurzcode; sonst ein neuer unter
-    artikeldaten_dir. Ist der Share nicht erreichbar, fällt es auf output_dir
-    neben der .exe zurück, damit die Arbeit nicht verloren geht.
+    Maßgeblich ist immer der eingegebene Name — wer den Titel ändert, bekommt
+    auch einen anderen Ordner. (Ein vorhandener Ordner zum Kurzcode wird beim
+    Einlesen nur als Vorschlag ins Titelfeld übernommen, siehe
+    finde_artikel_ordner; er überstimmt die Eingabe nicht.)
+
+    Ist der Share nicht erreichbar, fällt es auf output_dir neben der .exe
+    zurück, damit die Arbeit nicht verloren geht.
     """
-    vorhanden = finde_artikel_ordner(sc, cfg)
-    if vorhanden is not None:
-        return vorhanden, True
     basis = artikeldaten_dir(cfg)
     if basis is None:
         return APP_DIR / cfg.get("output_dir", "cover_output"), False
