@@ -11,9 +11,9 @@ Ablauf in der GUI:
 3. Ausgaben & (für 3D) Mockup-PSD + Smart-Object-Ebene wählen
 4. "Erstellen"  -> 2D sofort (Python), 3D über Photoshop (COM)
 
-Dateien/Ordner (neben der .exe):
-- data/config.json   : Einstellungen (wird beim ersten Start angelegt)
-- data/cover_output/ : Standard-Ausgabeordner
+Dateien/Ordner (direkt neben der .exe):
+- config.json   : Einstellungen (wird beim ersten Start angelegt)
+- cover_output/ : Standard-Ausgabeordner
 """
 
 from __future__ import annotations

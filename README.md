@@ -31,7 +31,7 @@ verlag_automations/
 ```
 
 Alle Tools folgen demselben Muster (`core.py` / `app.py` / `main.py` /
-`<Name>.spec` / `data/`).
+`<Name>.spec`); Laufzeitdaten liegen direkt neben der .exe.
 
 ## Ein neues Tool hinzufügen
 

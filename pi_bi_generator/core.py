@@ -35,7 +35,7 @@ from PIL import Image
 
 
 # ---------------------------------------------------------------------
-# Ordner (Config im "data"-Unterordner, Vorlagen als Ressourcen)
+# Ordner (Config neben der .exe, Vorlagen als Ressourcen)
 # ---------------------------------------------------------------------
 
 def _base_dir() -> Path:

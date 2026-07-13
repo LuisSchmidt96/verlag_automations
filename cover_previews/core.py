@@ -36,7 +36,7 @@ PT_PRO_ZOLL = 72.0
 
 
 # ---------------------------------------------------------------------
-# Daten-Ordner (Config, Ausgabe) — Muster wie die anderen Tools
+# Ordner (Config, Ausgabe) — Muster wie die anderen Tools
 # ---------------------------------------------------------------------
 
 def _base_dir() -> Path:
@@ -46,7 +46,9 @@ def _base_dir() -> Path:
     return Path(__file__).parent
 
 
-APP_DIR = _base_dir() / "data"
+# App-mutierte Laufzeitdaten (config.json, cover_output/) liegen direkt neben
+# der .exe — wie bei den anderen Tools, kein data-Unterordner.
+APP_DIR = _base_dir()
 APP_DIR.mkdir(parents=True, exist_ok=True)
 CONFIG_PFAD = APP_DIR / "config.json"
 

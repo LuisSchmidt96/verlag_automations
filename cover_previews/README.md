@@ -77,6 +77,8 @@ cover_previews/
 ├── main.py        Einstiegspunkt für den .exe-Build
 ├── CoverPreviews.spec
 ├── beispiele/     Test-PDF(s) (lokal, nicht eingecheckt)
-├── mockups/       optionale Mockup-PSDs (lokal, nicht eingecheckt)
-└── data/          config.json + cover_output/ (Laufzeit, nicht eingecheckt)
+└── mockups/       optionale Mockup-PSDs (lokal, nicht eingecheckt)
 ```
+
+Laufzeitdaten (`config.json`, `cover_output/`) legt das Tool direkt neben der
+.exe ab – kein `data/`-Unterordner, wie bei den anderen Tools.
