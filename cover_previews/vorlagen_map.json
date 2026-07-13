@@ -8,25 +8,48 @@
     "slots": [
       {
         "layer_id": 55,
-        "role": "cover"
+        "role": "cover",
+        "size_px": [
+          1178,
+          1820
+        ]
       },
       {
         "layer_id": 56,
-        "role": "spine"
+        "role": "spine",
+        "size_px": [
+          322,
+          1820
+        ],
+        "anchor": "right"
       },
       {
         "layer_id": 51,
-        "role": "cover"
+        "role": "cover",
+        "size_px": [
+          1178,
+          1820
+        ]
       },
       {
         "layer_id": 54,
-        "role": "spine"
+        "role": "spine",
+        "size_px": [
+          322,
+          1820
+        ],
+        "anchor": "right"
       }
     ],
     "hide_bg": [
       25
     ],
-    "auto": true
+    "auto": true,
+    "book_cm": [
+      12.0,
+      19.0
+    ],
+    "content_px_per_cm": 98.17
   },
   "12x22.psd": {
     "format_cm": [
@@ -37,25 +60,48 @@
     "slots": [
       {
         "layer_id": 39,
-        "role": "cover"
+        "role": "cover",
+        "size_px": [
+          1182,
+          2105
+        ]
       },
       {
         "layer_id": 40,
-        "role": "spine"
+        "role": "spine",
+        "size_px": [
+          331,
+          2104
+        ],
+        "anchor": "right"
       },
       {
         "layer_id": 35,
-        "role": "cover"
+        "role": "cover",
+        "size_px": [
+          1182,
+          2105
+        ]
       },
       {
         "layer_id": 37,
-        "role": "spine"
+        "role": "spine",
+        "size_px": [
+          331,
+          2104
+        ],
+        "anchor": "right"
       }
     ],
     "hide_bg": [
       25
     ],
-    "auto": true
+    "auto": true,
+    "book_cm": [
+      12.0,
+      22.0
+    ],
+    "content_px_per_cm": 98.5
   },
   "15,5x22.psd": {
     "format_cm": [
@@ -66,25 +112,48 @@
     "slots": [
       {
         "layer_id": 39,
-        "role": "spine"
+        "role": "spine",
+        "size_px": [
+          323,
+          2106
+        ],
+        "anchor": "right"
       },
       {
         "layer_id": 40,
-        "role": "cover"
+        "role": "cover",
+        "size_px": [
+          1484,
+          2105
+        ]
       },
       {
         "layer_id": 37,
-        "role": "spine"
+        "role": "spine",
+        "size_px": [
+          323,
+          2106
+        ],
+        "anchor": "right"
       },
       {
         "layer_id": 35,
-        "role": "cover"
+        "role": "cover",
+        "size_px": [
+          1484,
+          2105
+        ]
       }
     ],
     "hide_bg": [
       25
     ],
-    "auto": true
+    "auto": true,
+    "book_cm": [
+      15.5,
+      22.0
+    ],
+    "content_px_per_cm": 95.74
   },
   "16x16.psd": {
     "format_cm": [
@@ -95,25 +164,48 @@
     "slots": [
       {
         "layer_id": 42,
-        "role": "spine"
+        "role": "spine",
+        "size_px": [
+          236,
+          1350
+        ],
+        "anchor": "right"
       },
       {
         "layer_id": 41,
-        "role": "cover"
+        "role": "cover",
+        "size_px": [
+          1349,
+          1349
+        ]
       },
       {
         "layer_id": 37,
-        "role": "cover"
+        "role": "cover",
+        "size_px": [
+          1349,
+          1349
+        ]
       },
       {
         "layer_id": 40,
-        "role": "spine"
+        "role": "spine",
+        "size_px": [
+          236,
+          1350
+        ],
+        "anchor": "right"
       }
     ],
     "hide_bg": [
       3
     ],
-    "auto": true
+    "auto": true,
+    "book_cm": [
+      16.0,
+      16.0
+    ],
+    "content_px_per_cm": 84.31
   },
   "17x24.psd": {
     "format_cm": [
@@ -124,25 +216,48 @@
     "slots": [
       {
         "layer_id": 96,
-        "role": "cover"
+        "role": "cover",
+        "size_px": [
+          2008,
+          2835
+        ]
       },
       {
         "layer_id": 97,
-        "role": "spine"
+        "role": "spine",
+        "size_px": [
+          1181,
+          2835
+        ],
+        "anchor": "right"
       },
       {
         "layer_id": 84,
-        "role": "cover"
+        "role": "cover",
+        "size_px": [
+          2008,
+          2835
+        ]
       },
       {
         "layer_id": 87,
-        "role": "spine"
+        "role": "spine",
+        "size_px": [
+          1181,
+          2835
+        ],
+        "anchor": "right"
       }
     ],
     "hide_bg": [
       3
     ],
-    "auto": true
+    "auto": true,
+    "book_cm": [
+      17.0,
+      24.0
+    ],
+    "content_px_per_cm": 118.12
   },
   "21x13,5.psd": {
     "format_cm": [
@@ -153,25 +268,48 @@
     "slots": [
       {
         "layer_id": 42,
-        "role": "cover"
+        "role": "cover",
+        "size_px": [
+          1646,
+          2569
+        ]
       },
       {
         "layer_id": 43,
-        "role": "spine"
+        "role": "spine",
+        "size_px": [
+          411,
+          2570
+        ],
+        "anchor": "right"
       },
       {
         "layer_id": 36,
-        "role": "cover"
+        "role": "cover",
+        "size_px": [
+          1646,
+          2569
+        ]
       },
       {
         "layer_id": 40,
-        "role": "spine"
+        "role": "spine",
+        "size_px": [
+          411,
+          2570
+        ],
+        "anchor": "right"
       }
     ],
     "hide_bg": [
       25
     ],
-    "auto": true
+    "auto": true,
+    "book_cm": [
+      13.5,
+      21.0
+    ],
+    "content_px_per_cm": 121.93
   },
   "21x14.psd": {
     "format_cm": [
@@ -182,25 +320,48 @@
     "slots": [
       {
         "layer_id": 44,
-        "role": "cover"
+        "role": "cover",
+        "size_px": [
+          1668,
+          2571
+        ]
       },
       {
         "layer_id": 45,
-        "role": "spine"
+        "role": "spine",
+        "size_px": [
+          436,
+          2568
+        ],
+        "anchor": "right"
       },
       {
         "layer_id": 36,
-        "role": "cover"
+        "role": "cover",
+        "size_px": [
+          1668,
+          2571
+        ]
       },
       {
         "layer_id": 42,
-        "role": "spine"
+        "role": "spine",
+        "size_px": [
+          436,
+          2568
+        ],
+        "anchor": "right"
       }
     ],
     "hide_bg": [
       25
     ],
-    "auto": true
+    "auto": true,
+    "book_cm": [
+      14.0,
+      21.0
+    ],
+    "content_px_per_cm": 119.14
   },
   "21x21.psd": {
     "format_cm": [
@@ -211,25 +372,48 @@
     "slots": [
       {
         "layer_id": 50,
-        "role": "spine"
+        "role": "spine",
+        "size_px": [
+          236,
+          1350
+        ],
+        "anchor": "right"
       },
       {
         "layer_id": 49,
-        "role": "cover"
+        "role": "cover",
+        "size_px": [
+          1349,
+          1349
+        ]
       },
       {
         "layer_id": 37,
-        "role": "cover"
+        "role": "cover",
+        "size_px": [
+          1349,
+          1349
+        ]
       },
       {
         "layer_id": 40,
-        "role": "spine"
+        "role": "spine",
+        "size_px": [
+          236,
+          1350
+        ],
+        "anchor": "right"
       }
     ],
     "hide_bg": [
       3
     ],
-    "auto": true
+    "auto": true,
+    "book_cm": [
+      21.0,
+      21.0
+    ],
+    "content_px_per_cm": 64.24
   },
   "22x24.psd": {
     "format_cm": [
@@ -240,25 +424,48 @@
     "slots": [
       {
         "layer_id": 41,
-        "role": "spine"
+        "role": "spine",
+        "size_px": [
+          198,
+          1425
+        ],
+        "anchor": "right"
       },
       {
         "layer_id": 40,
-        "role": "cover"
+        "role": "cover",
+        "size_px": [
+          1535,
+          1425
+        ]
       },
       {
         "layer_id": 39,
-        "role": "spine"
+        "role": "spine",
+        "size_px": [
+          198,
+          1425
+        ],
+        "anchor": "right"
       },
       {
         "layer_id": 37,
-        "role": "cover"
+        "role": "cover",
+        "size_px": [
+          1535,
+          1425
+        ]
       }
     ],
     "hide_bg": [
       3
     ],
-    "auto": true
+    "auto": true,
+    "book_cm": [
+      24.0,
+      22.0
+    ],
+    "content_px_per_cm": 63.96
   },
   "28x21.psd": {
     "format_cm": [
@@ -269,25 +476,48 @@
     "slots": [
       {
         "layer_id": 59,
-        "role": "cover"
+        "role": "cover",
+        "size_px": [
+          3316,
+          2489
+        ]
       },
       {
         "layer_id": 60,
-        "role": "spine"
+        "role": "spine",
+        "size_px": [
+          1183,
+          2482
+        ],
+        "anchor": "right"
       },
       {
         "layer_id": 56,
-        "role": "cover"
+        "role": "cover",
+        "size_px": [
+          3316,
+          2489
+        ]
       },
       {
         "layer_id": 58,
-        "role": "spine"
+        "role": "spine",
+        "size_px": [
+          1183,
+          2482
+        ],
+        "anchor": "right"
       }
     ],
     "hide_bg": [
       3
     ],
-    "auto": true
+    "auto": true,
+    "book_cm": [
+      28.0,
+      21.0
+    ],
+    "content_px_per_cm": 118.43
   },
   "29,7x21.psd": {
     "format_cm": [
@@ -298,25 +528,48 @@
     "slots": [
       {
         "layer_id": 30,
-        "role": "spine"
+        "role": "spine",
+        "size_px": [
+          191,
+          2093
+        ],
+        "anchor": "right"
       },
       {
         "layer_id": 31,
-        "role": "cover"
+        "role": "cover",
+        "size_px": [
+          1495,
+          2094
+        ]
       },
       {
         "layer_id": 29,
-        "role": "spine"
+        "role": "spine",
+        "size_px": [
+          191,
+          2093
+        ],
+        "anchor": "right"
       },
       {
         "layer_id": 26,
-        "role": "cover"
+        "role": "cover",
+        "size_px": [
+          1495,
+          2094
+        ]
       }
     ],
     "hide_bg": [
       21
     ],
-    "auto": true
+    "auto": true,
+    "book_cm": [
+      21.0,
+      29.7
+    ],
+    "content_px_per_cm": 71.19
   },
   "29x22.psd": {
     "format_cm": [
@@ -327,41 +580,82 @@
     "slots": [
       {
         "layer_id": 30,
-        "role": "spine"
+        "role": "spine",
+        "size_px": [
+          191,
+          2093
+        ],
+        "anchor": "right"
       },
       {
         "layer_id": 31,
-        "role": "cover"
+        "role": "cover",
+        "size_px": [
+          1495,
+          2094
+        ]
       },
       {
         "layer_id": 46,
-        "role": "spine"
+        "role": "spine",
+        "size_px": [
+          180,
+          2033
+        ],
+        "anchor": "right"
       },
       {
         "layer_id": 44,
-        "role": "cover"
+        "role": "cover",
+        "size_px": [
+          1566,
+          2044
+        ]
       },
       {
         "layer_id": 29,
-        "role": "spine"
+        "role": "spine",
+        "size_px": [
+          191,
+          2093
+        ],
+        "anchor": "right"
       },
       {
         "layer_id": 26,
-        "role": "cover"
+        "role": "cover",
+        "size_px": [
+          1495,
+          2094
+        ]
       },
       {
         "layer_id": 40,
-        "role": "cover"
+        "role": "cover",
+        "size_px": [
+          1566,
+          2044
+        ]
       },
       {
         "layer_id": 43,
-        "role": "spine"
+        "role": "spine",
+        "size_px": [
+          180,
+          2033
+        ],
+        "anchor": "right"
       }
     ],
     "hide_bg": [
       21
     ],
-    "auto": true
+    "auto": true,
+    "book_cm": [
+      22.0,
+      29.0
+    ],
+    "content_px_per_cm": 67.95
   },
   "EBOOK.psd": {
     "format_cm": null,
@@ -369,7 +663,11 @@
     "slots": [
       {
         "layer_id": 12,
-        "role": "cover"
+        "role": "cover",
+        "size_px": [
+          457,
+          644
+        ]
       }
     ],
     "hide_bg": [],

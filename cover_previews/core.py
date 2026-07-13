@@ -138,12 +138,19 @@ def vorlagen_dir(cfg: dict) -> Path:
 
 
 def vorlagen_liste(cfg: dict) -> list[dict]:
-    """Alle bekannten Vorlagen mit Format + Pfad (inkl. Nicht-Auto wie EBOOK)."""
+    """Alle bekannten Vorlagen mit Format + Pfad (inkl. Nicht-Auto wie EBOOK).
+
+    ``book_cm`` sind die wahren Buchmaße (Breite, Höhe); ``format_cm`` ist nur der
+    Name der Vorlage und mal B×H, mal H×B (siehe psd_analyse.py). Für Vergleiche
+    also immer ``book_cm`` nehmen.
+    """
     vd = vorlagen_dir(cfg)
     liste = []
     for name, t in lade_vorlagen_map().items():
         liste.append({
             "name": name, "pfad": vd / name, "format_cm": t.get("format_cm"),
+            "book_cm": t.get("book_cm"), "px_pro_cm": t.get("content_px_per_cm"),
+            "slots": t.get("slots", []), "hide_bg": t.get("hide_bg", []),
             "auto": bool(t.get("auto")), "spine": bool(t.get("spine")),
         })
     return liste
@@ -154,6 +161,14 @@ def front_masse_cm(reg: "Regionen") -> tuple[float, float] | None:
         return None
     x0, y0, x1, y1 = reg.front
     return ((x1 - x0) / PT_PRO_ZOLL * 2.54, (y1 - y0) / PT_PRO_ZOLL * 2.54)
+
+
+def spine_dicke_cm(reg: "Regionen") -> float | None:
+    """Echte Rückendicke aus den Schnittlinien (cm)."""
+    if reg.spine is None:
+        return None
+    x0, _, x1, _ = reg.spine
+    return (x1 - x0) / PT_PRO_ZOLL * 2.54
 
 
 def waehle_vorlage(reg: "Regionen", cfg: dict) -> dict | None:
@@ -167,9 +182,9 @@ def waehle_vorlage(reg: "Regionen", cfg: dict) -> dict | None:
     tol = float(cfg.get("vorlagen_tol_cm", 1.0)) * (2 ** 0.5)
     best, best_d = None, None
     for eintrag in vorlagen_liste(cfg):
-        if not eintrag["auto"] or not eintrag["format_cm"]:
+        if not eintrag["auto"] or not eintrag["book_cm"]:
             continue
-        fw, fh = eintrag["format_cm"]
+        fw, fh = eintrag["book_cm"]
         d = ((fw - w_cm) ** 2 + (fh - h_cm) ** 2) ** 0.5
         if best_d is None or d < best_d:
             best, best_d = dict(eintrag), d
@@ -449,15 +464,106 @@ def region_box(reg: Regionen, name: str) -> tuple:
     raise ValueError(f"Unbekannte Region: {name}")
 
 
-def _stage_region(reg: Regionen, bild_hi: Image.Image, region: str, dpi: int,
-                  out_dir: Path, sc: str) -> Path:
-    """Schneidet eine Region (front/spine) aus und legt sie als PNG ab."""
+def _ausschnitt(reg: Regionen, bild_hi: Image.Image, region: str,
+                dpi: int) -> Image.Image:
     s = dpi / PT_PRO_ZOLL
     box_px = tuple(round(c * s) for c in region_box(reg, region))
-    img = extrahiere(bild_hi, box_px)
-    p = Path(out_dir) / f"_slot_{sc}_{region}.png"
+    return extrahiere(bild_hi, box_px)
+
+
+def _stage_cover(reg: Regionen, bild_hi: Image.Image, dpi: int, out_dir: Path,
+                 sc: str, size_px: tuple[int, int]) -> Path:
+    """Vorderseite exakt auf die Slot-Größe bringen.
+
+    Photoshop bildet den Inhalt eines Smart-Objekts über einen festen Transform
+    auf die 3D-Fläche ab; die Maße des Inhalts sind dabei der Maßstab. Ein Inhalt
+    in Slot-Größe füllt die Fläche also genau — auch wenn der PDF-Trim leicht vom
+    Vorlagenformat abweicht (die Verzerrung liegt typisch unter 2 %).
+    """
+    img = _ausschnitt(reg, bild_hi, "front", dpi).resize(tuple(size_px), Image.LANCZOS)
+    p = Path(out_dir) / f"_slot_{sc}_front_{size_px[0]}x{size_px[1]}.png"
     img.save(p, dpi=(dpi, dpi))
     return p
+
+
+def _stage_spine(reg: Regionen, bild_hi: Image.Image, dpi: int, out_dir: Path,
+                 sc: str, size_px: tuple[int, int], k: float, anchor: str,
+                 log=print) -> Path:
+    """Rücken maßgetreu in die volle Slot-Leinwand setzen.
+
+    Die Rücken-Slots der Vorlagen sind bewusst ÜBERBREIT (bei 17x24 z. B. 10 cm)
+    und tragen ihr Motiv nur in einem schmalen, an der Cover-Kante ausgerichteten
+    Streifen — der Rest ist transparent. Die Leinwand nimmt damit jede Rückendicke
+    auf. Genau so füllen wir sie: das Motiv ``Dicke × k`` px breit, an der
+    ``anchor``-Kante (der Kante zum Cover), Rest transparent.
+
+    Der Inhalt behält dadurch seine Slot-Größe — der Transform des Smart-Objekts
+    bleibt unverändert und der Rücken sitzt weiter bündig am Buch. Würde man
+    stattdessen nur den schmalen Streifen liefern, skalierte Photoshop den
+    Transform auf dessen Maße und der Rücken löste sich vom Cover.
+    """
+    breite, hoehe = int(size_px[0]), int(size_px[1])
+    dicke = spine_dicke_cm(reg) or 0.0
+    motiv_px = max(1, round(dicke * k))
+    if motiv_px > breite:
+        log(f"Warnung: Rücken {dicke:.2f} cm passt nicht in den Slot "
+            f"({breite / k:.2f} cm) — wird beschnitten.")
+        motiv_px = breite
+
+    motiv = _ausschnitt(reg, bild_hi, "spine", dpi).resize((motiv_px, hoehe),
+                                                           Image.LANCZOS)
+    leinwand = Image.new("RGBA", (breite, hoehe), (0, 0, 0, 0))
+    x = breite - motiv_px if anchor == "right" else 0
+    leinwand.paste(motiv.convert("RGBA"), (x, 0))
+
+    p = Path(out_dir) / f"_slot_{sc}_spine_{breite}x{hoehe}.png"
+    leinwand.save(p, dpi=(dpi, dpi))
+    log(f"Rücken {dicke:.2f} cm -> {motiv_px} px Motiv in {breite} px Leinwand "
+        f"({k:.1f} px/cm, bündig {anchor}).")
+    return p
+
+
+def _stage_slots(reg: Regionen, bild_hi: Image.Image, eintrag: dict, dpi: int,
+                 out_dir: Path, sc: str, braucht_spine: bool,
+                 log=print) -> list[tuple[int, Path]]:
+    """Legt je Smart-Object-Slot ein PNG in dessen Slot-Größe an.
+
+    Jeder Inhalt behält exakt die Größe seines Slots — nur so bleibt der Transform
+    des Smart-Objekts unverändert und das Buch zusammen. Der Inhaltsraum hat je
+    Vorlage eine eigene Auflösung ``k`` px/cm (162–310 dpi, siehe psd_analyse.py).
+
+    Buch und Spiegelung sind eigene Slots und können unterschiedliche Größen haben
+    (29x22 hat zwei Cover-Maße) — gleiche Zielgrößen werden nur einmal gerendert.
+    """
+    k = eintrag.get("content_px_per_cm")
+    if not k:
+        raise ValueError(
+            "Vorlage ohne content_px_per_cm — vorlagen_map.json mit "
+            "'python -m cover_previews.psd_analyse' neu erzeugen.")
+
+    cache: dict[tuple[str, int, int], Path] = {}
+    slots = []
+    for slot in eintrag.get("slots", []):
+        rolle = slot["role"]
+        if rolle == "spine" and not braucht_spine:
+            continue
+        size = slot.get("size_px")
+        if not size:
+            raise ValueError(
+                f"Slot {slot['layer_id']} hat keine size_px — vorlagen_map.json "
+                "mit 'python -m cover_previews.psd_analyse' neu erzeugen.")
+
+        schluessel = (rolle, int(size[0]), int(size[1]))
+        if schluessel not in cache:
+            if rolle == "spine":
+                cache[schluessel] = _stage_spine(
+                    reg, bild_hi, dpi, out_dir, sc, size, k,
+                    slot.get("anchor", "right"), log)
+            else:
+                cache[schluessel] = _stage_cover(reg, bild_hi, dpi, out_dir, sc,
+                                                 size)
+        slots.append((slot["layer_id"], cache[schluessel]))
+    return slots
 
 
 def _jp(p) -> str:
@@ -465,27 +571,28 @@ def _jp(p) -> str:
     return str(p).replace("\\", "/").replace('"', '\\"')
 
 
-def _baue_jsx(psd_pfad, eintrag: dict, cover_png, spine_png, weiss: bool,
-              png_transp, jpg_pfade: list[tuple[int, Path]], rand_cm: float) -> str:
+def _baue_jsx(psd_pfad, eintrag: dict, slot_pngs: list[tuple[int, Path]],
+              weiss: bool, png_transp, jpg_pfade: list[tuple[int, Path]],
+              rand_cm: float) -> str:
     """ExtendScript für das 3D-Mockup:
-    - Smart-Objekte per Layer-ID durch Cover/Rücken ersetzen (Reflexion ist mit
-      derselben SO-Quelle verknüpft und aktualisiert sich mit);
+    - Smart-Objekte per Layer-ID ersetzen; ``slot_pngs`` ist die Liste
+      (layer_id, PNG) — jedes PNG exakt in der Größe seines Slots, sodass der
+      Transform des Smart-Objekts unverändert bleibt;
     - optional Weiß-Korrektur (Selektive Farbkorrektur: Weiß +10 % Schwarz);
     - Hintergrund ausblenden, transparent zuschneiden -> PNG;
     - Hintergrund wieder ein, flach, JPEG in 300 & 72 dpi (nur DPI-Tag).
-    Original-PSD wird nur geöffnet und ohne Speichern geschlossen.
+
+    Die Vorlage wird direkt geöffnet (nicht kopiert) und im ``finally`` immer
+    mit DONOTSAVECHANGES geschlossen — auch wenn ein Schritt scheitert. Sonst
+    bliebe das Master-PSD mit ersetzten Smart-Objekten offen und ungespeichert
+    in Photoshop stehen, wo ein beiläufiges Strg+S es überschreiben würde.
     """
-    ersetzungen = []
-    for slot in eintrag.get("slots", []):
-        datei = cover_png if slot["role"] == "cover" else spine_png
-        if datei is None:
-            continue
-        ersetzungen.append(f'  replaceById({slot["layer_id"]}, '
-                           f'new File("{_jp(datei)}"));')
+    ersetzungen = [f'    replaceById({layer_id}, new File("{_jp(datei)}"));'
+                   for layer_id, datei in slot_pngs]
     ersetzen = "\n".join(ersetzungen)
     hide_ids = ", ".join(str(i) for i in eintrag.get("hide_bg", []))
     jpg_zeilen = "\n".join(
-        f'  saveJpg("{_jp(p)}", {dpi});' for dpi, p in jpg_pfade)
+        f'    saveJpg("{_jp(p)}", {dpi});' for dpi, p in jpg_pfade)
 
     return f'''#target photoshop
 app.preferences.rulerUnits = Units.PIXELS;
@@ -529,28 +636,33 @@ app.preferences.rulerUnits = Units.PIXELS;
     doc.saveAs(new File(path), jo, true, Extension.LOWERCASE);
   }}
 
-  // 1) Cover/Rücken einsetzen
+  try {{
+    // 1) Cover/Rücken einsetzen
 {ersetzen}
 
-  // 2) Weiß-Korrektur (nur bei weißem Umschlag)
-  {"weissKorrektur(10);" if weiss else "// keine Weiß-Korrektur"}
+    // 2) Weiß-Korrektur (nur bei weißem Umschlag)
+    {"weissKorrektur(10);" if weiss else "// keine Weiß-Korrektur"}
 
-  // 3) Transparent zuschneiden und als PNG exportieren
-  for (var i = 0; i < HIDE.length; i++) {{ try {{ setVis(HIDE[i], false); }} catch (e) {{}} }}
-  doc.trim(TrimType.TRANSPARENT);
-  var m = Math.round({rand_cm} / 2.54 * doc.resolution);
-  doc.resizeCanvas(new UnitValue(doc.width.value + 2 * m, "px"),
-                   new UnitValue(doc.height.value + 2 * m, "px"),
-                   AnchorPosition.MIDDLECENTER);
-  var o = new ExportOptionsSaveForWeb();
-  o.format = SaveDocumentType.PNG; o.PNG8 = false; o.transparency = true;
-  doc.exportDocument(new File("{_jp(png_transp)}"), ExportType.SAVEFORWEB, o);
+    // 3) Transparent zuschneiden und als PNG exportieren
+    for (var i = 0; i < HIDE.length; i++) {{ try {{ setVis(HIDE[i], false); }} catch (e) {{}} }}
+    doc.trim(TrimType.TRANSPARENT);
+    var m = Math.round({rand_cm} / 2.54 * doc.resolution);
+    doc.resizeCanvas(new UnitValue(doc.width.value + 2 * m, "px"),
+                     new UnitValue(doc.height.value + 2 * m, "px"),
+                     AnchorPosition.MIDDLECENTER);
+    var o = new ExportOptionsSaveForWeb();
+    o.format = SaveDocumentType.PNG; o.PNG8 = false; o.transparency = true;
+    doc.exportDocument(new File("{_jp(png_transp)}"), ExportType.SAVEFORWEB, o);
 
-  // 4) Hintergrund wieder ein, flach, JPEG in 300 & 72 dpi (gleiche Pixel)
-  for (var i = 0; i < HIDE.length; i++) {{ try {{ setVis(HIDE[i], true); }} catch (e) {{}} }}
-  doc.flatten();
+    // 4) Hintergrund wieder ein, flach, JPEG in 300 & 72 dpi (gleiche Pixel)
+    for (var i = 0; i < HIDE.length; i++) {{ try {{ setVis(HIDE[i], true); }} catch (e) {{}} }}
+    doc.flatten();
 {jpg_zeilen}
-  doc.close(SaveOptions.DONOTSAVECHANGES);
+  }} finally {{
+    // Immer schließen: sonst bliebe die Vorlage mit ersetzten Smart-Objekten
+    // offen und ungespeichert stehen, wenn oben etwas scheitert.
+    doc.close(SaveOptions.DONOTSAVECHANGES);
+  }}
 }})();
 '''
 
@@ -582,9 +694,8 @@ def erzeuge_3d_photoshop(reg: Regionen, bild_hi: Image.Image, cfg: dict,
     dpi_print = int(cfg.get("dpi_print", 300))
     dpi_web = int(cfg.get("dpi_web", 72))
     braucht_spine = eintrag.get("spine") and reg.spine is not None
-    cover_png = _stage_region(reg, bild_hi, "front", dpi_print, out_dir, sc)
-    spine_png = (_stage_region(reg, bild_hi, "spine", dpi_print, out_dir, sc)
-                 if braucht_spine else None)
+    slot_pngs = _stage_slots(reg, bild_hi, eintrag, dpi_print, out_dir, sc,
+                             braucht_spine, log)
     if weiss is None:
         weiss = ist_weisser_umschlag(extrahiere(
             bild_hi, tuple(round(c * dpi_print / PT_PRO_ZOLL)
@@ -595,7 +706,7 @@ def erzeuge_3d_photoshop(reg: Regionen, bild_hi: Image.Image, cfg: dict,
     jpg_pfade = [(dpi_print, out_dir / muster_3d.format(dpi=dpi_print, sc=sc)),
                  (dpi_web, out_dir / muster_3d.format(dpi=dpi_web, sc=sc))]
 
-    jsx = _baue_jsx(psd, eintrag, cover_png, spine_png, bool(weiss),
+    jsx = _baue_jsx(psd, eintrag, slot_pngs, bool(weiss),
                     png_transp, jpg_pfade, float(cfg.get("rand_cm", 1.5)))
     jsx_pfad = out_dir / f"_mockup_{sc}.jsx"
     jsx_pfad.write_text(jsx, encoding="utf-8")
@@ -603,7 +714,7 @@ def erzeuge_3d_photoshop(reg: Regionen, bild_hi: Image.Image, cfg: dict,
     if dry_run:
         log(f"Dry-Run: Slot-PNG(s) + {jsx_pfad.name} geschrieben "
             f"(Vorlage {vorlage_name}, weiß={bool(weiss)}).")
-        return [jsx_pfad, cover_png] + ([spine_png] if spine_png else [])
+        return [jsx_pfad] + sorted({p for _, p in slot_pngs})
 
     log(f"Starte Photoshop (COM) — Vorlage {vorlage_name} …")
     import win32com.client  # nur unter Windows verfügbar; bewusst lokal importiert

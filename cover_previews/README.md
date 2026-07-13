@@ -18,15 +18,43 @@ Kurzcode `sc` aus der ISBN (z. B. `05-572-1`).
 Für jedes Buchformat gibt es eine eigene Mockup-Vorlage (`17x24.psd`, `21x14.psd`
 usw.). Das Tool misst aus den Marken den **Vorderseiten-Trim** und wählt die
 formatnächste Vorlage **automatisch** (Dropdown-Override möglich, z. B. für
-`EBOOK` oder `MaGeBl`). Die Zuordnung Cover/Rücken → Smart-Objekt steckt in der
-mitgelieferten `vorlagen_map.json` (Layer-IDs aus einer einmaligen PSD-Analyse;
-die gespiegelte Reflexion teilt sich die Smart-Object-Quelle und aktualisiert
-sich mit). Bei **weißem Umschlag** wird automatisch eine leichte Grau-Korrektur
-(Selektive Farbkorrektur, Weiß +10 % Schwarz) angewandt.
+`EBOOK` oder `MaGeBl`). Bei **weißem Umschlag** wird automatisch eine leichte
+Grau-Korrektur (Selektive Farbkorrektur, Weiß +10 % Schwarz) angewandt.
 
 Der **Vorlagen-Ordner** (`_NEU_Vorlage`) wird in der GUI gewählt bzw. per
 `config.json → vorlagen_dir` gesetzt (z. B. auf den Netzpfad
 `…/Artikeldaten/_NEU_VORLAGE`). Die PSDs (~480 MB) sind **nicht** eingecheckt.
+
+## Wie die Smart-Objekte befüllt werden (der springende Punkt)
+
+`vorlagen_map.json` beschreibt jede Vorlage; erzeugt wird sie aus den PSDs mit
+
+```
+python -m cover_previews.psd_analyse          # nach jeder PSD-Revision neu laufen lassen
+```
+
+Zwei Eigenheiten der Vorlagen muss man kennen — sonst zerfällt das Mockup:
+
+**1. Jede Vorlage hat ihren eigenen Inhaltsmaßstab `k`.** Photoshop bildet den Inhalt
+eines Smart-Objekts über einen festen Transform auf die 3D-Fläche ab; die **Maße des
+Inhalts** sind dabei der Maßstab. Der Inhaltsraum liegt je nach Vorlage bei 162–310 dpi
+(nur `17x24` und `28x21` sind 300 dpi). Wer immer 300 dpi liefert, setzt den Inhalt in
+den meisten Vorlagen um bis zu 1,8× zu groß ein. `content_px_per_cm` hält `k` fest;
+das Cover wird exakt auf die Slot-Größe gebracht.
+
+**2. Die Rücken-Slots sind absichtlich überbreit.** Der Rücken-Slot von `17x24` ist
+z. B. 10 cm breit, trägt sein Motiv aber nur in einem schmalen, an der Cover-Kante
+ausgerichteten Streifen — der Rest ist transparent. Die Leinwand nimmt damit **jede**
+Rückendicke auf. Genau so füllt das Tool sie: Motiv `Dicke × k` px breit, an der
+`anchor`-Kante, Rest transparent. Der Rücken ist dadurch **maßgetreu** (ein 4-cm-Buch
+sieht dicker aus als ein 2-cm-Buch) und bleibt trotzdem bündig am Cover.
+
+Der Inhalt behält also **immer** die Größe seines Slots. Liefert man nur den schmalen
+Rückenstreifen, skaliert Photoshop den Transform auf dessen Maße — der Rücken schrumpft
+zur Außenkante und löst sich sichtbar vom Buch.
+
+Buch und Spiegelung sind eigene Slots (mit teils unterschiedlichen Maßen, `29x22` hat
+zwei Cover-Größen) und werden beide befüllt.
 
 ## So funktioniert die Marken-Erkennung
 
@@ -47,10 +75,11 @@ sich vor dem Rendern **mit der Maus nachjustieren**.
    **Vorlage** wird automatisch anhand des Formats gesetzt.
 2. Linien bei Bedarf justieren (blau ziehen); Vorlage ggf. im Dropdown ändern.
 3. Ausgaben ankreuzen (2D / 3D). Einmalig den **Vorlagen-Ordner** setzen.
-4. **Erstellen** → 2D sofort (JPEG); für 3D öffnet das Tool im Hintergrund eine
-   Kopie der Vorlage in Photoshop, setzt Cover + Rücken in die Smart-Objekte,
-   exportiert transparentes PNG + flache 3D-JPEGs und schließt **ohne zu
-   speichern** (Original-PSD bleibt unberührt).
+4. **Erstellen** → 2D sofort (JPEG); für 3D öffnet das Tool die Vorlage in
+   Photoshop, setzt Cover + Rücken in die Smart-Objekte, exportiert
+   transparentes PNG + flache 3D-JPEGs und schließt sie **ohne zu speichern**
+   (`finally`, also auch bei einem Fehler) — die Vorlagen-PSD auf der Platte
+   bleibt unberührt.
 
 ## 3D / Photoshop-Voraussetzungen
 
