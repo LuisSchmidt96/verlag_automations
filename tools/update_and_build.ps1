@@ -23,6 +23,12 @@
     $Beigaben - fuer CoverPreviews sind das die Mockup-Vorlagen (_NEU_Vorlage,
     rund 460 MB), die neben der .exe liegen muessen.
 
+    Zusaetzlich werden die fertigen Ordner nach \\C019\d\VR-Tools\ gespiegelt.
+    Von dort kopieren sich die Kollegen ihre Kopie. Uebertragen werden nur die
+    PROGRAMMTEILE (.exe, _internal\, Anleitung.txt, Beigaben) - nicht die
+    Nutzdaten daneben (config.json, kommliste.xlsx, paketnr.txt, Ausgabe-
+    ordner). Die gehoeren dem jeweiligen Anwender und bleiben unangetastet.
+
     Die virtuelle Umgebung und die PyInstaller-Zwischendateien liegen bewusst
     LOKAL (%LOCALAPPDATA%), nicht auf dem Netzlaufwerk: schneller, portabel
     (eine venv haengt am Python-Pfad des jeweiligen Rechners) und haelt den
@@ -37,10 +43,19 @@
 $ErrorActionPreference = 'Stop'
 
 # --- Pfade bestimmen --------------------------------------------------------
-$RepoRoot = Split-Path -Parent $PSScriptRoot   # ...\VR-Tools\repo
-$OutRoot  = Split-Path -Parent $RepoRoot       # ...\VR-Tools  (Ziel der Tools)
+$RepoRoot  = Split-Path -Parent $PSScriptRoot   # ...\VR-Tools\repo
+$OutRoot   = Split-Path -Parent $RepoRoot       # ...\VR-Tools  (Ziel der Tools)
+$ShareRoot = '\\C019\d\VR-Tools'                # von dort holen sich die Kollegen
+                                                # ihre Kopie
+$ShareBereit = Test-Path $ShareRoot
+
 Write-Host "Repo:    $RepoRoot" -ForegroundColor Cyan
 Write-Host "Ausgabe: $OutRoot"  -ForegroundColor Cyan
+if ($ShareBereit) {
+    Write-Host "Share:   $ShareRoot" -ForegroundColor Cyan
+} else {
+    Write-Warning "Share $ShareRoot nicht erreichbar - es wird nur lokal gebaut."
+}
 
 # --- 1) Neueste Aenderungen holen ------------------------------------------
 Write-Host "`n[1/4] git pull ..." -ForegroundColor Cyan
@@ -97,6 +112,35 @@ $Beigaben = @{
     }
 }
 
+# Legt NUR die Programmteile ab: .exe, _internal\, Anleitung.txt, Beigaben.
+# Bewusst NICHT die Nutzdaten daneben (config.json, kommliste.xlsx, paketnr.txt,
+# Ausgabeordner): die gehoeren dem jeweiligen Anwender. Wuerde man den ganzen
+# Ordner spiegeln, landete die eigene config.json bei allen anderen - und /MIR
+# wuerde die kommliste.xlsx auf dem Share loeschen.
+function Copy-Programmteile {
+    param([string]$Src, [string]$Dst, [string]$Anleitung, [hashtable]$Beigabe)
+
+    New-Item -ItemType Directory -Force -Path $Dst | Out-Null
+    # robocopy-Exitcodes 0-7 sind Erfolg, erst ab 8 ist es ein Fehler.
+    robocopy (Join-Path $Src '_internal') (Join-Path $Dst '_internal') /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
+    if ($LASTEXITCODE -ge 8) { throw "Konnte _internal nicht nach $Dst kopieren." }
+    Copy-Item (Join-Path $Src '*.exe') $Dst -Force
+
+    if ($Anleitung -and (Test-Path $Anleitung)) { Copy-Item $Anleitung $Dst -Force }
+
+    if ($Beigabe) {
+        $Quelle = $Beigabe.Quellen | Where-Object { Test-Path $_ } | Select-Object -First 1
+        if ($Quelle) {
+            Write-Host "     $($Beigabe.Ordner) -> $Dst" -ForegroundColor DarkGray
+            # /MIR uebertraegt nur Geaendertes; nur der erste Lauf kostet Zeit.
+            robocopy $Quelle (Join-Path $Dst $Beigabe.Ordner) /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
+            if ($LASTEXITCODE -ge 8) { throw "Konnte $($Beigabe.Ordner) nicht kopieren." }
+        } else {
+            Write-Warning "  $($Beigabe.Ordner) nicht gefunden - muss von Hand neben die .exe gelegt werden."
+        }
+    }
+}
+
 foreach ($Spec in $Specs) {
     $Name = $Spec.BaseName                       # == COLLECT-Name in der .spec
     Write-Host "  -> $($Spec.Name)" -ForegroundColor Yellow
@@ -104,39 +148,32 @@ foreach ($Spec in $Specs) {
         --distpath $StageDir --workpath $WorkPath $Spec.FullName
     if ($LASTEXITCODE -ne 0) { throw "PyInstaller-Build fehlgeschlagen: $Name" }
 
-    $Src = Join-Path $StageDir $Name
-    $Dst = Join-Path $OutRoot  $Name
-    New-Item -ItemType Directory -Force -Path $Dst | Out-Null
-    # Programmteile spiegeln; robocopy-Exitcodes 0-7 sind Erfolg (kein throw).
-    robocopy (Join-Path $Src '_internal') (Join-Path $Dst '_internal') /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
-    Copy-Item (Join-Path $Src '*.exe') $Dst -Force
-
-    # Anleitung fuer den Anwender mitliefern, falls das Tool eine hat.
+    $Src       = Join-Path $StageDir $Name
     $Anleitung = Join-Path $Spec.Directory 'Anleitung.txt'
-    if (Test-Path $Anleitung) { Copy-Item $Anleitung $Dst -Force }
+    $Beigabe   = $Beigaben[$Name]
 
-    # Beigaben (z. B. die Mockup-Vorlagen) in den fertigen Ordner spiegeln.
-    $B = $Beigaben[$Name]
-    if ($B) {
-        $Quelle = $B.Quellen | Where-Object { Test-Path $_ } | Select-Object -First 1
-        if ($Quelle) {
-            $Ziel = Join-Path $Dst $B.Ordner
-            Write-Host "     $($B.Ordner) aus $Quelle ..." -ForegroundColor DarkGray
-            # /MIR: nur geaenderte Dateien laufen ueber die Leitung, der zweite
-            # Build ist also schnell. Rund 460 MB beim ersten Mal.
-            robocopy $Quelle $Ziel /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
-            if ($LASTEXITCODE -ge 8) { throw "Konnte $($B.Ordner) nicht kopieren." }
-        } else {
-            Write-Warning "  $Name : $($B.Ordner) nicht gefunden - der Ordner muss von Hand neben die .exe gelegt werden."
-        }
+    Copy-Programmteile -Src $Src -Dst (Join-Path $OutRoot $Name) `
+                       -Anleitung $Anleitung -Beigabe $Beigabe
+
+    # Und auf den Share, damit die Kollegen sich den Ordner kopieren koennen.
+    if ($ShareBereit) {
+        Copy-Programmteile -Src $Src -Dst (Join-Path $ShareRoot $Name) `
+                           -Anleitung $Anleitung -Beigabe $Beigabe
     }
 }
 
 # --- 4) Ergebnis ------------------------------------------------------------
-Write-Host "`n[4/4] Fertige Tools unter $OutRoot :" -ForegroundColor Green
+Write-Host "`n[4/4] Fertige Tools:" -ForegroundColor Green
 foreach ($Spec in $Specs) {
     $ToolDir = Join-Path $OutRoot $Spec.BaseName   # COLLECT-Name == .spec-Basisname
     if (Test-Path $ToolDir) { Write-Host "  $ToolDir" }
+}
+if ($ShareBereit) {
+    Write-Host "`nZum Verteilen (Ordner kopieren, .exe starten):" -ForegroundColor Green
+    foreach ($Spec in $Specs) {
+        $ToolDir = Join-Path $ShareRoot $Spec.BaseName
+        if (Test-Path $ToolDir) { Write-Host "  $ToolDir" }
+    }
 }
 
 Write-Host "`nHinweis: Die Tools legen config.json & Co. direkt neben der .exe an"  -ForegroundColor DarkGray
