@@ -69,6 +69,34 @@ beiden Buchdeckel, das Feld dazwischen der Rücken.
 In der GUI werden die erkannten Linien blau über die Vorschau gelegt und lassen
 sich vor dem Rendern **mit der Maus nachjustieren**.
 
+## Ablage (Artikeldaten-Share)
+
+Die fertigen Bilder landen je Buch in einem eigenen Ordner unter
+
+```
+\\C019\d\Online\Webseite\Artikeldaten\<Kurzcode>_<Titel>\
+```
+
+(einstellbar über `config.json → artikeldaten_dir`; ist der Share nicht
+erreichbar, fällt das Tool auf `cover_output/` neben der .exe zurück).
+
+Nach dem Einlesen des PDFs sucht das Tool anhand des Kurzcodes einen **vorhandenen**
+Ordner (`05-597-4_Oberkirch`) und wählt ihn aus. Gibt es keinen, schlägt es einen
+neuen vor — der Kurzcode steht fest, den Titelteil tippst du daneben ein; vor dem
+Anlegen wird gefragt.
+
+Liegen im Zielordner schon gleichnamige Dateien, werden sie **nicht** überschrieben,
+sondern nach `_alt/<Zeitstempel>/` verschoben; die neuen behalten die regulären
+Namen. Die Konvention auf dem Share ist `.jpg` (nicht `.jpeg`) — sonst lägen die
+neuen Bilder neben den alten, statt sie abzulösen.
+
+## Hardcover / Softcover
+
+Die Vorlagen haben eine **Falz**-Ebene (die Rille am Buchdeckel neben dem Rücken).
+Der Schalter im GUI blendet sie ein (Hardcover) bzw. aus (Softcover). Die Sichtbarkeit
+wird immer **explizit** gesetzt: die Vorlagen sind sich uneinig, wie sie ausgeliefert
+werden (bei `16x16` und `29x22` ist die Falz aus, sonst an). `EBOOK` hat keine.
+
 ## Bedienung
 
 1. **Umschlag-PDF** wählen → Vorschau mit erkannten Linien; die passende

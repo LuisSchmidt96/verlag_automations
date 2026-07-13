@@ -6,14 +6,18 @@ Cover-Previews-Generator (Tkinter-GUI)
 Erzeugt aus einem druckfertigen Umschlag-PDF 2D- und 3D-Vorschau-PNGs.
 
 Ablauf in der GUI:
-1. Umschlag-PDF wählen  -> Vorschau mit erkannten Schnittlinien
+1. Umschlag-PDF wählen  -> Vorschau mit erkannten Schnittlinien; aus der ISBN
+   wird der Kurzcode und daraus der Zielordner auf dem Artikeldaten-Share
+   gesucht (bzw. ein neuer vorgeschlagen)
 2. Linien bei Bedarf mit der Maus nachjustieren  (blau = Schnitt)
-3. Ausgaben & (für 3D) Mockup-PSD + Smart-Object-Ebene wählen
+3. Ausgaben, Einband (Hardcover = mit Falz) und Mockup-Vorlage wählen
 4. "Erstellen"  -> 2D sofort (Python), 3D über Photoshop (COM)
 
-Dateien/Ordner (direkt neben der .exe):
-- config.json   : Einstellungen (wird beim ersten Start angelegt)
-- cover_output/ : Standard-Ausgabeordner
+Die Bilder landen in <Artikeldaten>/<Kurzcode>_<Titel>/. Liegen dort schon
+gleichnamige Dateien, werden sie nach _alt/<Zeitstempel>/ weggesichert, statt
+sie zu überschreiben.
+
+config.json (Einstellungen) liegt direkt neben der .exe.
 """
 
 from __future__ import annotations
@@ -22,6 +26,7 @@ import os
 import sys
 import threading
 import traceback
+from datetime import datetime
 from pathlib import Path
 from tkinter import (Tk, Canvas, filedialog, messagebox,
                      StringVar, BooleanVar)
@@ -54,6 +59,8 @@ class App(Tk):
         self.doc = None                 # fitz.Document
         self.reg = None                 # core.Regionen
         self.sc = "unbekannt"           # Kurzcode aus ISBN
+        self._out_dir = None            # Zielordner des laufenden Auftrags
+        self._alt = []                  # Dateien, die vorher weggesichert werden
         self._preview_img = None        # ImageTk-Referenz (sonst GC)
         self._scale = 1.0               # Faktor pt -> Canvas-Pixel
         self._drag = None               # (orientierung, index) beim Ziehen
@@ -65,9 +72,15 @@ class App(Tk):
         self.vorlage_info = StringVar(value="—")
         self.out_2d = BooleanVar(value=True)
         self.out_3d = BooleanVar(value=True)
+        self.einband_var = StringVar(
+            value=self.cfg.get("einband", "hardcover"))
+        self.titel_var = StringVar()            # Titelteil des Ordnernamens
+        self.ziel_var = StringVar(value="—")    # aufgelöster Zielordner
+        self.ziel_status = StringVar(value="")  # vorhanden / wird angelegt
         self.info_var = StringVar(value="Bitte ein Umschlag-PDF wählen.")
 
         self._build_ui()
+        self.titel_var.trace_add("write", lambda *_: self._aktualisiere_ziel())
 
     # ------------------------------------------------------------------
     # UI-Aufbau
@@ -89,6 +102,22 @@ class App(Tk):
             side="left", padx=(0, 4), pady=8)
         ttk.Button(frm_pdf, text="Neu erkennen", command=self._erkenne).pack(
             side="left", padx=(0, 8), pady=8)
+
+        # Zielordner auf dem Artikeldaten-Share
+        frm_ziel = ttk.LabelFrame(self, text="Zielordner (Artikeldaten)")
+        frm_ziel.pack(fill="x", **pad)
+        z1 = ttk.Frame(frm_ziel)
+        z1.pack(fill="x", padx=8, pady=(8, 2))
+        ttk.Label(z1, text="Ordnername:  Kurzcode +").pack(side="left")
+        ttk.Entry(z1, textvariable=self.titel_var, width=28).pack(
+            side="left", padx=6)
+        ttk.Label(z1, text="(Titel, optional)", foreground="gray").pack(side="left")
+        ttk.Label(z1, textvariable=self.ziel_status,
+                  foreground="#0a7").pack(side="left", padx=12)
+        z2 = ttk.Frame(frm_ziel)
+        z2.pack(fill="x", padx=8, pady=(0, 8))
+        ttk.Label(z2, textvariable=self.ziel_var, foreground="gray").pack(
+            side="left", fill="x", expand=True)
 
         # Bedienelemente unten zuerst verankern, damit sie nie verdeckt werden.
         unten = ttk.Frame(self)
@@ -119,6 +148,19 @@ class App(Tk):
         ttk.Label(frm_out,
                   text=f"2D als JPEG, 3D als PNG+JPEG — je {self.cfg['dpi_print']} "
                        f"& {self.cfg['dpi_web']} dpi",
+                  foreground="gray").pack(anchor="w", padx=8, pady=(0, 6))
+
+        frm_eb = ttk.LabelFrame(bottom, text="Einband (3D)")
+        frm_eb.pack(side="left", fill="both", padx=(10, 0))
+        ttk.Radiobutton(frm_eb, text="Hardcover  (mit Falz)",
+                        variable=self.einband_var, value="hardcover",
+                        command=self._einband_gewechselt).pack(
+                            anchor="w", padx=8, pady=(6, 0))
+        ttk.Radiobutton(frm_eb, text="Softcover  (ohne Falz)",
+                        variable=self.einband_var, value="softcover",
+                        command=self._einband_gewechselt).pack(
+                            anchor="w", padx=8, pady=(0, 6))
+        ttk.Label(frm_eb, text="Falz = Rille am Buchdeckel",
                   foreground="gray").pack(anchor="w", padx=8, pady=(0, 6))
 
         frm_ps = ttk.LabelFrame(bottom, text="3D-Mockup-Vorlage (nach Buchformat)")
@@ -182,9 +224,40 @@ class App(Tk):
                 self._auto_vorlage()
                 self.info_var.set(f"Erkannt. Kurzcode: {self.sc}. "
                                   "Linien bei Bedarf justieren, dann Erstellen.")
+            self._ziel_aus_kurzcode()
         except Exception as e:
             messagebox.showerror("Fehler beim Einlesen",
                                  f"{e}\n\n{traceback.format_exc()}")
+
+    # ------------------------------------------------------------------
+    # Zielordner
+    # ------------------------------------------------------------------
+    def _ziel_aus_kurzcode(self):
+        """Nach dem Einlesen: vorhandenen Artikelordner suchen bzw. einen neuen
+        vorschlagen. Der Titelteil wird aus einem gefundenen Ordner übernommen."""
+        vorhanden = core.finde_artikel_ordner(self.sc, self.cfg)
+        if vorhanden is not None:
+            rest = vorhanden.name[len(self.sc):].lstrip("_ -")
+            self.titel_var.set(rest)         # löst _aktualisiere_ziel aus
+        self._aktualisiere_ziel()
+
+    def _aktualisiere_ziel(self):
+        if not self.sc or self.sc == "unbekannt":
+            self.ziel_var.set("—")
+            self.ziel_status.set("")
+            return
+        ordner, existiert = core.ziel_ordner(self.sc, self.titel_var.get(), self.cfg)
+        self.ziel_var.set(str(ordner))
+        if core.artikeldaten_dir(self.cfg) is None:
+            self.ziel_status.set("⚠ Share nicht erreichbar — lokaler Ordner")
+        elif existiert:
+            self.ziel_status.set("vorhandener Ordner")
+        else:
+            self.ziel_status.set("wird neu angelegt")
+
+    def _einband_gewechselt(self):
+        self.cfg["einband"] = self.einband_var.get()
+        core.speichere_config(self.cfg)
 
     def _zeichne_vorschau(self):
         img = core.rendere_seite(self.doc, PREVIEW_RENDER_DPI)
@@ -304,8 +377,30 @@ class App(Tk):
                 "blauen Linien justieren (mind. 4 senkrechte Schnitte).")
             return
         self.cfg["vorlagen_dir"] = self.vorlagen_dir_var.get().strip()
+        self.cfg["einband"] = self.einband_var.get()
         core.speichere_config(self.cfg)
 
+        out_dir, existiert = core.ziel_ordner(self.sc, self.titel_var.get(), self.cfg)
+
+        if not existiert and not messagebox.askokcancel(
+                "Ordner anlegen", f"Der Ordner wird neu angelegt:\n\n{out_dir}"):
+            return
+
+        # Vorhandene Dateien nicht stillschweigend überschreiben.
+        namen = core.ausgabe_namen(self.sc, self.cfg, self.out_2d.get(),
+                                   self.out_3d.get())
+        self._alt = core.kollisionen(out_dir, namen)
+        if self._alt:
+            liste = "\n".join(f"• {p.name}" for p in self._alt)
+            if not messagebox.askokcancel(
+                    "Dateien vorhanden",
+                    f"Im Zielordner liegen schon {len(self._alt)} dieser "
+                    f"Datei(en):\n\n{liste}\n\n"
+                    "Sie werden nach _alt/<Zeitstempel>/ verschoben, die neuen "
+                    "bekommen die regulären Namen.\n\nFortfahren?"):
+                return
+
+        self._out_dir = out_dir
         self.btn_run.configure(state="disabled")
         self.info_var.set("Erzeuge …")
         threading.Thread(target=self._run_worker, daemon=True).start()
@@ -314,7 +409,13 @@ class App(Tk):
         erzeugt = []
         fehler = []
         try:
-            out_dir = core.APP_DIR / self.cfg["output_dir"]
+            out_dir = self._out_dir
+            out_dir.mkdir(parents=True, exist_ok=True)
+            if self._alt:
+                stempel = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+                ziel = core.sichere_weg(self._alt, stempel)
+                fehler.append(f"{len(self._alt)} alte Datei(en) nach "
+                              f"_alt/{ziel.name}/ verschoben.")
             img_hi = core.rendere_seite(self.doc, int(self.cfg["dpi_print"]))
 
             if self.out_2d.get():
@@ -353,7 +454,11 @@ class App(Tk):
             messagebox.showerror("Fehler", "\n".join(fehler) or "Unbekannt.")
 
     def _oeffne_ausgabe(self):
-        out_dir = core.APP_DIR / self.cfg["output_dir"]
+        if self.sc and self.sc != "unbekannt":
+            out_dir, _ = core.ziel_ordner(self.sc, self.titel_var.get(), self.cfg)
+        else:
+            out_dir = core.artikeldaten_dir(self.cfg) or \
+                core.APP_DIR / self.cfg["output_dir"]
         out_dir.mkdir(parents=True, exist_ok=True)
         if sys.platform == "win32":
             os.startfile(str(out_dir))

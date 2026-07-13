@@ -58,8 +58,15 @@ CONFIG_PFAD = APP_DIR / "config.json"
 # ---------------------------------------------------------------------
 
 DEFAULT_CONFIG = {
+    # Ablage der fertigen Bilder: je Buch ein Ordner unter artikeldaten_dir
+    # (Konvention dort: "<Kurzcode>_<Titel>", z. B. "05-597-4_Oberkirch").
+    # Leer / nicht erreichbar -> Rückfall auf output_dir neben der .exe.
+    "artikeldaten_dir": r"\\C019\d\Online\Webseite\Artikeldaten",
     "output_dir": "cover_output",
     "last_input_dir": "",
+    # Einband: "hardcover" zeigt die Falz-Ebene (Rille am Buchdeckel),
+    # "softcover" blendet sie aus.
+    "einband": "hardcover",
     # ISBN-Präfix des Verlags (für Kurzcode-Ableitung, falls im PDF gefunden).
     "isbn_prefix": "978-3-95505",
     # DPI-Ziele
@@ -72,8 +79,10 @@ DEFAULT_CONFIG = {
     # Marken-Erkennung
     "kante_tol_pt": 3.0,       # wie nah muss eine Marke am Blattrand liegen
     "cluster_tol_pt": 4.0,     # Marken mit ~gleicher Position zusammenfassen
-    # Dateinamen-Muster (Konvention des Verlags)
-    "muster_2d": "2D_{dpi}_{sc}.jpeg",
+    # Dateinamen-Muster (Konvention des Verlags — auf dem Artikeldaten-Share
+    # sind 344 von 345 2D-Bildern .jpg, nicht .jpeg; mit .jpeg würden die
+    # neuen Dateien neben den alten liegen statt sie zu ersetzen)
+    "muster_2d": "2D_{dpi}_{sc}.jpg",
     "muster_3d": "3D_{dpi}_{sc}.jpg",
     "muster_3d_png": "{sc}.png",
     "jpeg_qualitaet": 95,
@@ -443,6 +452,93 @@ def shortcode_aus_isbn(isbn13: str) -> str:
 
 
 # ---------------------------------------------------------------------
+# Zielordner (Artikeldaten-Share)
+# ---------------------------------------------------------------------
+
+def artikeldaten_dir(cfg: dict) -> Path | None:
+    """Basis-Ordner auf dem Share — None, wenn nicht gesetzt oder nicht erreichbar."""
+    raw = (cfg or {}).get("artikeldaten_dir") or ""
+    if not raw:
+        return None
+    p = Path(os.path.expandvars(raw))
+    try:
+        return p if p.is_dir() else None
+    except OSError:          # Netzpfad nicht erreichbar
+        return None
+
+
+def finde_artikel_ordner(sc: str, cfg: dict) -> Path | None:
+    """Vorhandenen Ordner zum Kurzcode suchen ("05-597-4_Oberkirch")."""
+    basis = artikeldaten_dir(cfg)
+    if not basis or not sc:
+        return None
+    for p in sorted(basis.glob(f"{sc}*")):
+        if p.is_dir():
+            return p
+    return None
+
+
+def ordner_name(sc: str, titel: str = "") -> str:
+    """Ordnername nach Konvention: Kurzcode, optional mit Titel."""
+    titel = re.sub(r'[<>:"/\\|?*]', "", (titel or "").strip()).strip(" ._")
+    return f"{sc}_{titel}" if titel else sc
+
+
+def ziel_ordner(sc: str, titel: str, cfg: dict) -> tuple[Path, bool]:
+    """Zielordner + ob er schon existiert.
+
+    Bevorzugt einen vorhandenen Ordner zum Kurzcode; sonst ein neuer unter
+    artikeldaten_dir. Ist der Share nicht erreichbar, fällt es auf output_dir
+    neben der .exe zurück, damit die Arbeit nicht verloren geht.
+    """
+    vorhanden = finde_artikel_ordner(sc, cfg)
+    if vorhanden is not None:
+        return vorhanden, True
+    basis = artikeldaten_dir(cfg)
+    if basis is None:
+        return APP_DIR / cfg.get("output_dir", "cover_output"), False
+    p = basis / ordner_name(sc, titel)
+    return p, p.is_dir()
+
+
+def ausgabe_namen(sc: str, cfg: dict, mit_2d: bool, mit_3d: bool) -> list[str]:
+    """Dateinamen, die ein Lauf schreiben würde (Konvention des Verlags)."""
+    namen = []
+    dpi_p, dpi_w = int(cfg.get("dpi_print", 300)), int(cfg.get("dpi_web", 72))
+    if mit_2d:
+        m = cfg.get("muster_2d", "2D_{dpi}_{sc}.jpeg")
+        namen += [m.format(dpi=d, sc=sc) for d in (dpi_p, dpi_w)]
+    if mit_3d:
+        m = cfg.get("muster_3d", "3D_{dpi}_{sc}.jpg")
+        namen += [m.format(dpi=d, sc=sc) for d in (dpi_p, dpi_w)]
+        namen.append(cfg.get("muster_3d_png", "{sc}.png").format(sc=sc))
+    return namen
+
+
+def kollisionen(out_dir: Path, namen: list[str]) -> list[Path]:
+    """Welche der Zieldateien liegen dort schon?"""
+    out_dir = Path(out_dir)
+    return [out_dir / n for n in namen if (out_dir / n).exists()]
+
+
+def sichere_weg(dateien: list[Path], zeitstempel: str) -> Path:
+    """Vorhandene Dateien nach _alt/<Zeitstempel>/ verschieben.
+
+    So bleiben die neuen Dateien konventionsgerecht benannt und die alten sind
+    trotzdem nicht weg. ``zeitstempel`` wird übergeben (nicht hier gebildet),
+    damit ein Lauf alles in denselben Unterordner legt.
+    """
+    if not dateien:
+        return None
+    ziel = Path(dateien[0]).parent / "_alt" / zeitstempel
+    ziel.mkdir(parents=True, exist_ok=True)
+    for f in dateien:
+        f = Path(f)
+        f.replace(ziel / f.name)
+    return ziel
+
+
+# ---------------------------------------------------------------------
 # 3D-Mockup über Photoshop (Windows, COM)
 # ---------------------------------------------------------------------
 
@@ -573,11 +669,12 @@ def _jp(p) -> str:
 
 def _baue_jsx(psd_pfad, eintrag: dict, slot_pngs: list[tuple[int, Path]],
               weiss: bool, png_transp, jpg_pfade: list[tuple[int, Path]],
-              rand_cm: float) -> str:
+              rand_cm: float, hardcover: bool = True) -> str:
     """ExtendScript für das 3D-Mockup:
     - Smart-Objekte per Layer-ID ersetzen; ``slot_pngs`` ist die Liste
       (layer_id, PNG) — jedes PNG exakt in der Größe seines Slots, sodass der
       Transform des Smart-Objekts unverändert bleibt;
+    - Falz-Ebenen (Rille am Buchdeckel) nur beim Hardcover einblenden;
     - optional Weiß-Korrektur (Selektive Farbkorrektur: Weiß +10 % Schwarz);
     - Hintergrund ausblenden, transparent zuschneiden -> PNG;
     - Hintergrund wieder ein, flach, JPEG in 300 & 72 dpi (nur DPI-Tag).
@@ -590,6 +687,9 @@ def _baue_jsx(psd_pfad, eintrag: dict, slot_pngs: list[tuple[int, Path]],
     ersetzungen = [f'    replaceById({layer_id}, new File("{_jp(datei)}"));'
                    for layer_id, datei in slot_pngs]
     ersetzen = "\n".join(ersetzungen)
+    # Sichtbarkeit der Falz IMMER explizit setzen: die Vorlagen sind sich uneinig,
+    # wie sie ausgeliefert werden (bei 16x16 und 29x22 ist sie aus, sonst an).
+    falz_ids = ", ".join(str(i) for i in eintrag.get("falz", []))
     hide_ids = ", ".join(str(i) for i in eintrag.get("hide_bg", []))
     jpg_zeilen = "\n".join(
         f'    saveJpg("{_jp(p)}", {dpi});' for dpi, p in jpg_pfade)
@@ -639,6 +739,12 @@ app.preferences.rulerUnits = Units.PIXELS;
   try {{
     // 1) Cover/Rücken einsetzen
 {ersetzen}
+
+    // 1b) Falz (Rille am Buchdeckel): nur beim Hardcover sichtbar
+    var FALZ = [{falz_ids}];
+    for (var i = 0; i < FALZ.length; i++) {{
+      try {{ setVis(FALZ[i], {str(bool(hardcover)).lower()}); }} catch (e) {{}}
+    }}
 
     // 2) Weiß-Korrektur (nur bei weißem Umschlag)
     {"weissKorrektur(10);" if weiss else "// keine Weiß-Korrektur"}
@@ -706,8 +812,9 @@ def erzeuge_3d_photoshop(reg: Regionen, bild_hi: Image.Image, cfg: dict,
     jpg_pfade = [(dpi_print, out_dir / muster_3d.format(dpi=dpi_print, sc=sc)),
                  (dpi_web, out_dir / muster_3d.format(dpi=dpi_web, sc=sc))]
 
-    jsx = _baue_jsx(psd, eintrag, slot_pngs, bool(weiss),
-                    png_transp, jpg_pfade, float(cfg.get("rand_cm", 1.5)))
+    hardcover = str(cfg.get("einband", "hardcover")).lower() != "softcover"
+    jsx = _baue_jsx(psd, eintrag, slot_pngs, bool(weiss), png_transp, jpg_pfade,
+                    float(cfg.get("rand_cm", 1.5)), hardcover=hardcover)
     jsx_pfad = out_dir / f"_mockup_{sc}.jsx"
     jsx_pfad.write_text(jsx, encoding="utf-8")
 

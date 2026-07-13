@@ -38,6 +38,8 @@ JSX = r'''
 #target photoshop
 (function () {
   var doc = app.open(new File("%s"));
+  var out = [];
+
   function info(id) {
     var ref = new ActionReference();
     ref.putIdentifier(charIDToTypeID("Lyr "), id);
@@ -51,37 +53,51 @@ JSX = r'''
       var t = som.getList(stringIDToTypeID("transform"));
       var pts = [];
       for (var i = 0; i < t.count; i++) pts.push(t.getDouble(i));
-      return id + "|" + name + "|SO|" + w + "|" + h + "|" + pts.join(",");
+      return "SLOT|" + id + "|" + name + "|SO|" + w + "|" + h + "|" + pts.join(",");
     } catch (e) {
-      return id + "|" + name + "|NOSO|0|0|";
+      return "SLOT|" + id + "|" + name + "|NOSO|0|0|";
     }
   }
   var IDS = [%s];
-  var out = [];
   for (var i = 0; i < IDS.length; i++) out.push(info(IDS[i]));
+
+  // Falz-Ebenen (Buchdeckel-Rille am Ruecken) — nur beim Hardcover sichtbar.
+  // Buch und Spiegelung haben je eine ("Falz", "Falz Kopie").
+  function walk(set) {
+    for (var i = 0; i < set.layers.length; i++) {
+      var L = set.layers[i];
+      if (L.typename == "LayerSet") { walk(L); continue; }
+      if (/^falz/i.test(L.name)) out.push("FALZ|" + L.id + "|" + L.name);
+    }
+  }
+  walk(doc);
+
   doc.close(SaveOptions.DONOTSAVECHANGES);
   return out.join("\n");
 })();
 '''
 
 
-def _lies_slots(ps, psd: Path, layer_ids: list[int]) -> dict[int, dict]:
-    """Smart-Object-Größe + Transform-Viereck je Layer-ID."""
+def _lies_psd(ps, psd: Path, layer_ids: list[int]) -> tuple[dict[int, dict], list[int]]:
+    """Smart-Object-Größe + Transform je Slot, dazu die Falz-Ebenen-IDs."""
     js = JSX % (str(psd).replace("\\", "/"), ", ".join(str(i) for i in layer_ids))
-    daten = {}
+    slots, falz = {}, []
     for zeile in ps.DoJavaScript(js).strip().splitlines():
         t = zeile.split("|")
-        lid = int(t[0])
-        if t[2] != "SO":
-            daten[lid] = {"name": t[1], "so": False}
+        if t[0] == "FALZ":
+            falz.append(int(t[1]))
             continue
-        werte = [float(x) for x in t[5].split(",")]
-        daten[lid] = {
-            "name": t[1], "so": True, "w": float(t[3]), "h": float(t[4]),
+        lid = int(t[1])
+        if t[3] != "SO":
+            slots[lid] = {"name": t[2], "so": False}
+            continue
+        werte = [float(x) for x in t[6].split(",")]
+        slots[lid] = {
+            "name": t[2], "so": True, "w": float(t[4]), "h": float(t[5]),
             # Content-Ecken (0,0) (W,0) (W,H) (0,H) -> Canvas
             "quad": [(werte[i], werte[i + 1]) for i in range(0, 8, 2)],
         }
-    return daten
+    return slots, falz
 
 
 def _book_cm(format_cm: list[float], so_w: float, so_h: float) -> list[float]:
@@ -126,12 +142,13 @@ def main(argv: list[str]) -> int:
             print(f"{name:<14} PSD fehlt: {psd}")
             continue
 
-        daten = _lies_slots(ps, psd, [s["layer_id"] for s in slots])
+        daten, falz = _lies_psd(ps, psd, [s["layer_id"] for s in slots])
         cover = next((daten[s["layer_id"]] for s in slots
                       if s["role"] == "cover" and daten[s["layer_id"]].get("so")), None)
         if cover is None:
             print(f"{name:<14} kein Cover-Smart-Objekt gefunden — übersprungen")
             continue
+        eintrag["falz"] = sorted(falz)
 
         if eintrag.get("format_cm"):
             buch = _book_cm(eintrag["format_cm"], cover["w"], cover["h"])
@@ -157,9 +174,8 @@ def main(argv: list[str]) -> int:
 
         kk = f"{k:6.1f} px/cm = {k * 2.54:3.0f} dpi" if k else "  (kein Buchformat)"
         buch_s = f"{eintrag['book_cm'][0]}x{eintrag['book_cm'][1]}" if k else "-"
-        anker = {s.get("anchor") for s in slots if s["role"] == "spine"}
         print(f"  {name:<14} Buch {buch_s:<10} {kk}   "
-              f"{len(slots)} Slots, Rücken-Anker: {', '.join(sorted(a for a in anker if a)) or '-'}")
+              f"{len(slots)} Slots, Falz: {eintrag['falz'] or '—'}")
 
     map_pfad.write_text(json.dumps(mapping, indent=2, ensure_ascii=False) + "\n",
                         encoding="utf-8")

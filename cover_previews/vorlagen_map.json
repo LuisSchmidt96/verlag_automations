@@ -49,7 +49,11 @@
       12.0,
       19.0
     ],
-    "content_px_per_cm": 98.17
+    "content_px_per_cm": 98.17,
+    "falz": [
+      38,
+      41
+    ]
   },
   "12x22.psd": {
     "format_cm": [
@@ -101,7 +105,11 @@
       12.0,
       22.0
     ],
-    "content_px_per_cm": 98.5
+    "content_px_per_cm": 98.5,
+    "falz": [
+      38,
+      41
+    ]
   },
   "15,5x22.psd": {
     "format_cm": [
@@ -153,7 +161,11 @@
       15.5,
       22.0
     ],
-    "content_px_per_cm": 95.74
+    "content_px_per_cm": 95.74,
+    "falz": [
+      38,
+      41
+    ]
   },
   "16x16.psd": {
     "format_cm": [
@@ -205,7 +217,10 @@
       16.0,
       16.0
     ],
-    "content_px_per_cm": 84.31
+    "content_px_per_cm": 84.31,
+    "falz": [
+      33
+    ]
   },
   "17x24.psd": {
     "format_cm": [
@@ -257,7 +272,11 @@
       17.0,
       24.0
     ],
-    "content_px_per_cm": 118.12
+    "content_px_per_cm": 118.12,
+    "falz": [
+      69,
+      98
+    ]
   },
   "21x13,5.psd": {
     "format_cm": [
@@ -309,7 +328,11 @@
       13.5,
       21.0
     ],
-    "content_px_per_cm": 121.93
+    "content_px_per_cm": 121.93,
+    "falz": [
+      41,
+      44
+    ]
   },
   "21x14.psd": {
     "format_cm": [
@@ -361,7 +384,11 @@
       14.0,
       21.0
     ],
-    "content_px_per_cm": 119.14
+    "content_px_per_cm": 119.14,
+    "falz": [
+      43,
+      46
+    ]
   },
   "21x21.psd": {
     "format_cm": [
@@ -413,7 +440,11 @@
       21.0,
       21.0
     ],
-    "content_px_per_cm": 64.24
+    "content_px_per_cm": 64.24,
+    "falz": [
+      33,
+      51
+    ]
   },
   "22x24.psd": {
     "format_cm": [
@@ -465,7 +496,11 @@
       24.0,
       22.0
     ],
-    "content_px_per_cm": 63.96
+    "content_px_per_cm": 63.96,
+    "falz": [
+      49,
+      50
+    ]
   },
   "28x21.psd": {
     "format_cm": [
@@ -517,7 +552,11 @@
       28.0,
       21.0
     ],
-    "content_px_per_cm": 118.43
+    "content_px_per_cm": 118.43,
+    "falz": [
+      49,
+      61
+    ]
   },
   "29,7x21.psd": {
     "format_cm": [
@@ -569,7 +608,11 @@
       21.0,
       29.7
     ],
-    "content_px_per_cm": 71.19
+    "content_px_per_cm": 71.19,
+    "falz": [
+      23,
+      32
+    ]
   },
   "29x22.psd": {
     "format_cm": [
@@ -655,7 +698,11 @@
       22.0,
       29.0
     ],
-    "content_px_per_cm": 67.95
+    "content_px_per_cm": 67.95,
+    "falz": [
+      23,
+      32
+    ]
   },
   "EBOOK.psd": {
     "format_cm": null,
@@ -671,7 +718,8 @@
       }
     ],
     "hide_bg": [],
-    "auto": false
+    "auto": false,
+    "falz": []
   },
   "MaGeBl.psd": {
     "format_cm": null,
