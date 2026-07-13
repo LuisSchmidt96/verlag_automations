@@ -568,23 +568,27 @@ def _ausschnitt(reg: Regionen, bild_hi: Image.Image, region: str,
 
 
 def _stage_cover(reg: Regionen, bild_hi: Image.Image, dpi: int, out_dir: Path,
-                 sc: str, size_px: tuple[int, int]) -> Path:
+                 sc: str, size_px: tuple[int, int], so_dpi: float) -> Path:
     """Vorderseite exakt auf die Slot-Größe bringen.
 
     Photoshop bildet den Inhalt eines Smart-Objekts über einen festen Transform
     auf die 3D-Fläche ab; die Maße des Inhalts sind dabei der Maßstab. Ein Inhalt
     in Slot-Größe füllt die Fläche also genau — auch wenn der PDF-Trim leicht vom
     Vorlagenformat abweicht (die Verzerrung liegt typisch unter 2 %).
+
+    ``so_dpi`` ist die Auflösung der Vorlage: Photoshop setzt den Inhalt nach
+    PHYSISCHER Größe ein (px / dpi), nicht nach Pixelzahl. Ein 300-dpi-Tag in
+    einer 367,59-dpi-Vorlage landet um Faktor 300/367,59 daneben.
     """
     img = _ausschnitt(reg, bild_hi, "front", dpi).resize(tuple(size_px), Image.LANCZOS)
     p = Path(out_dir) / f"_slot_{sc}_front_{size_px[0]}x{size_px[1]}.png"
-    img.save(p, dpi=(dpi, dpi))
+    img.save(p, dpi=(so_dpi, so_dpi))
     return p
 
 
 def _stage_spine(reg: Regionen, bild_hi: Image.Image, dpi: int, out_dir: Path,
                  sc: str, size_px: tuple[int, int], k: float, anchor: str,
-                 log=print) -> Path:
+                 so_dpi: float, log=print) -> Path:
     """Rücken maßgetreu in die volle Slot-Leinwand setzen.
 
     Die Rücken-Slots der Vorlagen sind bewusst ÜBERBREIT (bei 17x24 z. B. 10 cm)
@@ -613,7 +617,7 @@ def _stage_spine(reg: Regionen, bild_hi: Image.Image, dpi: int, out_dir: Path,
     leinwand.paste(motiv.convert("RGBA"), (x, 0))
 
     p = Path(out_dir) / f"_slot_{sc}_spine_{breite}x{hoehe}.png"
-    leinwand.save(p, dpi=(dpi, dpi))
+    leinwand.save(p, dpi=(so_dpi, so_dpi))
     log(f"Rücken {dicke:.2f} cm -> {motiv_px} px Motiv in {breite} px Leinwand "
         f"({k:.1f} px/cm, bündig {anchor}).")
     return p
@@ -632,9 +636,10 @@ def _stage_slots(reg: Regionen, bild_hi: Image.Image, eintrag: dict, dpi: int,
     (29x22 hat zwei Cover-Maße) — gleiche Zielgrößen werden nur einmal gerendert.
     """
     k = eintrag.get("content_px_per_cm")
-    if not k:
+    so_dpi = eintrag.get("content_dpi")
+    if not k or not so_dpi:
         raise ValueError(
-            "Vorlage ohne content_px_per_cm — vorlagen_map.json mit "
+            "Vorlage ohne content_px_per_cm/content_dpi — vorlagen_map.json mit "
             "'python -m cover_previews.psd_analyse' neu erzeugen.")
 
     cache: dict[tuple[str, int, int], Path] = {}
@@ -654,10 +659,10 @@ def _stage_slots(reg: Regionen, bild_hi: Image.Image, eintrag: dict, dpi: int,
             if rolle == "spine":
                 cache[schluessel] = _stage_spine(
                     reg, bild_hi, dpi, out_dir, sc, size, k,
-                    slot.get("anchor", "right"), log)
+                    slot.get("anchor", "right"), so_dpi, log)
             else:
                 cache[schluessel] = _stage_cover(reg, bild_hi, dpi, out_dir, sc,
-                                                 size)
+                                                 size, so_dpi)
         slots.append((slot["layer_id"], cache[schluessel]))
     return slots
 
@@ -692,7 +697,7 @@ def _baue_jsx(psd_pfad, eintrag: dict, slot_pngs: list[tuple[int, Path]],
     falz_ids = ", ".join(str(i) for i in eintrag.get("falz", []))
     hide_ids = ", ".join(str(i) for i in eintrag.get("hide_bg", []))
     jpg_zeilen = "\n".join(
-        f'    saveJpg("{_jp(p)}", {dpi});' for dpi, p in jpg_pfade)
+        f'    saveJpg(fertig, "{_jp(p)}", {dpi});' for dpi, p in jpg_pfade)
 
     return f'''#target photoshop
 app.preferences.rulerUnits = Units.PIXELS;
@@ -730,11 +735,13 @@ app.preferences.rulerUnits = Units.PIXELS;
     desc.putObject(charIDToTypeID("Usng"), stringIDToTypeID("selectiveColor"), adj);
     executeAction(charIDToTypeID("Mk  "), desc, DialogModes.NO);
   }}
-  function saveJpg(path, dpi) {{
-    doc.resizeImage(undefined, undefined, dpi, ResampleMethod.NONE);
+  function saveJpg(d, path, dpi) {{
+    d.resizeImage(undefined, undefined, dpi, ResampleMethod.NONE);
     var jo = new JPEGSaveOptions(); jo.quality = 12;
-    doc.saveAs(new File(path), jo, true, Extension.LOWERCASE);
+    d.saveAs(new File(path), jo, true, Extension.LOWERCASE);
   }}
+
+  var fertig = null;   // zusammengefasstes Ergebnis-Dokument
 
   try {{
     // 1) Cover/Rücken einsetzen
@@ -749,24 +756,50 @@ app.preferences.rulerUnits = Units.PIXELS;
     // 2) Weiß-Korrektur (nur bei weißem Umschlag)
     {"weissKorrektur(10);" if weiss else "// keine Weiß-Korrektur"}
 
-    // 3) Transparent zuschneiden und als PNG exportieren
+    // 3) Hintergrund aus, transparent zuschneiden
     for (var i = 0; i < HIDE.length; i++) {{ try {{ setVis(HIDE[i], false); }} catch (e) {{}} }}
     doc.trim(TrimType.TRANSPARENT);
+
+    // Ergebnis in ein FRISCHES Dokument kopieren, statt die Leinwand einfach
+    // wieder zu vergrößern. Grund: trim() verkleinert nur die Leinwand, die
+    // Ebenen behalten ihre Pixel außerhalb davon. Ein resizeCanvas() legt die
+    // wieder frei — und weil Photoshop Ebenenmasken beim Vergrößern mit WEISS
+    // (= sichtbar) fortsetzt, käme die ausmaskierte untere Hälfte der Spiegelung
+    // als harter Block zurück. Auf der hellen Vorlage sieht man das nicht, bei
+    // einem dunklen Umschlag klebt ein grauer Klotz unter dem Buch.
+    // Das neue Dokument enthält nur die sichtbaren Pixel — außerhalb ist nichts.
     var m = Math.round({rand_cm} / 2.54 * doc.resolution);
-    doc.resizeCanvas(new UnitValue(doc.width.value + 2 * m, "px"),
-                     new UnitValue(doc.height.value + 2 * m, "px"),
-                     AnchorPosition.MIDDLECENTER);
+    var W = doc.width.value + 2 * m, H = doc.height.value + 2 * m;
+    doc.selection.selectAll();
+    doc.selection.copy(true);             // auf Basis aller sichtbaren Ebenen
+    doc.selection.deselect();
+
+    fertig = app.documents.add(W, H, doc.resolution, "cover_3d",
+                               NewDocumentMode.RGB, DocumentFill.TRANSPARENT);
+    fertig.paste();                       // wird mittig eingefügt
+    fertig.selection.deselect();
+
     var o = new ExportOptionsSaveForWeb();
     o.format = SaveDocumentType.PNG; o.PNG8 = false; o.transparency = true;
-    doc.exportDocument(new File("{_jp(png_transp)}"), ExportType.SAVEFORWEB, o);
+    fertig.exportDocument(new File("{_jp(png_transp)}"), ExportType.SAVEFORWEB, o);
 
-    // 4) Hintergrund wieder ein, flach, JPEG in 300 & 72 dpi (gleiche Pixel)
-    for (var i = 0; i < HIDE.length; i++) {{ try {{ setVis(HIDE[i], true); }} catch (e) {{}} }}
-    doc.flatten();
+    // 4) Dieselben Pixel auf Weiß -> JPEG in 300 & 72 dpi (nur DPI-Tag anders).
+    // Der Hintergrund der Vorlagen ist reines Weiß.
+    var bg = fertig.artLayers.add();
+    var weissF = new SolidColor();
+    weissF.rgb.red = 255; weissF.rgb.green = 255; weissF.rgb.blue = 255;
+    fertig.selection.selectAll();
+    fertig.selection.fill(weissF);
+    fertig.selection.deselect();
+    bg.move(fertig, ElementPlacement.PLACEATEND);
+    fertig.flatten();
 {jpg_zeilen}
   }} finally {{
-    // Immer schließen: sonst bliebe die Vorlage mit ersetzten Smart-Objekten
+    // Immer schließen: sonst bliebe das Master-PSD mit ersetzten Smart-Objekten
     // offen und ungespeichert stehen, wenn oben etwas scheitert.
+    if (fertig !== null) {{
+      try {{ fertig.close(SaveOptions.DONOTSAVECHANGES); }} catch (e) {{}}
+    }}
     doc.close(SaveOptions.DONOTSAVECHANGES);
   }}
 }})();
@@ -830,6 +863,27 @@ def erzeuge_3d_photoshop(reg: Regionen, bild_hi: Image.Image, cfg: dict,
     fehlend = [p for _, p in jpg_pfade if not p.exists()] + \
               ([png_transp] if not png_transp.exists() else [])
     if fehlend:
+        # Zwischendateien stehen lassen — mit ihnen lässt sich der Photoshop-
+        # Schritt nachvollziehen bzw. das .jsx von Hand ausführen.
         raise RuntimeError("Photoshop hat nicht alle Ausgaben erzeugt: "
                            + ", ".join(p.name for p in fehlend))
+
+    raeume_auf(out_dir, sc)
     return [png_transp, *[p for _, p in jpg_pfade]]
+
+
+def raeume_auf(out_dir: Path, sc: str) -> list[Path]:
+    """Zwischendateien des 3D-Laufs entfernen (_slot_*.png, _mockup_*.jsx).
+
+    Sie sind nur Futter für Photoshop; im Artikelordner haben sie nichts zu
+    suchen. Bei einem Fehler bleiben sie liegen (siehe erzeuge_3d_photoshop).
+    """
+    weg = []
+    for p in sorted(Path(out_dir).glob(f"_slot_{sc}_*.png")) + \
+            sorted(Path(out_dir).glob(f"_mockup_{sc}.jsx")):
+        try:
+            p.unlink()
+            weg.append(p)
+        except OSError:
+            pass
+    return weg

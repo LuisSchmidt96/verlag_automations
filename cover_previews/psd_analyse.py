@@ -38,7 +38,7 @@ JSX = r'''
 #target photoshop
 (function () {
   var doc = app.open(new File("%s"));
-  var out = [];
+  var out = ["DOC|" + doc.resolution];
 
   function info(id) {
     var ref = new ActionReference();
@@ -78,12 +78,16 @@ JSX = r'''
 '''
 
 
-def _lies_psd(ps, psd: Path, layer_ids: list[int]) -> tuple[dict[int, dict], list[int]]:
-    """Smart-Object-Größe + Transform je Slot, dazu die Falz-Ebenen-IDs."""
+def _lies_psd(ps, psd: Path,
+              layer_ids: list[int]) -> tuple[dict[int, dict], list[int], float]:
+    """Smart-Object-Größe + Transform je Slot, Falz-Ebenen-IDs, Dokument-dpi."""
     js = JSX % (str(psd).replace("\\", "/"), ", ".join(str(i) for i in layer_ids))
-    slots, falz = {}, []
+    slots, falz, dpi = {}, [], 300.0
     for zeile in ps.DoJavaScript(js).strip().splitlines():
         t = zeile.split("|")
+        if t[0] == "DOC":
+            dpi = float(t[1])
+            continue
         if t[0] == "FALZ":
             falz.append(int(t[1]))
             continue
@@ -97,7 +101,7 @@ def _lies_psd(ps, psd: Path, layer_ids: list[int]) -> tuple[dict[int, dict], lis
             # Content-Ecken (0,0) (W,0) (W,H) (0,H) -> Canvas
             "quad": [(werte[i], werte[i + 1]) for i in range(0, 8, 2)],
         }
-    return slots, falz
+    return slots, falz, dpi
 
 
 def _book_cm(format_cm: list[float], so_w: float, so_h: float) -> list[float]:
@@ -142,13 +146,17 @@ def main(argv: list[str]) -> int:
             print(f"{name:<14} PSD fehlt: {psd}")
             continue
 
-        daten, falz = _lies_psd(ps, psd, [s["layer_id"] for s in slots])
+        daten, falz, dpi = _lies_psd(ps, psd, [s["layer_id"] for s in slots])
         cover = next((daten[s["layer_id"]] for s in slots
                       if s["role"] == "cover" and daten[s["layer_id"]].get("so")), None)
         if cover is None:
             print(f"{name:<14} kein Cover-Smart-Objekt gefunden — übersprungen")
             continue
         eintrag["falz"] = sorted(falz)
+        # Photoshop setzt ersetzten Inhalt nach PHYSISCHER Größe ein (px / dpi).
+        # Die Staging-PNGs müssen also mit der Auflösung der Vorlage gespeichert
+        # werden — 21x13,5 läuft z. B. auf 367,59 dpi statt 300.
+        eintrag["content_dpi"] = round(dpi, 2)
 
         if eintrag.get("format_cm"):
             buch = _book_cm(eintrag["format_cm"], cover["w"], cover["h"])
@@ -172,9 +180,10 @@ def main(argv: list[str]) -> int:
             else:
                 slot.pop("anchor", None)
 
-        kk = f"{k:6.1f} px/cm = {k * 2.54:3.0f} dpi" if k else "  (kein Buchformat)"
+        kk = f"{k:6.1f} px/cm" if k else "(kein Buchformat)"
         buch_s = f"{eintrag['book_cm'][0]}x{eintrag['book_cm'][1]}" if k else "-"
-        print(f"  {name:<14} Buch {buch_s:<10} {kk}   "
+        print(f"  {name:<14} Buch {buch_s:<10} {kk:<12} "
+              f"{eintrag['content_dpi']:>6.2f} dpi   "
               f"{len(slots)} Slots, Falz: {eintrag['falz'] or '—'}")
 
     map_pfad.write_text(json.dumps(mapping, indent=2, ensure_ascii=False) + "\n",

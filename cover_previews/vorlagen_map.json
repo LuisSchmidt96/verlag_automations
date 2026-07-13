@@ -53,7 +53,8 @@
     "falz": [
       38,
       41
-    ]
+    ],
+    "content_dpi": 300.0
   },
   "12x22.psd": {
     "format_cm": [
@@ -109,7 +110,8 @@
     "falz": [
       38,
       41
-    ]
+    ],
+    "content_dpi": 300.0
   },
   "15,5x22.psd": {
     "format_cm": [
@@ -165,7 +167,8 @@
     "falz": [
       38,
       41
-    ]
+    ],
+    "content_dpi": 300.0
   },
   "16x16.psd": {
     "format_cm": [
@@ -220,7 +223,8 @@
     "content_px_per_cm": 84.31,
     "falz": [
       33
-    ]
+    ],
+    "content_dpi": 300.0
   },
   "17x24.psd": {
     "format_cm": [
@@ -276,7 +280,8 @@
     "falz": [
       69,
       98
-    ]
+    ],
+    "content_dpi": 300.0
   },
   "21x13,5.psd": {
     "format_cm": [
@@ -332,7 +337,8 @@
     "falz": [
       41,
       44
-    ]
+    ],
+    "content_dpi": 367.59
   },
   "21x14.psd": {
     "format_cm": [
@@ -388,7 +394,8 @@
     "falz": [
       43,
       46
-    ]
+    ],
+    "content_dpi": 367.59
   },
   "21x21.psd": {
     "format_cm": [
@@ -444,7 +451,8 @@
     "falz": [
       33,
       51
-    ]
+    ],
+    "content_dpi": 300.0
   },
   "22x24.psd": {
     "format_cm": [
@@ -500,7 +508,8 @@
     "falz": [
       49,
       50
-    ]
+    ],
+    "content_dpi": 300.0
   },
   "28x21.psd": {
     "format_cm": [
@@ -556,7 +565,8 @@
     "falz": [
       49,
       61
-    ]
+    ],
+    "content_dpi": 300.0
   },
   "29,7x21.psd": {
     "format_cm": [
@@ -612,7 +622,8 @@
     "falz": [
       23,
       32
-    ]
+    ],
+    "content_dpi": 300.0
   },
   "29x22.psd": {
     "format_cm": [
@@ -702,7 +713,8 @@
     "falz": [
       23,
       32
-    ]
+    ],
+    "content_dpi": 300.0
   },
   "EBOOK.psd": {
     "format_cm": null,
@@ -719,7 +731,8 @@
     ],
     "hide_bg": [],
     "auto": false,
-    "falz": []
+    "falz": [],
+    "content_dpi": 300.0
   },
   "MaGeBl.psd": {
     "format_cm": null,
