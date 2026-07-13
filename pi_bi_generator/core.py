@@ -45,8 +45,9 @@ def _base_dir() -> Path:
     return Path(__file__).parent
 
 
-# App-mutierte Laufzeitdaten (config.json) liegen getrennt vom Programm.
-APP_DIR = _base_dir() / "data"
+# App-mutierte Laufzeitdaten (config.json, cover_cache/, pi_bi_output/) liegen
+# direkt neben der .exe — wie bei booxpress_etiketten, kein data-Unterordner.
+APP_DIR = _base_dir()
 APP_DIR.mkdir(parents=True, exist_ok=True)
 CONFIG_PFAD = APP_DIR / "config.json"
 

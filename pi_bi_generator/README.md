@@ -53,5 +53,5 @@ pyinstaller pi_bi_generator/PiBiGenerator.spec
 ```
 
 Ergebnis in `dist\PiBiGenerator\`. Der komplette Ordner wird auf den Ziel-PC
-kopiert. Die Vorlagen sind in die `.exe` gebündelt; `data/config.json` wird beim
-ersten Start daneben angelegt.
+kopiert. Die Vorlagen sind in die `.exe` gebündelt; `config.json` wird beim
+ersten Start direkt daneben angelegt (ebenso `pi_bi_output/` und `cover_cache/`).

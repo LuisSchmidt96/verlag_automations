@@ -14,11 +14,13 @@ verlag_automations/
 │   ├── main.py                 ← Einstiegspunkt für den .exe-Build
 │   ├── BooxpressEtiketten.spec ← PyInstaller-Build-Rezept
 │   ├── README.md               ← Details zu diesem Tool
-│   ├── samples/                ← Beispiel-Eingaben (nur zur Referenz)
-│   └── data/                   ← Laufzeitdaten neben der .exe
-│       ├── config.json         (wird bei Bedarf automatisch erzeugt)
-│       ├── paketnr.txt         (Zähler)
-│       └── kommliste.xlsx      (Stammdaten)
+│   └── samples/                ← Beispiel-Eingaben (nur zur Referenz)
+│                                 Laufzeitdaten (config.json, paketnr.txt,
+│                                 kommliste.xlsx) liegen neben der .exe
+├── pi_bi_generator/            ← ein Tool (PI/BI aus VLB-ONIX-XML)
+│   ├── core.py, app.py, main.py, PiBiGenerator.spec, README.md
+│   ├── vorlagen/               ← docx-/html-Vorlagen (in die .exe gebündelt)
+│   └── beispiele/              ← Beispiel-XML + Referenzdokumente
 ├── tools/
 │   └── update_and_build.ps1    ← zieht Git-Änderungen & baut alle Tools neu
 ├── requirements.txt            ← gemeinsame Python-Abhängigkeiten
@@ -30,8 +32,9 @@ verlag_automations/
 1. Neuen Ordner anlegen, z. B. `mein_tool/` mit `__init__.py`, `core.py`,
    `app.py`, `main.py` (nach dem Muster von `booxpress_etiketten/`).
 2. `main.py` als Einstiegspunkt: `from mein_tool.app import main`.
-3. Laufzeitdaten immer in `mein_tool/data/` ablegen (siehe `core.py`:
-   `APP_DIR = _base_dir() / "data"`).
+3. Laufzeitdaten (config.json, Ausgabeordner, …) immer direkt neben der .exe
+   ablegen (siehe `core.py`: `APP_DIR = _base_dir()`) – kein `data/`-Unterordner,
+   damit der Anwender sie sofort findet.
 4. Eine eigene `MeinTool.spec` anlegen (Kopie der vorhandenen anpassen:
    Entry-Skript, `name=` und ggf. `collect_all(...)`).
 5. Fertig – `tools/update_and_build.ps1` findet die neue `.spec` automatisch.

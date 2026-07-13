@@ -36,9 +36,10 @@ def _base_dir() -> Path:
     return Path(__file__).parent
 
 
-# Sämtliche Laufzeitdateien liegen im Unterordner "data" neben der .exe,
-# damit Programm und Daten sauber getrennt sind.
-APP_DIR = _base_dir() / "data"
+# Sämtliche Laufzeitdateien (config.json, paketnr.txt, kommliste.xlsx sowie
+# der Ausgabeordner etiketten_output/) liegen direkt neben der .exe —
+# bewusst KEIN data-Unterordner, damit die Stammdaten leicht zu finden sind.
+APP_DIR = _base_dir()
 APP_DIR.mkdir(parents=True, exist_ok=True)
 CONFIG_PFAD = APP_DIR / "config.json"
 PAKETNR_PFAD = APP_DIR / "paketnr.txt"

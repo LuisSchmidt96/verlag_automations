@@ -18,7 +18,7 @@ dist/
 # Generated output
 etiketten_output/
 pi_bi_output/
-pi_bi_generator/data/cover_cache/
+cover_cache/
 
 # Runtime state (app-mutated)
 config.json

@@ -7,9 +7,10 @@ Erzeugt aus einem VLB-ONIX-XML-Datensatz die Presse- (PI) und
 Buchinformation (BI) je als docx und html in einem Ausgabeordner.
 
 Dateien/Ordner (neben der .exe):
-- vorlagen/   : mitgelieferte docx-/html-Vorlagen
-- data/       : config.json (wird beim ersten Start angelegt)
-- pi_bi_output/ : Standard-Ausgabeordner
+- config.json    : Einstellungen (wird beim ersten Start angelegt)
+- pi_bi_output/  : Standard-Ausgabeordner
+- cover_cache/   : vom Webserver geladene Cover
+Die docx-/html-Vorlagen sind in die .exe gebündelt.
 
 Bauen als .exe (Windows, aus dem Repo-Wurzelordner):
     pyinstaller pi_bi_generator/PiBiGenerator.spec
