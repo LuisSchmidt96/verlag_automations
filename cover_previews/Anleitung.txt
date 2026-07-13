@@ -1,0 +1,86 @@
+Cover-Previews-Generator
+========================
+Erzeugt aus einem druckfertigen Umschlag-PDF die Artikeldaten-Bilder:
+  - 2D-Vorderseite (flach, auf die Buchkante beschnitten)
+  - 3D-Mockup (Buch mit Ruecken und Spiegelung, ueber Photoshop)
+
+
+Starten
+-------
+Doppelklick auf  CoverPreviews.exe
+Eine Installation ist nicht noetig. Der komplette Ordner kann kopiert und auf
+jedem Windows-PC abgelegt werden - einfach mitkopieren und starten.
+
+Der Ordner _NEU_Vorlage (die Mockup-Vorlagen, rund 460 MB) liegt schon mit
+dabei. Er MUSS neben der .exe bleiben, sonst findet das Tool die Vorlagen
+nicht. Ein anderer Ordner laesst sich im Programm unter "Vorlagen-Ordner"
+einstellen (z. B. der Netzpfad in den Artikeldaten).
+
+
+Voraussetzung fuer 3D
+---------------------
+Photoshop muss auf DEMSELBEN PC installiert sein - das Tool steuert es fern.
+Ohne Photoshop funktioniert die 2D-Ausgabe trotzdem.
+
+
+Bedienung
+---------
+1. Umschlag-PDF waehlen (das druckfertige, mit Schnittmarken).
+   In der Vorschau erscheinen die erkannten Schnittlinien blau.
+   Bitte kurz pruefen: sie muessen auf Rueckseite | Ruecken | Vorderseite
+   passen. Stimmt etwas nicht, die blauen Linien mit der Maus verschieben.
+
+2. Aus der ISBN im PDF wird der Kurzcode (z. B. 05-572-1) gelesen und damit
+   der Zielordner in den Artikeldaten gesucht:
+        \\C019\d\Online\Webseite\Artikeldaten\<Kurzcode>_<Titel>\
+   - Gibt es den Ordner schon, wird er ausgewaehlt ("vorhandener Ordner").
+   - Sonst wird ein neuer vorgeschlagen ("wird neu angelegt"). Der Kurzcode
+     steht fest, den Titel daneben eintippen. Vor dem Anlegen wird gefragt.
+
+3. Einband waehlen:
+   - Hardcover = mit Falz (die Rille am Buchdeckel neben dem Ruecken)
+   - Softcover = ohne Falz
+
+4. Die Mockup-Vorlage wird automatisch nach dem Buchformat gesetzt. Bei Bedarf
+   im Dropdown aendern (z. B. EBOOK).
+
+5. "Erstellen" - es entstehen im Zielordner:
+        2D_300_<Kurzcode>.jpg    2D_72_<Kurzcode>.jpg
+        3D_300_<Kurzcode>.jpg    3D_72_<Kurzcode>.jpg
+        <Kurzcode>.png           (3D, transparent)
+
+   Die _300- und _72-Dateien sind absichtlich PIXELGLEICH - es unterscheidet
+   sich nur der eingetragene DPI-Wert (wie "neu berechnen aus" in Photoshop).
+
+   Liegen dort schon Dateien mit denselben Namen, werden sie NICHT
+   ueberschrieben, sondern nach  _alt\<Zeitstempel>\  verschoben.
+
+Fuer 3D oeffnet das Tool die Vorlage in Photoshop, setzt Cover und Ruecken ein
+und schliesst sie wieder OHNE zu speichern. Die Vorlagen-PSD bleibt unberuehrt.
+Waehrend das laeuft, Photoshop bitte in Ruhe lassen.
+
+
+Wenn etwas nicht stimmt
+-----------------------
+"Regionen unklar" / Linien sitzen falsch
+    Die Setzer zeichnen die Schnittmarken unterschiedlich. Erkennt das Tool sie
+    nicht sauber, die blauen Linien einfach von Hand an die Schnittkanten
+    ziehen - alles Weitere rechnet sich daraus neu.
+
+Ruecken zu dick/duenn im 3D
+    Die Rueckendicke kommt aus dem PDF (Abstand der beiden mittleren Linien).
+    Sitzen die Linien richtig, stimmt auch der Ruecken.
+
+Vorlage passt nicht zum Format
+    Im Dropdown die richtige waehlen. Steht hinter der Vorlage ein Warnzeichen
+    mit "pruefen", weicht das erkannte Format mehr als 1 cm von ihr ab.
+
+3D bricht ab
+    Photoshop laeuft nicht, ist beschaeftigt, oder der Ordner _NEU_Vorlage
+    fehlt neben der .exe. Bleiben Dateien mit "_" am Anfang liegen
+    (_slot_*.png, _mockup_*.jsx), war es ein Photoshop-Fehler - damit laesst
+    sich der Schritt nachvollziehen.
+
+config.json
+    Liegt neben der .exe und merkt sich die Einstellungen. Kann man loeschen,
+    dann wird sie mit den Standardwerten neu angelegt.

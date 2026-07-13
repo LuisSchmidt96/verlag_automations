@@ -9,12 +9,19 @@
         VR-Tools\
         |-- repo\                 <- dieses Git-Repo (Quellcode)
         |-- BooxpressEtiketten\   <- fertiges Tool  (Doppelklick auf die .exe)
-        `-- PiBiGenerator\        <- fertiges Tool
+        |-- PiBiGenerator\        <- fertiges Tool
+        `-- CoverPreviews\        <- fertiges Tool  (inkl. _NEU_Vorlage\)
 
     Jedes Tool hat eine eigene *.spec-Datei in seinem Unterordner. Das Skript
     findet automatisch ALLE *.spec-Dateien im Repo und baut sie einzeln - direkt
     als Ordner in VR-Tools ("--distpath"). Neue Automations werden automatisch
     mitgebaut, sobald sie eine .spec-Datei mitbringen.
+
+    Jeder fertige Ordner ist fuer sich lauffaehig: kopieren, auf einen anderen
+    PC legen, .exe starten. Liegt im Tool-Ordner eine Anleitung.txt, wird sie
+    mitgeliefert. Grosse Nutzdaten, die nicht in die .exe gehoeren, stehen in
+    $Beigaben - fuer CoverPreviews sind das die Mockup-Vorlagen (_NEU_Vorlage,
+    rund 460 MB), die neben der .exe liegen muessen.
 
     Die virtuelle Umgebung und die PyInstaller-Zwischendateien liegen bewusst
     LOKAL (%LOCALAPPDATA%), nicht auf dem Netzlaufwerk: schneller, portabel
@@ -77,6 +84,19 @@ if (-not $Specs) {
     return
 }
 
+# Grosse Nutzdaten, die NICHT in die .exe gehoeren, aber im fertigen Ordner
+# liegen muessen, damit er sich einfach kopieren laesst. Es gewinnt die erste
+# Quelle, die es gibt.
+$Beigaben = @{
+    'CoverPreviews' = @{
+        Ordner  = '_NEU_Vorlage'                 # muss neben der .exe liegen
+        Quellen = @(
+            '\\C019\d\Online\Webseite\Artikeldaten\_NEU_Vorlage',   # Original
+            (Join-Path $RepoRoot 'cover_previews\_NEU_Vorlage')     # lokale Kopie
+        )
+    }
+}
+
 foreach ($Spec in $Specs) {
     $Name = $Spec.BaseName                       # == COLLECT-Name in der .spec
     Write-Host "  -> $($Spec.Name)" -ForegroundColor Yellow
@@ -90,6 +110,26 @@ foreach ($Spec in $Specs) {
     # Programmteile spiegeln; robocopy-Exitcodes 0-7 sind Erfolg (kein throw).
     robocopy (Join-Path $Src '_internal') (Join-Path $Dst '_internal') /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
     Copy-Item (Join-Path $Src '*.exe') $Dst -Force
+
+    # Anleitung fuer den Anwender mitliefern, falls das Tool eine hat.
+    $Anleitung = Join-Path $Spec.Directory 'Anleitung.txt'
+    if (Test-Path $Anleitung) { Copy-Item $Anleitung $Dst -Force }
+
+    # Beigaben (z. B. die Mockup-Vorlagen) in den fertigen Ordner spiegeln.
+    $B = $Beigaben[$Name]
+    if ($B) {
+        $Quelle = $B.Quellen | Where-Object { Test-Path $_ } | Select-Object -First 1
+        if ($Quelle) {
+            $Ziel = Join-Path $Dst $B.Ordner
+            Write-Host "     $($B.Ordner) aus $Quelle ..." -ForegroundColor DarkGray
+            # /MIR: nur geaenderte Dateien laufen ueber die Leitung, der zweite
+            # Build ist also schnell. Rund 460 MB beim ersten Mal.
+            robocopy $Quelle $Ziel /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
+            if ($LASTEXITCODE -ge 8) { throw "Konnte $($B.Ordner) nicht kopieren." }
+        } else {
+            Write-Warning "  $Name : $($B.Ordner) nicht gefunden - der Ordner muss von Hand neben die .exe gelegt werden."
+        }
+    }
 }
 
 # --- 4) Ergebnis ------------------------------------------------------------
@@ -99,6 +139,7 @@ foreach ($Spec in $Specs) {
     if (Test-Path $ToolDir) { Write-Host "  $ToolDir" }
 }
 
-Write-Host "`nHinweis: BooxpressEtiketten legt config.json/paketnr.txt direkt"    -ForegroundColor DarkGray
-Write-Host "neben der .exe an (kein data-Unterordner). Die kommliste.xlsx"        -ForegroundColor DarkGray
-Write-Host "(Stammdaten) muss ebenfalls dort neben der .exe liegen."              -ForegroundColor DarkGray
+Write-Host "`nHinweis: Die Tools legen config.json & Co. direkt neben der .exe an"  -ForegroundColor DarkGray
+Write-Host "(kein data-Unterordner). BooxpressEtiketten braucht dort zusaetzlich"    -ForegroundColor DarkGray
+Write-Host "die kommliste.xlsx (Stammdaten), CoverPreviews den Ordner _NEU_Vorlage"  -ForegroundColor DarkGray
+Write-Host "(wird oben automatisch mitkopiert)."                                     -ForegroundColor DarkGray
