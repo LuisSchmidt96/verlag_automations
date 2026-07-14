@@ -334,9 +334,24 @@ class App(Tk):
     # ------------------------------------------------------------------
     # Vorlagen-Auswahl
     # ------------------------------------------------------------------
+    def _merke_vorlagen_dir(self):
+        """Den Vorlagen-Ordner in die config übernehmen — aber nur, wenn er vom
+        Standard ABWEICHT.
+
+        Standard ist `_NEU_Vorlage` neben der .exe; im Eingabefeld steht dafür der
+        aufgelöste, absolute Pfad. Schriebe man den in die config, wäre der
+        Tool-Ordner nicht mehr verschiebbar: er zeigte auf das Laufwerk des
+        Rechners, auf dem er gebaut wurde. Leer lassen heißt "neben der .exe" —
+        und genau das soll der kopierte Ordner tun.
+        """
+        gewaehlt = self.vorlagen_dir_var.get().strip()
+        standard = core.vorlagen_dir({})          # cfg ohne Eintrag -> Standard
+        self.cfg["vorlagen_dir"] = (
+            "" if gewaehlt and Path(gewaehlt) == standard else gewaehlt)
+
     def _fuelle_vorlagen(self):
         """Befüllt die Vorlagen-Combobox aus dem Vorlagen-Ordner."""
-        self.cfg["vorlagen_dir"] = self.vorlagen_dir_var.get().strip()
+        self._merke_vorlagen_dir()
         namen = [e["name"] for e in core.vorlagen_liste(self.cfg)]
         self.vorlage_box.configure(values=namen)
 
@@ -344,9 +359,8 @@ class App(Tk):
         pfad = filedialog.askdirectory(title="Vorlagen-Ordner (_NEU_Vorlage) wählen")
         if pfad:
             self.vorlagen_dir_var.set(pfad)
-            self.cfg["vorlagen_dir"] = pfad
+            self._fuelle_vorlagen()               # setzt cfg["vorlagen_dir"]
             core.speichere_config(self.cfg)
-            self._fuelle_vorlagen()
             if self.reg is not None:
                 self._auto_vorlage()
 
