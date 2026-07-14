@@ -156,7 +156,8 @@ class App(Tk):
     def _verbinde_worker(self):
         try:
             c = core.ShopClient(self.cfg["shop_url"], self.cfg["access_key_id"],
-                                self.cfg["secret_access_key"])
+                                self.cfg["secret_access_key"],
+                                tls_pruefen=bool(self.cfg.get("tls_pruefen", True)))
             version = c.verbinde().get("version", "?")
             self._lookups = {
                 "tax": c.steuersaetze(), "cur": c.waehrungen(),

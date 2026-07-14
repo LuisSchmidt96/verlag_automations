@@ -40,6 +40,40 @@ optional **Kategorie** und **Hersteller**. Die Auswahl landet in der
 > Die `config.json` liegt neben der .exe und enthält das **Secret im Klartext**.
 > Sie ist per `.gitignore` vom Repo ausgeschlossen — bitte nicht weitergeben.
 
+## Dev-Store hinter Caddy (Basic-Auth + TLS)
+
+**Basic-Auth blockt die Admin-API.** Basic und Bearer teilen sich denselben
+`Authorization`-Header — es kann nur eines von beiden gesendet werden. Steht vor
+dem Shop eine Basic-Auth, antwortet der Proxy mit 401, bevor Shopware das Token
+überhaupt sieht. Das lässt sich **nicht** im Tool lösen, sondern nur im Proxy:
+`/api/*` von der Basic-Auth ausnehmen.
+
+```caddyfile
+dev.example.de {
+    # alles außer der API bleibt passwortgeschützt
+    @geschuetzt not path /api/*
+    basic_auth @geschuetzt {
+        luis $2a$14$…   # bcrypt-Hash (caddy hash-password)
+    }
+    reverse_proxy localhost:8000
+}
+```
+
+(Bei Caddy < 2.8 heißt die Direktive `basicauth` statt `basic_auth`.)
+
+Danach `caddy reload`. Der Admin im Browser bleibt geschützt, die API ist für
+das Tool erreichbar. Alternativ das Tool direkt gegen den Shop **hinter** dem
+Proxy laufen lassen (z. B. `http://localhost:8000`).
+
+**TLS:** Nutzt Caddy für den Dev-Store seine interne CA, kennt Python das
+Zertifikat nicht (`CERTIFICATE_VERIFY_FAILED`). Dann in der `config.json`
+
+```json
+"tls_pruefen": false
+```
+
+setzen — **nur für den Dev-Store**. Im Produktivshop bleibt es `true`.
+
 ## Bilder
 
 Die Bilder erzeugt das **`cover_previews`-Tool** und legt sie auf dem

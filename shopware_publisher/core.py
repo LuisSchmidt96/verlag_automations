@@ -54,6 +54,9 @@ DEFAULT_CONFIG = {
     "shop_url": "",                 # z. B. https://shop.verlag-regionalkultur.de
     "access_key_id": "",
     "secret_access_key": "",
+    # Dev-Store hinter Caddy (interne CA): auf false setzen, wenn das
+    # TLS-Zertifikat nicht überprüfbar ist. Im Produktivshop true lassen!
+    "tls_pruefen": True,
 
     # --- Zuordnungen aus dem Shop (werden beim "Verbinden" befüllt) ----------
     "tax_id": "",                   # Steuersatz-ID (Bücher: 7 %)
@@ -433,11 +436,21 @@ class ShopFehler(RuntimeError):
 class ShopClient:
     """Minimaler Admin-API-Client (OAuth client_credentials + Sync + Medien)."""
 
-    def __init__(self, shop_url: str, key: str, secret: str, timeout: float = 30.0):
+    def __init__(self, shop_url: str, key: str, secret: str, timeout: float = 30.0,
+                 tls_pruefen: bool = True):
         self.base = (shop_url or "").rstrip("/")
         self.key = key
         self.secret = secret
         self.timeout = timeout
+        # Dev-Store hinter Caddy: dessen interne CA kennt Python nicht. Dann
+        # kann die Zertifikatsprüfung hier abgeschaltet werden (nur für Dev!).
+        self._ssl = None
+        if not tls_pruefen:
+            import ssl
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+            self._ssl = ctx
         self._token: str | None = None
 
     # -- HTTP-Grundlagen ------------------------------------------------
@@ -455,13 +468,34 @@ class ShopClient:
         if auth:
             req.add_header("Authorization", f"Bearer {self.token()}")
         try:
-            with urllib.request.urlopen(req, timeout=self.timeout) as r:
+            with urllib.request.urlopen(req, timeout=self.timeout,
+                                        context=self._ssl) as r:
                 return r.read()
         except urllib.error.HTTPError as e:
+            # Basic-Auth vor dem Shop (z. B. Caddy) blockt die API: Basic und
+            # Bearer teilen sich denselben Authorization-Header — beides
+            # gleichzeitig geht nicht. Das muss im Proxy gelöst werden.
+            wa = (e.headers.get("WWW-Authenticate") or "") if e.headers else ""
+            if e.code == 401 and wa.lower().startswith("basic"):
+                raise ShopFehler(
+                    "Der Shop steht hinter einer Basic-Auth (z. B. Caddy) — die "
+                    "Admin-API ist so nicht erreichbar: Basic und Bearer nutzen "
+                    "beide den Authorization-Header.\n\n"
+                    "Lösung: im Proxy /api/* von der Basic-Auth ausnehmen "
+                    "(siehe README), oder das Tool direkt gegen den Shop "
+                    "hinter dem Proxy laufen lassen.") from e
             detail = e.read().decode("utf-8", "replace")[:800]
             raise ShopFehler(f"{method} {pfad} -> HTTP {e.code}\n{detail}") from e
         except urllib.error.URLError as e:
-            raise ShopFehler(f"{method} {pfad} -> nicht erreichbar: {e.reason}") from e
+            grund = str(getattr(e, "reason", e))
+            if "CERTIFICATE_VERIFY_FAILED" in grund:
+                raise ShopFehler(
+                    "TLS-Zertifikat nicht überprüfbar — bei einem Dev-Store "
+                    "hinter Caddy ist das meist dessen interne CA.\n\n"
+                    "Lösung: in der config.json \"tls_pruefen\": false setzen "
+                    "(nur für den Dev-Store!) oder Caddys Root-CA im System "
+                    "vertrauen.") from e
+            raise ShopFehler(f"{method} {pfad} -> nicht erreichbar: {grund}") from e
 
     def _json(self, method: str, pfad: str, daten: dict | None = None,
               auth: bool = True) -> dict:
@@ -619,7 +653,8 @@ def veroeffentliche(f: dict, cfg: dict, bilder: dict | None = None,
         return {"payload": payload, "medien": medien, "admin_url": ""}
 
     client = ShopClient(cfg.get("shop_url", ""), cfg.get("access_key_id", ""),
-                        cfg.get("secret_access_key", ""))
+                        cfg.get("secret_access_key", ""),
+                        tls_pruefen=bool(cfg.get("tls_pruefen", True)))
     fehlend = [k for k in ("tax_id", "currency_id") if not cfg.get(k)]
     if fehlend:
         raise ShopFehler("Zuordnung fehlt: " + ", ".join(fehlend) +
