@@ -75,6 +75,8 @@ class App(Tk):
         self.out_tif = BooleanVar(value=bool(self.cfg.get("tif_erzeugen", True)))
         self.einband_var = StringVar(
             value=self.cfg.get("einband", "hardcover"))
+        self.artikeldaten_var = StringVar(       # Ablage-Basisordner (Share)
+            value=self.cfg.get("artikeldaten_dir", ""))
         self.titel_var = StringVar()            # Titelteil des Ordnernamens
         self.ziel_var = StringVar(value="—")    # aufgelöster Zielordner
         self.ziel_status = StringVar(value="")  # vorhanden / wird angelegt
@@ -82,6 +84,7 @@ class App(Tk):
 
         self._build_ui()
         self.titel_var.trace_add("write", lambda *_: self._aktualisiere_ziel())
+        self.artikeldaten_var.trace_add("write", lambda *_: self._ablageort_geaendert())
 
     # ------------------------------------------------------------------
     # UI-Aufbau
@@ -107,8 +110,15 @@ class App(Tk):
         # Zielordner auf dem Artikeldaten-Share
         frm_ziel = ttk.LabelFrame(self, text="Zielordner (Artikeldaten)")
         frm_ziel.pack(fill="x", **pad)
+        z0 = ttk.Frame(frm_ziel)
+        z0.pack(fill="x", padx=8, pady=(8, 2))
+        ttk.Label(z0, text="Ablageort:").pack(side="left")
+        ttk.Entry(z0, textvariable=self.artikeldaten_var).pack(
+            side="left", fill="x", expand=True, padx=6)
+        ttk.Button(z0, text="…", width=3,
+                   command=self._waehle_artikeldaten_dir).pack(side="left")
         z1 = ttk.Frame(frm_ziel)
-        z1.pack(fill="x", padx=8, pady=(8, 2))
+        z1.pack(fill="x", padx=8, pady=(2, 2))
         ttk.Label(z1, text="Ordnername:  Kurzcode +").pack(side="left")
         ttk.Entry(z1, textvariable=self.titel_var, width=28).pack(
             side="left", padx=6)
@@ -238,6 +248,23 @@ class App(Tk):
     # ------------------------------------------------------------------
     # Zielordner
     # ------------------------------------------------------------------
+    def _waehle_artikeldaten_dir(self):
+        start = self.artikeldaten_var.get().strip() or None
+        pfad = filedialog.askdirectory(
+            title="Ablageort für die Artikelordner wählen", initialdir=start)
+        if pfad:
+            self.artikeldaten_var.set(pfad)      # löst _ablageort_geaendert aus
+            core.speichere_config(self.cfg)
+
+    def _ablageort_geaendert(self):
+        """Basisordner geändert: in die config übernehmen und Zielordner neu
+        auflösen. Ein vorhandener Artikelordner wird dabei erneut vorgeschlagen."""
+        self.cfg["artikeldaten_dir"] = self.artikeldaten_var.get().strip()
+        if self.sc and self.sc != "unbekannt":
+            self._ziel_aus_kurzcode()
+        else:
+            self._aktualisiere_ziel()
+
     def _ziel_aus_kurzcode(self):
         """Nach dem Einlesen: vorhandenen Artikelordner suchen bzw. einen neuen
         vorschlagen. Der Titelteil wird aus einem gefundenen Ordner übernommen."""
@@ -404,6 +431,7 @@ class App(Tk):
         self._merke_vorlagen_dir()    # nur abweichenden Pfad speichern (verschiebbar)
         self.cfg["einband"] = self.einband_var.get()
         self.cfg["tif_erzeugen"] = self.out_tif.get()
+        self.cfg["artikeldaten_dir"] = self.artikeldaten_var.get().strip()
         core.speichere_config(self.cfg)
 
         out_dir, existiert = core.ziel_ordner(self.sc, self.titel_var.get(), self.cfg)

@@ -68,10 +68,13 @@ dir \\C018\d\Online\Webseite\Artikeldaten
       dazu README und `Anleitung.txt`. `tools/update_and_build.ps1` zieht die
       Vorlagen ebenfalls von `\\C019\d\…\_NEU_Vorlage` und spiegelt nach
       `\\C019\d\VR-Tools` — beides mitziehen.
-* [ ] **Der eigentliche Bedienfehler:** der Ordner ist in der GUI gar nicht
-      einstellbar. Steht der Pfad falsch, sieht der Anwender nur
-      „⚠ Share nicht erreichbar — lokaler Ordner“ und kann nichts dagegen tun,
-      ohne die `config.json` von Hand zu ändern. Also im Rahmen „Zielordner
-      (Artikeldaten)“ ein Eingabefeld + „…“-Knopf für `artikeldaten_dir`
-      ergänzen, und in der Statuszeile den **konfigurierten Pfad mit ausgeben**,
-      damit man sieht, *worauf* er zeigt.
+* [x] **Der Bedienfehler ist behoben:** im Rahmen „Zielordner (Artikeldaten)“
+      gibt es jetzt ein Feld „Ablageort:“ + „…“-Knopf für `artikeldaten_dir`
+      (`app.py`). Ändern übernimmt es in die config und löst den Zielordner neu
+      auf; die volle Zielpfad-Zeile + Status zeigen, worauf es zeigt. Leer =
+      lokal neben der .exe.
+* [ ] Der richtige **Vorgabe-Pfad** ist weiter offen (C018 vs. C019). Die
+      Voreinstellung `\\C019\d\Online\Webseite\Artikeldaten` in `core.py` bestätigen
+      bzw. korrigieren (dann auch `shopware_publisher/core.py`, README, Anleitung,
+      `tools/update_and_build.ps1`). Bis dahin behilft sich der Anwender über das
+      neue Feld.

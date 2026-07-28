@@ -123,8 +123,11 @@ Die fertigen Bilder landen je Buch in einem eigenen Ordner unter
 \\C019\d\Online\Webseite\Artikeldaten\<Kurzcode>_<Titel>\
 ```
 
-(einstellbar über `config.json → artikeldaten_dir`; ist der Share nicht
-erreichbar, fällt das Tool auf `cover_output/` neben der .exe zurück).
+Der **Ablageort** (Basisordner) ist in der GUI im Rahmen „Zielordner
+(Artikeldaten)“ einstellbar (Feld „Ablageort:“ + „…“-Knopf, bzw. `config.json →
+artikeldaten_dir`). Zeigt er ins Leere, sieht man das an der Statuszeile
+(„Share nicht erreichbar“) und kann den richtigen Pfad direkt eintragen. Leer =
+`cover_output/` neben der .exe.
 
 Nach dem Einlesen des PDFs sucht das Tool anhand des Kurzcodes einen **vorhandenen**
 Ordner (`05-597-4_Oberkirch`) und wählt ihn aus. Gibt es keinen, schlägt es einen

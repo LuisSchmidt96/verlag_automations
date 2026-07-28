@@ -31,9 +31,12 @@ Bedienung
    passen. Stimmt etwas nicht, die blauen Linien mit der Maus verschieben.
 
 2. Aus der ISBN im PDF wird der Kurzcode (z. B. 05-572-1) gelesen und damit
-   der Zielordner in den Artikeldaten gesucht:
-        \\C019\d\Online\Webseite\Artikeldaten\<Kurzcode>_<Titel>\
-   - Gibt es den Ordner schon, wird er ausgewaehlt ("vorhandener Ordner").
+   der Zielordner unter dem "Ablageort" gesucht:
+        <Ablageort>\<Kurzcode>_<Titel>\
+   - Der "Ablageort" ist voreingestellt auf den Artikeldaten-Ordner. Stimmt der
+     Pfad nicht (Feld zeigt "Share nicht erreichbar"), einfach den richtigen
+     eintippen oder ueber "..." waehlen. Leer lassen = neben der .exe ablegen.
+   - Gibt es den Buch-Ordner schon, wird er ausgewaehlt ("vorhandener Ordner").
    - Sonst wird ein neuer vorgeschlagen ("wird neu angelegt"). Der Kurzcode
      steht fest, den Titel daneben eintippen. Vor dem Anlegen wird gefragt.
 
