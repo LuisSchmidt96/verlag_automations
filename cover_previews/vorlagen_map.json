@@ -54,7 +54,10 @@
       38,
       41
     ],
-    "content_dpi": 300.0
+    "content_dpi": 300.0,
+    "spiegelung": [
+      42
+    ]
   },
   "12x22.psd": {
     "format_cm": [
@@ -111,7 +114,10 @@
       38,
       41
     ],
-    "content_dpi": 300.0
+    "content_dpi": 300.0,
+    "spiegelung": [
+      42
+    ]
   },
   "15,5x22.psd": {
     "format_cm": [
@@ -168,7 +174,10 @@
       38,
       41
     ],
-    "content_dpi": 300.0
+    "content_dpi": 300.0,
+    "spiegelung": [
+      42
+    ]
   },
   "16x16.psd": {
     "format_cm": [
@@ -224,7 +233,10 @@
     "falz": [
       33
     ],
-    "content_dpi": 300.0
+    "content_dpi": 300.0,
+    "spiegelung": [
+      43
+    ]
   },
   "17x24.psd": {
     "format_cm": [
@@ -281,7 +293,10 @@
       69,
       98
     ],
-    "content_dpi": 300.0
+    "content_dpi": 300.0,
+    "spiegelung": [
+      99
+    ]
   },
   "21x13,5.psd": {
     "format_cm": [
@@ -338,7 +353,10 @@
       41,
       44
     ],
-    "content_dpi": 367.59
+    "content_dpi": 367.59,
+    "spiegelung": [
+      45
+    ]
   },
   "21x14.psd": {
     "format_cm": [
@@ -395,7 +413,10 @@
       43,
       46
     ],
-    "content_dpi": 367.59
+    "content_dpi": 367.59,
+    "spiegelung": [
+      47
+    ]
   },
   "21x21.psd": {
     "format_cm": [
@@ -452,7 +473,10 @@
       33,
       51
     ],
-    "content_dpi": 300.0
+    "content_dpi": 300.0,
+    "spiegelung": [
+      43
+    ]
   },
   "22x24.psd": {
     "format_cm": [
@@ -509,7 +533,10 @@
       49,
       50
     ],
-    "content_dpi": 300.0
+    "content_dpi": 300.0,
+    "spiegelung": [
+      42
+    ]
   },
   "28x21.psd": {
     "format_cm": [
@@ -566,7 +593,10 @@
       49,
       61
     ],
-    "content_dpi": 300.0
+    "content_dpi": 300.0,
+    "spiegelung": [
+      42
+    ]
   },
   "29,7x21.psd": {
     "format_cm": [
@@ -623,7 +653,10 @@
       23,
       32
     ],
-    "content_dpi": 300.0
+    "content_dpi": 300.0,
+    "spiegelung": [
+      33
+    ]
   },
   "29x22.psd": {
     "format_cm": [
@@ -714,7 +747,10 @@
       23,
       32
     ],
-    "content_dpi": 300.0
+    "content_dpi": 300.0,
+    "spiegelung": [
+      33
+    ]
   },
   "EBOOK.psd": {
     "format_cm": null,
@@ -732,7 +768,8 @@
     "hide_bg": [],
     "auto": false,
     "falz": [],
-    "content_dpi": 300.0
+    "content_dpi": 300.0,
+    "spiegelung": []
   },
   "MaGeBl.psd": {
     "format_cm": null,

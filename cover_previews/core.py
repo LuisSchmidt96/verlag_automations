@@ -589,6 +589,9 @@ def ausgabe_namen(sc: str, cfg: dict, mit_2d: bool, mit_3d: bool) -> list[str]:
         m = cfg.get("muster_3d", "3D_{dpi}_{sc}.jpg")
         namen += [m.format(dpi=d, sc=sc) for d in (dpi_p, dpi_w)]
         namen.append(cfg.get("muster_3d_png", "{sc}.png").format(sc=sc))
+        if cfg.get("tif_erzeugen", True):
+            namen.append(cfg.get("muster_3d_tif", "3D_{dpi}_{sc}.tif").format(
+                dpi=dpi_p, sc=sc))
     return namen
 
 
@@ -749,10 +752,78 @@ def _jp(p) -> str:
     return str(p).replace("\\", "/").replace('"', '\\"')
 
 
+def _tif_block(eintrag: dict, tif_pfad, rand_cm: float, dpi_print: int) -> str:
+    """JSX für das freigestellte CMYK-TIF (nur das Buch, Vektor-Beschneidungspfad).
+
+    Läuft NACH den JPEGs, solange ``doc`` noch offen ist. Die Spiegelung wird
+    ausgeblendet, aufs Buch zugeschnitten und in ein frisches Dokument kopiert;
+    daraus wird über die Transparenz ein Beschneidungspfad („Pfad 1") erzeugt,
+    das Buch auf Weiß gelegt, nach CMYK gewandelt und als TIFF gespeichert —
+    genau wie die vom Setzer gelieferte Referenz. KEIN Alphakanal: für CMYK-Druck
+    ist der Pfad der Standard, den InDesign/RIPs verstehen.
+
+    Der weiße Falz-Schein am Rand (Alpha 1) fällt weg, weil die Auswahl vor dem
+    Pfad um 2 px verkleinert wird.
+    """
+    if not tif_pfad:
+        return "    // kein TIF gewünscht"
+    spiegel_ids = ", ".join(str(i) for i in eintrag.get("spiegelung", []))
+    return f'''
+    // 5) Freigestelltes CMYK-TIF: nur das Buch, Vektor-Beschneidungspfad
+    app.activeDocument = doc;
+    var SPIEG = [{spiegel_ids}];
+    for (var s = 0; s < SPIEG.length; s++) {{ try {{ setVis(SPIEG[s], false); }} catch (e) {{}} }}
+    doc.trim(TrimType.TRANSPARENT);                 // jetzt nur noch das Buch
+    var mt = Math.round({rand_cm} / 2.54 * doc.resolution);
+    doc.selection.selectAll(); doc.selection.copy(true); doc.selection.deselect();
+    tifdoc = app.documents.add(doc.width.value + 2 * mt, doc.height.value + 2 * mt,
+                               doc.resolution, "cover_tif",
+                               NewDocumentMode.RGB, DocumentFill.TRANSPARENT);
+    tifdoc.paste();                                 // mittig
+    tifdoc.selection.deselect();
+
+    // Beschneidungspfad aus der Transparenz der eingefügten Ebene
+    var td = new ActionDescriptor();
+    var tr = new ActionReference(); tr.putProperty(charIDToTypeID("Chnl"), charIDToTypeID("fsel"));
+    td.putReference(charIDToTypeID("null"), tr);
+    var tr2 = new ActionReference();
+    tr2.putEnumerated(charIDToTypeID("Chnl"), charIDToTypeID("Chnl"), charIDToTypeID("Trsp"));
+    td.putReference(charIDToTypeID("T   "), tr2);
+    executeAction(charIDToTypeID("setd"), td, DialogModes.NO);
+    tifdoc.selection.contract(new UnitValue(2, "px"));   // Falz-Schein weg
+    var tm = new ActionDescriptor();
+    var trp = new ActionReference(); trp.putClass(stringIDToTypeID("path"));
+    tm.putReference(charIDToTypeID("null"), trp);
+    var trf = new ActionReference(); trf.putProperty(charIDToTypeID("Chnl"), charIDToTypeID("fsel"));
+    tm.putReference(charIDToTypeID("From"), trf);
+    tm.putUnitDouble(charIDToTypeID("Tlrn"), charIDToTypeID("#Pxl"), 2.0);
+    executeAction(charIDToTypeID("Mk  "), tm, DialogModes.NO);
+    var twp = null;
+    for (var p = 0; p < tifdoc.pathItems.length; p++)
+      if (tifdoc.pathItems[p].kind == PathKind.WORKPATH) {{ twp = tifdoc.pathItems[p]; break; }}
+    twp.name = "Pfad 1";                            // benennen = Pfad speichern
+    tifdoc.pathItems["Pfad 1"].makeClippingPath();
+    tifdoc.selection.deselect();
+
+    // auf Weiß, flach, CMYK, TIFF (LZW, Profil einbetten, kein Alpha, keine Ebenen)
+    var tbg = tifdoc.artLayers.add();
+    var twf = new SolidColor(); twf.rgb.red = 255; twf.rgb.green = 255; twf.rgb.blue = 255;
+    tifdoc.selection.selectAll(); tifdoc.selection.fill(twf); tifdoc.selection.deselect();
+    tbg.move(tifdoc, ElementPlacement.PLACEATEND);
+    tifdoc.flatten();
+    tifdoc.changeMode(ChangeMode.CMYK);
+    tifdoc.resizeImage(undefined, undefined, {dpi_print}, ResampleMethod.NONE);
+    var topt = new TiffSaveOptions();
+    topt.imageCompression = TIFFEncoding.TIFFLZW;
+    topt.embedColorProfile = true; topt.layers = false; topt.alphaChannels = false;
+    tifdoc.saveAs(new File("{_jp(tif_pfad)}"), topt, true, Extension.LOWERCASE);
+    tifdoc.close(SaveOptions.DONOTSAVECHANGES); tifdoc = null;'''
+
+
 def _baue_jsx(psd_pfad, eintrag: dict, slot_pngs: list[tuple[int, Path]],
               weiss: bool, png_transp, jpg_pfade: list[tuple[int, Path]],
               rand_cm: float, rand_unten_cm: float = 0.0,
-              hardcover: bool = True) -> str:
+              hardcover: bool = True, tif_pfad=None, dpi_print: int = 300) -> str:
     """ExtendScript für das 3D-Mockup:
     - Smart-Objekte per Layer-ID ersetzen; ``slot_pngs`` ist die Liste
       (layer_id, PNG) — jedes PNG exakt in der Größe seines Slots, sodass der
@@ -760,7 +831,8 @@ def _baue_jsx(psd_pfad, eintrag: dict, slot_pngs: list[tuple[int, Path]],
     - Falz-Ebenen (Rille am Buchdeckel) nur beim Hardcover einblenden;
     - optional Weiß-Korrektur (Selektive Farbkorrektur: Weiß +10 % Schwarz);
     - Hintergrund ausblenden, transparent zuschneiden -> PNG;
-    - Hintergrund wieder ein, flach, JPEG in 300 & 72 dpi (nur DPI-Tag).
+    - Hintergrund wieder ein, flach, JPEG in 300 & 72 dpi (nur DPI-Tag);
+    - optional das freigestellte CMYK-TIF (siehe _tif_block).
 
     Die Vorlage wird direkt geöffnet (nicht kopiert) und im ``finally`` immer
     mit DONOTSAVECHANGES geschlossen — auch wenn ein Schritt scheitert. Sonst
@@ -776,6 +848,7 @@ def _baue_jsx(psd_pfad, eintrag: dict, slot_pngs: list[tuple[int, Path]],
     hide_ids = ", ".join(str(i) for i in eintrag.get("hide_bg", []))
     jpg_zeilen = "\n".join(
         f'    saveJpg(fertig, "{_jp(p)}", {dpi});' for dpi, p in jpg_pfade)
+    tif_zeilen = _tif_block(eintrag, tif_pfad, rand_cm, dpi_print)
 
     return f'''#target photoshop
 app.preferences.rulerUnits = Units.PIXELS;
@@ -819,7 +892,8 @@ app.preferences.rulerUnits = Units.PIXELS;
     d.saveAs(new File(path), jo, true, Extension.LOWERCASE);
   }}
 
-  var fertig = null;   // zusammengefasstes Ergebnis-Dokument
+  var fertig = null;   // zusammengefasstes Ergebnis-Dokument (PNG/JPEG)
+  var tifdoc = null;   // freigestelltes Buch (CMYK-TIF)
 
   try {{
     // 1) Cover/Rücken einsetzen
@@ -879,9 +953,14 @@ app.preferences.rulerUnits = Units.PIXELS;
     bg.move(fertig, ElementPlacement.PLACEATEND);
     fertig.flatten();
 {jpg_zeilen}
+    fertig.close(SaveOptions.DONOTSAVECHANGES); fertig = null;
+{tif_zeilen}
   }} finally {{
     // Immer schließen: sonst bliebe das Master-PSD mit ersetzten Smart-Objekten
     // offen und ungespeichert stehen, wenn oben etwas scheitert.
+    if (tifdoc !== null) {{
+      try {{ tifdoc.close(SaveOptions.DONOTSAVECHANGES); }} catch (e) {{}}
+    }}
     if (fertig !== null) {{
       try {{ fertig.close(SaveOptions.DONOTSAVECHANGES); }} catch (e) {{}}
     }}
@@ -930,10 +1009,18 @@ def erzeuge_3d_photoshop(reg: Regionen, bild_hi: Image.Image, cfg: dict,
     jpg_pfade = [(dpi_print, out_dir / muster_3d.format(dpi=dpi_print, sc=sc)),
                  (dpi_web, out_dir / muster_3d.format(dpi=dpi_web, sc=sc))]
 
+    # Freigestelltes CMYK-TIF (nur das Buch) — nur bei echter Spiegelungs-Gruppe;
+    # EBOOK o. Ä. ohne Spiegelung braucht keins.
+    tif_pfad = None
+    if cfg.get("tif_erzeugen", True) and eintrag.get("spiegelung"):
+        tif_pfad = out_dir / cfg.get("muster_3d_tif", "3D_{dpi}_{sc}.tif").format(
+            dpi=dpi_print, sc=sc)
+
     hardcover = str(cfg.get("einband", "hardcover")).lower() != "softcover"
     jsx = _baue_jsx(psd, eintrag, slot_pngs, bool(weiss), png_transp, jpg_pfade,
                     float(cfg.get("rand_cm", 1.5)),
-                    float(cfg.get("rand_unten_cm", 0.0)), hardcover=hardcover)
+                    float(cfg.get("rand_unten_cm", 0.0)), hardcover=hardcover,
+                    tif_pfad=tif_pfad, dpi_print=dpi_print)
     jsx_pfad = out_dir / f"_mockup_{sc}.jsx"
     jsx_pfad.write_text(jsx, encoding="utf-8")
 
@@ -947,7 +1034,8 @@ def erzeuge_3d_photoshop(reg: Regionen, bild_hi: Image.Image, cfg: dict,
     ps = win32com.client.Dispatch("Photoshop.Application")
     ps.DoJavaScript(jsx)
     fehlend = [p for _, p in jpg_pfade if not p.exists()] + \
-              ([png_transp] if not png_transp.exists() else [])
+              ([png_transp] if not png_transp.exists() else []) + \
+              ([tif_pfad] if tif_pfad and not tif_pfad.exists() else [])
     if fehlend:
         # Zwischendateien stehen lassen — mit ihnen lässt sich der Photoshop-
         # Schritt nachvollziehen bzw. das .jsx von Hand ausführen.
@@ -955,7 +1043,7 @@ def erzeuge_3d_photoshop(reg: Regionen, bild_hi: Image.Image, cfg: dict,
                            + ", ".join(p.name for p in fehlend))
 
     raeume_auf(out_dir, sc)
-    return [png_transp, *[p for _, p in jpg_pfade]]
+    return [png_transp, *[p for _, p in jpg_pfade]] + ([tif_pfad] if tif_pfad else [])
 
 
 def raeume_auf(out_dir: Path, sc: str) -> list[Path]:

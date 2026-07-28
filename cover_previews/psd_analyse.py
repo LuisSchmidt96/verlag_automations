@@ -61,16 +61,21 @@ JSX = r'''
   var IDS = [%s];
   for (var i = 0; i < IDS.length; i++) out.push(info(IDS[i]));
 
-  // Falz-Ebenen (Buchdeckel-Rille am Ruecken) — nur beim Hardcover sichtbar.
-  // Buch und Spiegelung haben je eine ("Falz", "Falz Kopie").
-  function walk(set) {
+  // Ebenenbaum: id | parent | ist-Gruppe | top | bottom | name. Daraus leitet
+  // Python die Falz-Ebenen (Name ~ "Falz") UND die Spiegelungs-Gruppe her.
+  function walk(set, parentId) {
     for (var i = 0; i < set.layers.length; i++) {
       var L = set.layers[i];
-      if (L.typename == "LayerSet") { walk(L); continue; }
-      if (/^falz/i.test(L.name)) out.push("FALZ|" + L.id + "|" + L.name);
+      var id = -1; try { id = L.id; } catch (e) {}
+      var grp = (L.typename == "LayerSet") ? 1 : 0;
+      var b = L.bounds;
+      out.push("TREE|" + id + "|" + parentId + "|" + grp + "|" +
+               Math.round(b[1].as("px")) + "|" + Math.round(b[3].as("px")) + "|" +
+               L.name.replace(/\|/g, "/"));
+      if (grp) walk(L, id);
     }
   }
-  walk(doc);
+  walk(doc, -1);
 
   doc.close(SaveOptions.DONOTSAVECHANGES);
   return out.join("\n");
@@ -78,30 +83,78 @@ JSX = r'''
 '''
 
 
-def _lies_psd(ps, psd: Path,
-              layer_ids: list[int]) -> tuple[dict[int, dict], list[int], float]:
-    """Smart-Object-Größe + Transform je Slot, Falz-Ebenen-IDs, Dokument-dpi."""
+def _lies_psd(ps, psd: Path, layer_ids: list[int]
+              ) -> tuple[dict[int, dict], dict[int, dict], float]:
+    """Smart-Object-Größe/Transform je Slot, Ebenenbaum, Dokument-dpi."""
     js = JSX % (str(psd).replace("\\", "/"), ", ".join(str(i) for i in layer_ids))
-    slots, falz, dpi = {}, [], 300.0
+    slots, baum, dpi = {}, {}, 300.0
     for zeile in ps.DoJavaScript(js).strip().splitlines():
         t = zeile.split("|")
         if t[0] == "DOC":
             dpi = float(t[1])
-            continue
-        if t[0] == "FALZ":
-            falz.append(int(t[1]))
-            continue
-        lid = int(t[1])
-        if t[3] != "SO":
-            slots[lid] = {"name": t[2], "so": False}
-            continue
-        werte = [float(x) for x in t[6].split(",")]
-        slots[lid] = {
-            "name": t[2], "so": True, "w": float(t[4]), "h": float(t[5]),
-            # Content-Ecken (0,0) (W,0) (W,H) (0,H) -> Canvas
-            "quad": [(werte[i], werte[i + 1]) for i in range(0, 8, 2)],
-        }
-    return slots, falz, dpi
+        elif t[0] == "TREE":
+            lid = int(t[1])
+            baum[lid] = {"parent": int(t[2]), "grp": t[3] == "1",
+                         "top": int(t[4]), "bot": int(t[5]), "name": t[6]}
+        elif t[0] == "SLOT":
+            lid = int(t[1])
+            if t[3] != "SO":
+                slots[lid] = {"name": t[2], "so": False}
+            else:
+                werte = [float(x) for x in t[6].split(",")]
+                slots[lid] = {
+                    "name": t[2], "so": True, "w": float(t[4]), "h": float(t[5]),
+                    # Content-Ecken (0,0) (W,0) (W,H) (0,H) -> Canvas
+                    "quad": [(werte[i], werte[i + 1]) for i in range(0, 8, 2)],
+                }
+    return slots, baum, dpi
+
+
+def _falz_ids(baum: dict[int, dict]) -> list[int]:
+    """Falz-Ebenen aus dem Baum (Name beginnt mit „Falz")."""
+    return sorted(i for i, n in baum.items()
+                  if not n["grp"] and n["name"].lower().startswith("falz"))
+
+
+def _spiegelung_ids(baum: dict[int, dict], slot_ids: list[int],
+                    falz_ids: list[int]) -> list[int]:
+    """Die auszublendende Spiegelungs-Gruppe herleiten.
+
+    Jede Vorlage enthält das Buch zweimal: aufrecht und als Spiegelung darunter.
+    Buch- und Spiegelungs-Ebenen (Slots + Falz) trennen sich sauber an der
+    GRÖSSTEN Lücke ihrer ``top``-Werte — die Spiegelung sitzt deutlich tiefer.
+    Zu jeder Spiegelungs-Ebene die äußerste Vorfahr-Gruppe suchen, die KEINE
+    Buch-Ebene enthält; das ist die Gruppe, die fürs freigestellte TIF aus muss.
+    """
+    marker = [i for i in (slot_ids + falz_ids) if i in baum]
+    if len(marker) < 2:
+        return []                                  # z. B. EBOOK: keine Spiegelung
+    tops = sorted((baum[i]["top"], i) for i in marker)
+    luecken = [(tops[k + 1][0] - tops[k][0], k) for k in range(len(tops) - 1)]
+    breite, k = max(luecken)
+    # Ohne echte zweite Hälfte (eine Vorlage ohne Spiegelung) keine Gruppe.
+    seite_h = max(n["bot"] for n in baum.values())
+    if breite < seite_h * 0.15:
+        return []
+    buch = {i for _, i in tops[:k + 1]}
+    spiegel = {i for _, i in tops[k + 1:]}
+
+    def vorfahren(i):
+        kette, p = [], baum[i]["parent"]
+        while p in baum:
+            kette.append(p)
+            p = baum[p]["parent"]
+        return kette                               # innen -> außen
+
+    buch_gruppen = {g for i in buch for g in vorfahren(i)}
+    gruppen = set()
+    for i in spiegel:
+        aussen = None
+        for g in vorfahren(i):                      # äußerste nicht-Buch-Gruppe
+            if g not in buch_gruppen:
+                aussen = g
+        gruppen.add(aussen if aussen is not None else i)
+    return sorted(gruppen)
 
 
 def _book_cm(format_cm: list[float], so_w: float, so_h: float) -> list[float]:
@@ -146,13 +199,17 @@ def main(argv: list[str]) -> int:
             print(f"{name:<14} PSD fehlt: {psd}")
             continue
 
-        daten, falz, dpi = _lies_psd(ps, psd, [s["layer_id"] for s in slots])
+        slot_ids = [s["layer_id"] for s in slots]
+        daten, baum, dpi = _lies_psd(ps, psd, slot_ids)
         cover = next((daten[s["layer_id"]] for s in slots
                       if s["role"] == "cover" and daten[s["layer_id"]].get("so")), None)
         if cover is None:
             print(f"{name:<14} kein Cover-Smart-Objekt gefunden — übersprungen")
             continue
-        eintrag["falz"] = sorted(falz)
+        falz = _falz_ids(baum)
+        eintrag["falz"] = falz
+        # Gruppe, die fürs freigestellte CMYK-TIF ausgeblendet wird (nur Buch).
+        eintrag["spiegelung"] = _spiegelung_ids(baum, slot_ids, falz)
         # Photoshop setzt ersetzten Inhalt nach PHYSISCHER Größe ein (px / dpi).
         # Die Staging-PNGs müssen also mit der Auflösung der Vorlage gespeichert
         # werden — 21x13,5 läuft z. B. auf 367,59 dpi statt 300.
@@ -183,8 +240,9 @@ def main(argv: list[str]) -> int:
         kk = f"{k:6.1f} px/cm" if k else "(kein Buchformat)"
         buch_s = f"{eintrag['book_cm'][0]}x{eintrag['book_cm'][1]}" if k else "-"
         print(f"  {name:<14} Buch {buch_s:<10} {kk:<12} "
-              f"{eintrag['content_dpi']:>6.2f} dpi   "
-              f"{len(slots)} Slots, Falz: {eintrag['falz'] or '—'}")
+              f"{eintrag['content_dpi']:>6.2f} dpi   {len(slots)} Slots, "
+              f"Falz: {eintrag['falz'] or '—'}, "
+              f"Spiegelung: {eintrag['spiegelung'] or '—'}")
 
     map_pfad.write_text(json.dumps(mapping, indent=2, ensure_ascii=False) + "\n",
                         encoding="utf-8")

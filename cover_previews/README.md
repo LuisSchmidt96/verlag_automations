@@ -5,11 +5,15 @@ plus Einschlag/Beschnitt) automatisch die Artikeldaten-Bilder – nach dem
 manuellen Photoshop-Ablauf des Verlags:
 
 - **2D-Vorderseite** — flach, auf die Buchkante beschnitten, als JPEG:
-  `2D_300_{sc}.jpeg` und `2D_72_{sc}.jpeg` (**pixelgleich**, nur der DPI-Eintrag
+  `2D_300_{sc}.jpg` und `2D_72_{sc}.jpg` (**pixelgleich**, nur der DPI-Eintrag
   unterscheidet sich, wie „neu berechnen aus“).
 - **3D-Mockup (Vorderseite + Rücken)** — über die zum **Buchformat** passende
   Mockup-Vorlage (`_NEU_Vorlage/…psd`): transparentes `{sc}.png` plus
   `3D_300_{sc}.jpg` / `3D_72_{sc}.jpg`. Gesteuert per Photoshop-COM.
+- **Freigestelltes CMYK-TIF** (optional) — `3D_300_{sc}.tif`: nur das Buch
+  (ohne Spiegelung/Hintergrund), auf Weiß, mit Vektor-**Beschneidungspfad**
+  „Pfad 1“, in **CMYK** mit eingebettetem Profil. Zum Platzieren in Newslettern
+  / InDesign auf farbigem Grund. Siehe unten.
 
 Kurzcode `sc` aus der ISBN (z. B. `05-572-1`).
 
@@ -55,6 +59,33 @@ zur Außenkante und löst sich sichtbar vom Buch.
 
 Buch und Spiegelung sind eigene Slots (mit teils unterschiedlichen Maßen, `29x22` hat
 zwei Cover-Größen) und werden beide befüllt.
+
+## Freigestelltes CMYK-TIF (`3D_300_{sc}.tif`)
+
+Zusätzlich zum 3D-Mockup kann das Tool das Buch **freigestellt** als CMYK-TIF
+ausgeben — zum Platzieren in Newslettern / InDesign auf farbigem Grund. Es folgt der
+vom Setzer gelieferten Referenz:
+
+- **nur das Buch** (Spiegelung + Hintergrund raus), auf **Weiß**;
+- freigestellt über einen **Vektor-Beschneidungspfad** „Pfad 1“ — nicht über einen
+  Alphakanal. Für CMYK-Druck ist der Pfad der Standard, den InDesign/RIPs verstehen;
+  CMYK+Alpha ist ein 5-Kanal-Sonderfall, den manche Workflows verweigern;
+- **CMYK** mit eingebettetem Profil (`changeMode` nutzt den CMYK-Arbeitsfarbraum des
+  Photoshop — auf dem Verlagsrechner also dessen Profil), 300 dpi, LZW.
+
+Die weiche, transparente Fassung **mit** Spiegelung gibt es weiter als `{sc}.png`
+(RGB, echter Alphakanal) — das ist die Bildschirm-/HTML-Variante. TIF = Druck, PNG =
+Bildschirm; sie teilen sich nach Medium auf.
+
+Damit nur das Buch übrig bleibt, wird die **Spiegelungs-Gruppe** der Vorlage
+ausgeblendet. Welche Gruppe das ist, leitet `psd_analyse.py` her (Schlüssel
+`spiegelung` in `vorlagen_map.json`): Buch- und Spiegelungs-Ebenen trennen sich an der
+größten Lücke ihrer `top`-Werte (die Spiegelung sitzt tiefer); zur Spiegelung die
+äußerste Vorfahr-Gruppe ohne Buch-Ebene. Der weiße **Falz-Schein** am Rand (Alpha 1)
+fällt weg, weil die Auswahl vor dem Pfad um 2 px verkleinert wird — kein weißer Strich.
+
+Steuerung: Ankreuzfeld „3D zusätzlich als CMYK-TIF“ (an die 3D-Ausgabe gekoppelt),
+Stand in `config.json → tif_erzeugen`.
 
 ## So funktioniert die Marken-Erkennung
 

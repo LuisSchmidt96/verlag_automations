@@ -72,6 +72,7 @@ class App(Tk):
         self.vorlage_info = StringVar(value="—")
         self.out_2d = BooleanVar(value=True)
         self.out_3d = BooleanVar(value=True)
+        self.out_tif = BooleanVar(value=bool(self.cfg.get("tif_erzeugen", True)))
         self.einband_var = StringVar(
             value=self.cfg.get("einband", "hardcover"))
         self.titel_var = StringVar()            # Titelteil des Ordnernamens
@@ -143,11 +144,16 @@ class App(Tk):
         frm_out.pack(side="left", fill="both", expand=True)
         ttk.Checkbutton(frm_out, text="2D-Vorderseite",
                         variable=self.out_2d).pack(anchor="w", padx=8, pady=(6, 0))
-        ttk.Checkbutton(frm_out, text="3D-Mockup (Photoshop)",
-                        variable=self.out_3d).pack(anchor="w", padx=8, pady=(0, 6))
+        ttk.Checkbutton(frm_out, text="3D-Mockup (Photoshop)", variable=self.out_3d,
+                        command=self._tif_koppeln).pack(anchor="w", padx=8, pady=(0, 0))
+        self.chk_tif = ttk.Checkbutton(
+            frm_out, text="3D zusätzlich als CMYK-TIF (Buch freigestellt)",
+            variable=self.out_tif)
+        self.chk_tif.pack(anchor="w", padx=(28, 8), pady=(0, 6))
+        self._tif_koppeln()
         ttk.Label(frm_out,
                   text=f"2D als JPEG, 3D als PNG+JPEG — je {self.cfg['dpi_print']} "
-                       f"& {self.cfg['dpi_web']} dpi",
+                       f"& {self.cfg['dpi_web']} dpi. TIF mit Beschneidungspfad.",
                   foreground="gray").pack(anchor="w", padx=8, pady=(0, 6))
 
         frm_eb = ttk.LabelFrame(bottom, text="Einband (3D)")
@@ -258,6 +264,11 @@ class App(Tk):
     def _einband_gewechselt(self):
         self.cfg["einband"] = self.einband_var.get()
         core.speichere_config(self.cfg)
+
+    def _tif_koppeln(self):
+        """Das CMYK-TIF entsteht aus dem 3D-Schritt — ohne 3D kein TIF."""
+        self.chk_tif.configure(
+            state="normal" if self.out_3d.get() else "disabled")
 
     def _zeichne_vorschau(self):
         img = core.rendere_seite(self.doc, PREVIEW_RENDER_DPI)
@@ -390,8 +401,9 @@ class App(Tk):
                 "Vorder-/Rückseite/Rücken sind nicht bestimmt. Bitte die "
                 "blauen Linien justieren (mind. 4 senkrechte Schnitte).")
             return
-        self.cfg["vorlagen_dir"] = self.vorlagen_dir_var.get().strip()
+        self._merke_vorlagen_dir()    # nur abweichenden Pfad speichern (verschiebbar)
         self.cfg["einband"] = self.einband_var.get()
+        self.cfg["tif_erzeugen"] = self.out_tif.get()
         core.speichere_config(self.cfg)
 
         out_dir, existiert = core.ziel_ordner(self.sc, self.titel_var.get(), self.cfg)

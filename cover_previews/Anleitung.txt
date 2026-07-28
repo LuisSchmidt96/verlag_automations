@@ -47,10 +47,16 @@ Bedienung
 5. "Erstellen" - es entstehen im Zielordner:
         2D_300_<Kurzcode>.jpg    2D_72_<Kurzcode>.jpg
         3D_300_<Kurzcode>.jpg    3D_72_<Kurzcode>.jpg
-        <Kurzcode>.png           (3D, transparent)
+        <Kurzcode>.png           (3D, transparent - fuer Bildschirm/HTML)
+        3D_300_<Kurzcode>.tif    (nur wenn "CMYK-TIF" angekreuzt)
 
    Die _300- und _72-Dateien sind absichtlich PIXELGLEICH - es unterscheidet
    sich nur der eingetragene DPI-Wert (wie "neu berechnen aus" in Photoshop).
+
+   Das CMYK-TIF ist das freigestellte Buch (nur Buch, ohne Spiegelung) mit
+   einem Beschneidungspfad "Pfad 1" - zum Platzieren in Newslettern / InDesign
+   auf farbigem Hintergrund. Fuer den Bildschirm/HTML stattdessen die .png
+   nehmen (die hat die Spiegelung und weiche Kanten).
 
    Liegen dort schon Dateien mit denselben Namen, werden sie NICHT
    ueberschrieben, sondern nach  _alt\<Zeitstempel>\  verschoben.
