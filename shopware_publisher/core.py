@@ -18,6 +18,7 @@ zweiter Lauf aktualisiert also dasselbe Produkt statt ein zweites anzulegen.
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import html
 import json
@@ -47,28 +48,70 @@ APP_DIR.mkdir(parents=True, exist_ok=True)
 CONFIG_PFAD = APP_DIR / "config.json"
 
 
-DEFAULT_CONFIG = {
-    # --- Shopware-Zugang (Admin -> Einstellungen -> System -> Integrationen) --
-    # Das Secret steht im Klartext in dieser config.json. Sie liegt neben der
-    # .exe und ist per .gitignore vom Repo ausgeschlossen.
+# Alles, was je Shop unterschiedlich ist, steckt in einer Umgebung ("dev"/"prod").
+# Wichtig: tax_id, currency_id, category_id & Co. sind **UUIDs des jeweiligen
+# Shops** — dieselbe Kategorie hat auf dev und prod verschiedene IDs. Sie dürfen
+# deshalb nicht global stehen, sonst schreibt man dev-IDs in den Produktivshop.
+DEFAULT_UMGEBUNG = {
+    # --- Zugang (Admin -> Einstellungen -> System -> Integrationen) ----------
     "shop_url": "",                 # z. B. https://shop.verlag-regionalkultur.de
-    "access_key_id": "",
-    "secret_access_key": "",
-    # Dev-Store hinter Caddy (interne CA): auf false setzen, wenn das
-    # TLS-Zertifikat nicht überprüfbar ist. Im Produktivshop true lassen!
+    "access_key_id": "",            # wie ein Benutzername — nicht geheim
+    # Das Secret liegt NIE im Klartext auf der Platte: es wird mit einem
+    # Schlüssel verschlüsselt, der aus dem Master-Passwort abgeleitet wird
+    # (scrypt + AES-GCM). Wer die config.json kopiert, hat nur Chiffretext.
+    "secret_enc": "",               # base64(nonce + ciphertext)
+    "kdf_salt": "",                 # base64(salt)
+    # Dev-Store mit nicht überprüfbarem Zertifikat: auf false setzen.
+    # Im Produktivshop true lassen!
     "tls_pruefen": True,
 
-    # --- Zuordnungen aus dem Shop (werden beim "Verbinden" befüllt) ----------
+    # --- Zuordnungen aus diesem Shop (beim "Verbinden" befüllt) --------------
     "tax_id": "",                   # Steuersatz-ID (Bücher: 7 %)
     "tax_rate": 7.0,                # zugehöriger Satz, für die Netto-Rechnung
     "currency_id": "",              # EUR
     "category_id": "",              # Zielkategorie (optional)
     "manufacturer_id": "",          # Hersteller/Verlag (optional)
-    "default_stock": 0,
+    # Ohne Sales-Channel-Sichtbarkeit ist das Produkt im Shop UNSICHTBAR —
+    # auch aktiv geschaltet. 30 = überall sichtbar (wie im Bestand).
+    "sales_channel_id": "",
+    "visibility": 30,
+    # Layout der Produktseite; wird beim Verbinden aus einem vorhandenen
+    # Produkt übernommen, damit neue Produkte gleich aussehen.
+    "cms_page_id": "",
+}
 
-    # --- Produkt-Voreinstellungen -------------------------------------------
+DEFAULT_CONFIG = {
+    # Wird bei jeder Änderung der Verlags-Vorgaben (unten) erhöht, damit
+    # bestehende config.json-Dateien die neuen Werte übernehmen (siehe
+    # _migriere). Ohne das blieben alte Werte per setdefault eingefroren.
+    "config_version": 2,
+
+    # --- Umgebungen ---------------------------------------------------------
+    "aktive_umgebung": "dev",
+    "umgebungen": {
+        "dev": dict(DEFAULT_UMGEBUNG),
+        "prod": dict(DEFAULT_UMGEBUNG),
+    },
+
+    # --- Produkt-Voreinstellungen (shop-unabhängig) --------------------------
     # Entwurf: Produkt wird angelegt, ist aber im Shop nicht sichtbar.
     "aktiv": False,
+    # Lieferbarkeit — für alle Bücher gleich (Vorgabe des Verlags):
+    "default_stock": 9999,          # Lagerbestand
+    "is_closeout": True,            # Abverkauf AN
+    "restock_time": None,           # Wiederauffüllzeit leer lassen
+    "min_purchase": 1,              # Mindestabnahme
+    "purchase_steps": 1,            # Staffelung
+    "shipping_free": False,         # Versandkostenfrei aus
+    # Maximalabnahme und Lieferzeit bleiben bewusst leer.
+
+    # --- customFields (SW5-Migration; das Theme zeigt sie an) ----------------
+    "custom_fields": {
+        "untertitel": "migration_Shopware5_product_attr1",
+        "autor_link": "migration_Shopware5_product_attr2",
+        "format":     "migration_Shopware5_product_attr12",
+    },
+    "autoren_basis_url": "/autoren-herausgeber",
 
     # --- Bilder (kommen vom cover_previews-Tool auf dem Artikeldaten-Share) --
     "artikeldaten_dir": r"\\C019\d\Online\Webseite\Artikeldaten",
@@ -90,22 +133,155 @@ DEFAULT_CONFIG = {
     "last_input_dir": "",
 }
 
+# Schlüssel, die früher flach in der config.json standen (eine Umgebung).
+_ALTE_FLACHE_SCHLUESSEL = tuple(DEFAULT_UMGEBUNG) + ("secret_access_key",)
+
+# Verlags-Vorgaben (für alle Bücher gleich): werden bei einer Versionserhöhung
+# aus DEFAULT_CONFIG aufgefrischt, damit alte config.json-Werte nicht per
+# setdefault eingefroren bleiben (z. B. default_stock 0 -> 9999).
+_VORGABE_SCHLUESSEL = ("aktiv", "default_stock", "is_closeout", "restock_time",
+                       "min_purchase", "purchase_steps", "shipping_free",
+                       "custom_fields", "autoren_basis_url")
+
+
+def _migriere(cfg: dict) -> dict:
+    """Alte, flache Config in die Umgebungs-Struktur heben und Verlags-Vorgaben
+    bei einer Versionserhöhung auffrischen."""
+    if "umgebungen" not in cfg:
+        alt = {k: cfg.pop(k) for k in _ALTE_FLACHE_SCHLUESSEL if k in cfg}
+        umg = dict(DEFAULT_UMGEBUNG)
+        umg.update({k: v for k, v in alt.items() if k in DEFAULT_UMGEBUNG})
+        if alt.get("secret_access_key"):      # Klartext-Altlast mitnehmen
+            umg["secret_access_key"] = alt["secret_access_key"]
+        cfg["umgebungen"] = {"dev": umg, "prod": dict(DEFAULT_UMGEBUNG)}
+        cfg["aktive_umgebung"] = "dev"
+
+    if cfg.get("config_version", 1) < DEFAULT_CONFIG["config_version"]:
+        for k in _VORGABE_SCHLUESSEL:
+            cfg[k] = json.loads(json.dumps(DEFAULT_CONFIG[k]))   # frische Kopie
+        cfg["config_version"] = DEFAULT_CONFIG["config_version"]
+    return cfg
+
 
 def lade_config() -> dict:
     if CONFIG_PFAD.exists():
         with open(CONFIG_PFAD, "r", encoding="utf-8") as f:
             cfg = json.load(f)
+        cfg = _migriere(cfg)
         for k, v in DEFAULT_CONFIG.items():
             cfg.setdefault(k, v)
+        for name, umg in cfg.get("umgebungen", {}).items():
+            for k, v in DEFAULT_UMGEBUNG.items():
+                umg.setdefault(k, v)
         return cfg
     with open(CONFIG_PFAD, "w", encoding="utf-8") as f:
         json.dump(DEFAULT_CONFIG, f, indent=2, ensure_ascii=False)
-    return dict(DEFAULT_CONFIG)
+    return json.loads(json.dumps(DEFAULT_CONFIG))     # tiefe Kopie
+
+
+# ---------------------------------------------------------------------
+# Umgebungen (dev / prod)
+# ---------------------------------------------------------------------
+
+def umgebungs_namen(cfg: dict) -> list[str]:
+    return list(cfg.get("umgebungen", {}))
+
+
+def aktive_umgebung(cfg: dict) -> str:
+    name = cfg.get("aktive_umgebung") or "dev"
+    if name not in cfg.get("umgebungen", {}):
+        name = (umgebungs_namen(cfg) or ["dev"])[0]
+    return name
+
+
+def umgebung(cfg: dict, name: str | None = None) -> dict:
+    """Die (aktive) Umgebung — Zugang + shopspezifische Zuordnungen."""
+    name = name or aktive_umgebung(cfg)
+    umgs = cfg.setdefault("umgebungen", {})
+    return umgs.setdefault(name, dict(DEFAULT_UMGEBUNG))
+
+
+def ist_produktiv(name: str) -> bool:
+    """Heuristik für die Warnfarbe im GUI."""
+    return name.lower().startswith(("prod", "live"))
+
+
+def effektiv(cfg: dict) -> dict:
+    """Globale Einstellungen + aktive Umgebung zu einer flachen Sicht
+    zusammenlegen — so arbeiten die Bau-Funktionen unverändert weiter."""
+    flach = {k: v for k, v in cfg.items()
+             if k not in ("umgebungen", "aktive_umgebung")}
+    flach.update(umgebung(cfg))
+    return flach
 
 
 def speichere_config(cfg: dict) -> None:
     with open(CONFIG_PFAD, "w", encoding="utf-8") as f:
         json.dump(cfg, f, indent=2, ensure_ascii=False)
+
+
+# ---------------------------------------------------------------------
+# Master-Passwort: Secret verschlüsselt ablegen
+# ---------------------------------------------------------------------
+#
+# Ein reiner Passwort-Dialog wäre wirkungslos, solange das Secret im Klartext
+# in der config.json steht — man liest die Datei einfach auf. Das Passwort ist
+# deshalb der *Schlüssel*: daraus wird per scrypt ein AES-Schlüssel abgeleitet,
+# mit dem das Secret verschlüsselt gespeichert wird. AES-GCM ist authentifiziert,
+# ein falsches Passwort scheitert also sauber statt Datenmüll zu liefern.
+
+SCRYPT_N, SCRYPT_R, SCRYPT_P = 2 ** 14, 8, 1
+
+
+class PasswortFehler(RuntimeError):
+    pass
+
+
+def _kdf(passwort: str, salt: bytes) -> bytes:
+    return hashlib.scrypt(passwort.encode("utf-8"), salt=salt,
+                          n=SCRYPT_N, r=SCRYPT_R, p=SCRYPT_P, dklen=32)
+
+
+def _aesgcm(schluessel: bytes):
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    return AESGCM(schluessel)
+
+
+def hat_secret(umg: dict) -> bool:
+    """Liegt für diese Umgebung ein verschlüsseltes Secret vor?"""
+    return bool(umg.get("secret_enc") and umg.get("kdf_salt"))
+
+
+def setze_secret(umg: dict, secret: str, passwort: str) -> None:
+    """Secret dieser Umgebung mit dem Master-Passwort verschlüsselt ablegen.
+    Jede Umgebung bekommt ein eigenes Salt — dev und prod sind unabhängig."""
+    if not passwort:
+        raise PasswortFehler("Master-Passwort darf nicht leer sein.")
+    salt = os.urandom(16)
+    nonce = os.urandom(12)
+    ct = _aesgcm(_kdf(passwort, salt)).encrypt(nonce, secret.encode("utf-8"), None)
+    umg["secret_enc"] = base64.b64encode(nonce + ct).decode()
+    umg["kdf_salt"] = base64.b64encode(salt).decode()
+    umg.pop("secret_access_key", None)      # evtl. Altlast im Klartext entfernen
+
+
+def hole_secret(umg: dict, passwort: str) -> str:
+    """Secret dieser Umgebung entschlüsseln. Falsches Passwort -> PasswortFehler."""
+    if not hat_secret(umg):
+        raise PasswortFehler("Für diese Umgebung ist noch kein Secret hinterlegt.")
+    roh = base64.b64decode(umg["secret_enc"])
+    salt = base64.b64decode(umg["kdf_salt"])
+    try:
+        klar = _aesgcm(_kdf(passwort, salt)).decrypt(roh[:12], roh[12:], None)
+    except Exception as e:                  # InvalidTag u. Ä.
+        raise PasswortFehler("Falsches Master-Passwort.") from e
+    return klar.decode("utf-8")
+
+
+def klartext_secret_vorhanden(umg: dict) -> str:
+    """Altlast: Secret aus einer früheren Version, das noch im Klartext steht.
+    Wird beim ersten Start mit Passwort verschlüsselt."""
+    return umg.get("secret_access_key") or ""
 
 
 # ---------------------------------------------------------------------
@@ -129,7 +305,12 @@ def _join_und(namen: list[str]) -> str:
     return ", ".join(namen[:-1]) + " und " + namen[-1]
 
 
-def _kontributoren(product, rolle: str) -> list[str]:
+def _kontributoren(product, rolle: str) -> list[dict]:
+    """[{'name': 'Ruth Birkle', 'vorname': 'Ruth', 'nachname': 'Birkle'}, …]
+
+    b039/b040 (Vor-/Nachname) sind für den Autor-Link nötig — b036 ist nur der
+    zusammengesetzte Name.
+    """
     dd = product.find("descriptivedetail")
     if dd is None:
         return []
@@ -138,9 +319,52 @@ def _kontributoren(product, rolle: str) -> list[str]:
         if _txt(c.find("b035")) == rolle:
             seq = _txt(c.find("b034"))
             name = _txt(c.find("b036"))
+            vor, nach = _txt(c.find("b039")), _txt(c.find("b040"))
+            if not name and nach:
+                name = f"{vor} {nach}".strip()
+            if not nach and name:               # Rückfall: am letzten Leerzeichen
+                teile = name.rsplit(" ", 1)
+                vor, nach = (teile[0], teile[1]) if len(teile) == 2 else ("", name)
             if name:
-                beitraege.append((int(seq) if seq.isdigit() else 999, name))
-    return [n for _, n in sorted(beitraege)]
+                beitraege.append((int(seq) if seq.isdigit() else 999,
+                                  {"name": name, "vorname": vor, "nachname": nach}))
+    return [n for _, n in sorted(beitraege, key=lambda x: x[0])]
+
+
+def _namen(kontributoren: list[dict]) -> list[str]:
+    return [k["name"] for k in kontributoren]
+
+
+_UMLAUTE = {"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss",
+            "Ä": "ae", "Ö": "oe", "Ü": "ue"}
+
+
+def slug(text: str) -> str:
+    """'Sophie Brandes' -> 'sophie-brandes' (Umlaute ausgeschrieben)."""
+    t = "".join(_UMLAUTE.get(c, c) for c in (text or ""))
+    t = re.sub(r"[^A-Za-z0-9]+", "-", t).strip("-").lower()
+    return t
+
+
+def autor_link(k: dict, basis: str) -> str:
+    """<a href='/autoren-herausgeber/b/brandes-sophie/'>Sophie Brandes</a>
+
+    Konvention aus den bestehenden Produkten: Nachname-Vorname, einsortiert
+    unter dem Anfangsbuchstaben des Nachnamens.
+    """
+    nach, vor = k.get("nachname", ""), k.get("vorname", "")
+    if not nach:
+        return html.escape(k.get("name", ""))
+    pfad = slug(f"{nach}-{vor}") if vor else slug(nach)
+    initial = slug(nach)[:1]
+    url = f"{basis.rstrip('/')}/{initial}/{pfad}/"
+    return f"<a href='{url}'>{html.escape(k.get('name', ''))}</a>"
+
+
+def _zahl_de(x: float) -> str:
+    """24.4 -> '24,4'; 24.0 -> '24'."""
+    s = f"{x:g}"
+    return s.replace(".", ",")
 
 
 def _entferne_intro(absaetze: list[str]) -> list[str]:
@@ -187,14 +411,16 @@ def lade_buchfelder(xml_pfad, cfg: dict | None = None) -> dict:
     if not isbn13 or len(isbn13) != 13 or not isbn13.isdigit():
         raise ValueError(f"Keine gültige ISBN-13 gefunden (gelesen: {isbn13!r}).")
 
-    # Titel (Produktebene, nicht die Collection-Kopie)
-    titel = ""
+    # Titel + Untertitel (Produktebene, nicht die Collection-Kopie).
+    # Achtung: das b029 unter collection/ ist der Untertitel der REIHE.
+    titel, untertitel = "", ""
     if dd is not None:
         for td in dd.findall("titledetail"):
             if _txt(td.find("b202")) == "01":
                 for te in td.findall("titleelement"):
                     if _txt(te.find("x409")) == "01":
                         titel = _txt(te.find("b203"))
+                        untertitel = _txt(te.find("b029"))
                         break
             if titel:
                 break
@@ -234,9 +460,31 @@ def lade_buchfelder(xml_pfad, cfg: dict | None = None) -> dict:
             break
 
     roh_datum = _txt(product.find("publishingdetail/publishingdate/b306"))
-    datum = ""
+    datum, datum_iso = "", ""
     if len(roh_datum) == 8 and roh_datum.isdigit():
         datum = f"{roh_datum[6:8]}.{roh_datum[4:6]}.{roh_datum[0:4]}"
+        datum_iso = (f"{roh_datum[0:4]}-{roh_datum[4:6]}-{roh_datum[6:8]}"
+                     f"T00:00:00.000+00:00")
+
+    # Maße (measure): x315 01=Höhe, 02=Breite, 03=Dicke, 08=Gewicht
+    masse: dict[str, float] = {}
+    _MASS = {"01": "hoehe_cm", "02": "breite_cm", "03": "dicke_cm",
+             "08": "gewicht_kg"}
+    if dd is not None:
+        for m in dd.findall("measure"):
+            feld = _MASS.get(_txt(m.find("x315")))
+            wert, einheit = _txt(m.find("c094")), _txt(m.find("c095")).lower()
+            if not feld or not wert:
+                continue
+            try:
+                w = float(wert.replace(",", "."))
+            except ValueError:
+                continue
+            if feld == "gewicht_kg" and einheit in ("gr", "g"):
+                w = w / 1000.0                  # Shopware rechnet in kg
+            elif feld != "gewicht_kg" and einheit == "mm":
+                w = w / 10.0                    # Shopware-Felder sind cm-Werte
+            masse[feld] = w
 
     cover_url = ""
     for sr in product.findall("collateraldetail/supportingresource"):
@@ -254,18 +502,23 @@ def lade_buchfelder(xml_pfad, cfg: dict | None = None) -> dict:
         "isbn13_formatiert": f"{isbn_prefix}-{e[9:12]}-{e[12]}",
         "shortcode": shortcode_aus_isbn(isbn13),
         "titel": titel,
+        "untertitel": untertitel,
         "serientitel": serientitel,
         "band": band,
-        "autoren": autoren,
-        "herausgeber": herausgeber,
+        "autoren": _namen(autoren),
+        "herausgeber": _namen(herausgeber),
+        "autoren_teile": autoren,          # inkl. Vor-/Nachname (für Autor-Link)
+        "herausgeber_teile": herausgeber,
         "seiten": seiten,
         "einband": einband,
         "verlag": verlag,
         "preis_brutto": preis_brutto,
         "waehrung": waehrung,
         "datum": datum,
+        "datum_iso": datum_iso,
         "cover_url": cover_url,
         "werbetext_absaetze": werbetext,
+        **masse,
     }
 
 
@@ -347,69 +600,179 @@ def produkt_name(f: dict) -> str:
 
 
 def baue_beschreibung(f: dict) -> str:
-    """Werbetext (ONIX d104) als Absätze + kompakter Fakten-Block."""
-    teile = [f"<p>{html.escape(a)}</p>" for a in f.get("werbetext_absaetze", [])]
+    """Beschreibung im Hausstil des Verlags:
 
-    fakten = []
-    if f.get("herausgeber"):
-        fakten.append(f"{_join_und(f['herausgeber'])} (Hrsg.)")
+    Werbetext-Absätze (durch <br><br> getrennt), danach ggf. die Mitautoren
+    („Mit Beiträgen von …“) und ein KURSIVER Fakten-Block mit Zeilenumbrüchen
+    (<br>) — kein <p>, kein <hr>, keine '·'-Trennzeichen. So wie die bestehenden
+    Produkte im Shop (siehe beispiel_produkt.json). Herausgeber/Autor stehen im
+    eigenen „Autor“-Feld (customFields), nicht hier.
+    """
+    bloecke: list[str] = []
+    absaetze = [html.escape(a) for a in f.get("werbetext_absaetze", []) if a.strip()]
+    if absaetze:
+        bloecke.append("<br>\n<br>\n".join(absaetze))
+
+    # Mitautoren als eigener Absatz (die Herausgeber stehen im Autor-Feld)
     if f.get("autoren"):
-        fakten.append(_join_und(f["autoren"]))
+        bloecke.append(html.escape(
+            "Mit Beiträgen von " + _join_und(f["autoren"]) + "."))
+
+    # Kursiver Fakten-Block: Umfang/Einband, Verlag + Jahr, ISBN + Preis
+    zeilen: list[str] = []
     umfang = []
     if f.get("seiten"):
         umfang.append(f"{f['seiten']} Seiten")
     if f.get("einband"):
         umfang.append(f["einband"])
     if umfang:
-        fakten.append(", ".join(umfang))
+        zeilen.append(", ".join(umfang) + ".")
+    jahr = (f.get("datum") or "")[-4:]
+    if f.get("verlag") and jahr:
+        zeilen.append(f"{f['verlag']}. {jahr}.")
+    elif f.get("verlag"):
+        zeilen.append(f["verlag"] + ".")
+    isbn_preis = ""
     if f.get("isbn13_formatiert"):
-        fakten.append(f"ISBN {f['isbn13_formatiert']}")
-    if f.get("datum"):
-        fakten.append(f"Erschienen: {f['datum']}")
+        isbn_preis = f"ISBN {f['isbn13_formatiert']}."
     if f.get("preis_brutto"):
         betrag = f"{f['preis_brutto']:.2f}".replace(".", ",")
-        fakten.append(f"{betrag} {f.get('waehrung', 'EUR')}")
+        isbn_preis = (isbn_preis + " " if isbn_preis else "") \
+            + f"{f.get('waehrung', 'EUR')} {betrag}."
+    if isbn_preis:
+        zeilen.append(isbn_preis.strip())
+    if zeilen:
+        bloecke.append("<i>" + "<br>\n".join(html.escape(z) for z in zeilen)
+                       + "</i>")
 
-    if fakten:
-        teile.append("<hr />")
-        teile.append("<p>" + " &middot; ".join(html.escape(x) for x in fakten)
-                     + "</p>")
-    return "\n".join(teile)
+    return "<br>\n<br>\n".join(bloecke)
 
 
 def netto(brutto: float, satz: float) -> float:
     return round(float(brutto) / (1.0 + float(satz) / 100.0), 4)
 
 
-def baue_produkt(f: dict, cfg: dict, medien: list[dict] | None = None) -> dict:
+def baue_customfields(f: dict, cfg: dict) -> dict:
+    """SW5-Migrations-Felder, wie sie die bestehenden Produkte nutzen:
+    attr1 = Untertitel, attr12 = Format + Einband, attr2 = Autor-Feld."""
+    schluessel = cfg.get("custom_fields", DEFAULT_CONFIG["custom_fields"])
+    cf: dict = {}
+
+    # Untertitel: bei einer Reihe die Bandangabe ("Band 3"), sonst der
+    # ONIX-Untertitel (auf Produktebene).
+    untertitel = f"Band {f['band']}" if f.get("band") else f.get("untertitel", "")
+    if untertitel and schluessel.get("untertitel"):
+        cf[schluessel["untertitel"]] = untertitel
+
+    # "24 x 17 cm, fester Einband"
+    teile = []
+    if f.get("hoehe_cm") and f.get("breite_cm"):
+        teile.append(f"{_zahl_de(f['hoehe_cm'])} x {_zahl_de(f['breite_cm'])} cm")
+    if f.get("einband"):
+        teile.append(f["einband"])
+    if teile and schluessel.get("format"):
+        cf[schluessel["format"]] = ", ".join(teile)
+
+    # Autor-Feld: die HERAUSGEBER (mit Link, " / "-getrennt, "(Hrsg.)") — so wie
+    # im Bestand. Die eigentlichen Autoren sind nur Mitautoren und gehören hier
+    # NICHT rein (die stehen in der Beschreibung). Ohne Herausgeber (rein
+    # autorschaftliches Buch) steht hier der/die Autor(en).
+    basis = cfg.get("autoren_basis_url", DEFAULT_CONFIG["autoren_basis_url"])
+    if f.get("herausgeber_teile") and schluessel.get("autor_link"):
+        links = " / ".join(autor_link(k, basis) for k in f["herausgeber_teile"])
+        cf[schluessel["autor_link"]] = links + " (Hrsg.)"
+    elif f.get("autoren_teile") and schluessel.get("autor_link"):
+        cf[schluessel["autor_link"]] = ", ".join(
+            autor_link(k, basis) for k in f["autoren_teile"])
+    return cf
+
+
+def baue_produkt(f: dict, cfg: dict, medien: list[dict] | None = None,
+                 bestehende_id: str | None = None) -> dict:
     """Baut den Shopware-Produkt-Payload (upsert).
 
-    ``medien`` = [{"media_id": .., "cover": bool}, ...] (bereits hochgeladen).
+    ``medien``        = [{"media_id": .., "cover": bool}, ...] (schon hochgeladen)
+    ``bestehende_id`` = ID eines bereits vorhandenen Produkts mit derselben
+                        Artikelnummer. Muss übernommen werden — productNumber ist
+                        eindeutig, ein neuer Datensatz würde sonst abgelehnt.
     """
     isbn = f["isbn13"]
+    # Artikelnummer wie im Bestand: ISBN MIT Bindestrichen (978-3-95505-559-2)
+    nummer = f.get("isbn13_formatiert") or isbn
     satz = float(cfg.get("tax_rate", 7.0))
     brutto = float(f.get("preis_brutto") or 0.0)
 
     payload = {
-        "id": produkt_id(isbn),
-        "productNumber": isbn,
-        "ean": isbn,
+        "id": bestehende_id or produkt_id(isbn),
+        "productNumber": nummer,
+        "ean": nummer,
         "name": produkt_name(f),
         "active": bool(cfg.get("aktiv", False)),   # Entwurf: inaktiv
-        "stock": int(cfg.get("default_stock", 0)),
         "description": baue_beschreibung(f),
         "taxId": cfg.get("tax_id") or None,
         "price": [{
             "currencyId": cfg.get("currency_id") or None,
             "gross": round(brutto, 2),
             "net": netto(brutto, satz),
-            "linked": True,
+            "linked": True,        # Shopware rechnet netto selbst nach
         }],
+        # Lieferbarkeit — Vorgabe des Verlags, für alle Bücher gleich.
+        # Maximalabnahme und Lieferzeit bleiben leer (nicht mitschicken).
+        "stock": int(cfg.get("default_stock", 9999)),
+        "isCloseout": bool(cfg.get("is_closeout", True)),
+        "minPurchase": int(cfg.get("min_purchase", 1)),
+        "purchaseSteps": int(cfg.get("purchase_steps", 1)),
+        "shippingFree": bool(cfg.get("shipping_free", False)),
     }
+
+    # Wiederauffüllzeit: nur setzen, wenn konfiguriert (sonst leer lassen)
+    if cfg.get("restock_time") is not None:
+        payload["restockTime"] = int(cfg["restock_time"])
+
+    if f.get("datum_iso"):
+        payload["releaseDate"] = f["datum_iso"]
+
+    # Maße/Gewicht aus der ONIX (Shopware: cm bzw. kg)
+    for onix, sw in (("hoehe_cm", "height"), ("breite_cm", "width"),
+                     ("dicke_cm", "length"), ("gewicht_kg", "weight")):
+        if f.get(onix):
+            payload[sw] = f[onix]
+
+    # SEO
+    payload["metaTitle"] = produkt_name(f)[:255]
+    text = " ".join(f.get("werbetext_absaetze") or [])
+    if text:
+        payload["metaDescription"] = text[:255]
+    stichworte = [k["nachname"] for k in (f.get("autoren_teile") or [])
+                  if k.get("nachname")]
+    stichworte += [k["nachname"] for k in (f.get("herausgeber_teile") or [])
+                   if k.get("nachname")]
+    if f.get("titel"):
+        stichworte.append(f["titel"])
+    if f.get("serientitel"):
+        stichworte.append(f["serientitel"])
+    if stichworte:
+        payload["keywords"] = ", ".join(dict.fromkeys(stichworte))[:255]
+
     if cfg.get("manufacturer_id"):
         payload["manufacturerId"] = cfg["manufacturer_id"]
     if cfg.get("category_id"):
         payload["categories"] = [{"id": cfg["category_id"]}]
+    if cfg.get("cms_page_id"):
+        payload["cmsPageId"] = cfg["cms_page_id"]
+
+    # Sichtbarkeit: OHNE diesen Eintrag taucht das Produkt im Shop NICHT auf —
+    # auch nicht, wenn es aktiv geschaltet wird.
+    if cfg.get("sales_channel_id"):
+        payload["visibilities"] = [{
+            "id": _media_id(isbn, "vis:" + cfg["sales_channel_id"]),
+            "salesChannelId": cfg["sales_channel_id"],
+            "visibility": int(cfg.get("visibility", 30)),
+        }]
+
+    cf = baue_customfields(f, cfg)
+    if cf:
+        payload["customFields"] = cf
 
     if medien:
         eintraege, cover_pmid = [], None
@@ -433,12 +796,31 @@ class ShopFehler(RuntimeError):
     pass
 
 
+class ProduktExistiert(ShopFehler):
+    """Das Buch ist im Shop schon vorhanden und darf nicht ohne ausdrückliche
+    Bestätigung überschrieben werden (schützt gepflegte Bestandsdaten)."""
+
+    def __init__(self, nummer: str, produkt_id: str):
+        self.nummer = nummer
+        self.produkt_id = produkt_id
+        super().__init__(f"Produkt {nummer} existiert bereits.")
+
+
+def normalisiere_url(url: str) -> str:
+    """'dev.example.de/' -> 'https://dev.example.de'. Ohne Schema kann urllib
+    die Adresse nicht auflösen ('unknown url type')."""
+    u = (url or "").strip().rstrip("/")
+    if u and not re.match(r"^https?://", u, re.IGNORECASE):
+        u = "https://" + u
+    return u
+
+
 class ShopClient:
     """Minimaler Admin-API-Client (OAuth client_credentials + Sync + Medien)."""
 
     def __init__(self, shop_url: str, key: str, secret: str, timeout: float = 30.0,
                  tls_pruefen: bool = True):
-        self.base = (shop_url or "").rstrip("/")
+        self.base = normalisiere_url(shop_url)
         self.key = key
         self.secret = secret
         self.timeout = timeout
@@ -472,18 +854,17 @@ class ShopClient:
                                         context=self._ssl) as r:
                 return r.read()
         except urllib.error.HTTPError as e:
-            # Basic-Auth vor dem Shop (z. B. Caddy) blockt die API: Basic und
-            # Bearer teilen sich denselben Authorization-Header — beides
-            # gleichzeitig geht nicht. Das muss im Proxy gelöst werden.
+            # Basic-Auth vor dem Shop (Apache/nginx/Caddy) blockt die API: Basic
+            # und Bearer teilen sich denselben Authorization-Header — beides
+            # gleichzeitig geht nicht. Das muss im Webserver gelöst werden.
             wa = (e.headers.get("WWW-Authenticate") or "") if e.headers else ""
             if e.code == 401 and wa.lower().startswith("basic"):
                 raise ShopFehler(
-                    "Der Shop steht hinter einer Basic-Auth (z. B. Caddy) — die "
+                    "Der Shop steht hinter einer Basic-Auth (Webserver) — die "
                     "Admin-API ist so nicht erreichbar: Basic und Bearer nutzen "
                     "beide den Authorization-Header.\n\n"
-                    "Lösung: im Proxy /api/* von der Basic-Auth ausnehmen "
-                    "(siehe README), oder das Tool direkt gegen den Shop "
-                    "hinter dem Proxy laufen lassen.") from e
+                    "Lösung: im Dev-vHost /api von der Basic-Auth ausnehmen, "
+                    "am besten nur für die eigene IP (siehe README).") from e
             detail = e.read().decode("utf-8", "replace")[:800]
             raise ShopFehler(f"{method} {pfad} -> HTTP {e.code}\n{detail}") from e
         except urllib.error.URLError as e:
@@ -566,6 +947,53 @@ class ShopClient:
     def hersteller(self) -> list[dict]:
         return self._liste("/api/product-manufacturer")
 
+    def sales_channels(self) -> list[dict]:
+        return self._liste("/api/sales-channel")
+
+    def produkt_id_zu_nummer(self, nummer: str) -> str | None:
+        """ID eines bereits vorhandenen Produkts mit dieser Artikelnummer.
+
+        productNumber ist eindeutig: gibt es das Buch schon (z. B. aus der
+        SW5-Migration), MUSS dessen ID wiederverwendet werden — sonst lehnt
+        Shopware den Upsert als Duplikat ab.
+        """
+        treffer = self.suche("product", {
+            "limit": 1,
+            "filter": [{"type": "equals", "field": "productNumber",
+                        "value": nummer}],
+        })
+        return treffer[0]["id"] if treffer else None
+
+    def vorlage_vom_bestand(self) -> dict:
+        """Verkaufskanal, Seiten-Layout und Hersteller aus einem vorhandenen
+        Produkt lesen.
+
+        Alle drei sind im Verlagsshop für jedes Buch gleich (Hersteller =
+        „Standard“) — es lohnt nicht, das von Hand zu pflegen. Ohne
+        Verkaufskanal wäre ein neues Produkt im Shop sogar unsichtbar.
+        """
+        treffer = self.suche("product", {
+            "limit": 1,
+            "associations": {
+                "visibilities": {"associations": {"salesChannel": {}}},
+                "manufacturer": {},
+            },
+        })
+        if not treffer:
+            return {}
+        p = treffer[0]
+        sicht = (p.get("visibilities") or [{}])[0]
+        kanal = sicht.get("salesChannel") or {}
+        hersteller = p.get("manufacturer") or {}
+        return {
+            "cms_page_id": p.get("cmsPageId") or "",
+            "sales_channel_id": sicht.get("salesChannelId") or "",
+            "sales_channel_name": kanal.get("name") or "",
+            "visibility": sicht.get("visibility") or 30,
+            "manufacturer_id": p.get("manufacturerId") or "",
+            "manufacturer_name": hersteller.get("name") or "",
+        }
+
     # -- Medien ---------------------------------------------------------
     def produkt_medien_ordner(self) -> str | None:
         """ID des Standard-Medienordners für Produktbilder (für Thumbnails).
@@ -612,6 +1040,12 @@ class ShopClient:
                   datei.read_bytes(), mime)
         return media_id
 
+    # -- Lesen ----------------------------------------------------------
+    def suche(self, entity: str, koerper: dict) -> list[dict]:
+        """POST /api/search/<entity> — erlaubt Filter + Assoziationen."""
+        antwort = self._json("POST", f"/api/search/{entity}", koerper)
+        return antwort.get("data") or []
+
     # -- Schreiben ------------------------------------------------------
     def sync(self, entity: str, payload: list[dict]) -> dict:
         return self._json("POST", "/api/_action/sync", {
@@ -629,14 +1063,21 @@ class ShopClient:
 # ---------------------------------------------------------------------
 
 def veroeffentliche(f: dict, cfg: dict, bilder: dict | None = None,
-                    dry_run: bool = False, log=print) -> dict:
+                    secret: str = "", dry_run: bool = False,
+                    ueberschreiben: bool = False, log=print) -> dict:
     """Lädt die Bilder hoch und legt/aktualisiert das Produkt als Entwurf.
 
+    ``secret`` ist das entschlüsselte Shopware-Secret — es kommt bewusst als
+    Parameter und wird nie aus der Config gelesen (dort liegt nur Chiffretext).
+    ``ueberschreiben`` muss True sein, um ein **bestehendes** Buch zu ändern;
+    sonst wird ``ProduktExistiert`` geworfen, BEVOR irgendetwas gesendet oder
+    ein Bild hochgeladen wird — so bleiben gepflegte Bestandsdaten geschützt.
     dry_run=True baut nur den Payload (nichts wird gesendet).
     Rückgabe: {"payload": .., "medien": [..], "admin_url": ..}
     """
     isbn = f["isbn13"]
     bilder = bilder or {"cover": None, "galerie": []}
+    eff = effektiv(cfg)          # globale Einstellungen + aktive Umgebung
 
     dateien: list[tuple[Path, bool]] = []
     if bilder.get("cover"):
@@ -647,18 +1088,29 @@ def veroeffentliche(f: dict, cfg: dict, bilder: dict | None = None,
     if dry_run:
         medien = [{"media_id": _media_id(isbn, p.stem), "cover": ist_cover,
                    "datei": str(p)} for p, ist_cover in dateien]
-        payload = baue_produkt(f, cfg, medien)
+        payload = baue_produkt(f, eff, medien)
         log(f"Dry-Run: Payload für {payload['productNumber']} gebaut "
             f"({len(medien)} Bild(er)) — nichts gesendet.")
         return {"payload": payload, "medien": medien, "admin_url": ""}
 
-    client = ShopClient(cfg.get("shop_url", ""), cfg.get("access_key_id", ""),
-                        cfg.get("secret_access_key", ""),
-                        tls_pruefen=bool(cfg.get("tls_pruefen", True)))
-    fehlend = [k for k in ("tax_id", "currency_id") if not cfg.get(k)]
+    if not secret:
+        raise ShopFehler("Kein Secret entsperrt — bitte Master-Passwort eingeben.")
+    client = ShopClient(eff.get("shop_url", ""), eff.get("access_key_id", ""),
+                        secret, tls_pruefen=bool(eff.get("tls_pruefen", True)))
+    fehlend = [k for k in ("tax_id", "currency_id") if not eff.get(k)]
     if fehlend:
         raise ShopFehler("Zuordnung fehlt: " + ", ".join(fehlend) +
                          " — bitte einmal 'Verbinden' und auswählen.")
+
+    # Gibt es das Buch schon (z. B. aus der SW5-Migration)? Diese Prüfung läuft
+    # ZUERST — noch vor dem Bild-Upload —, damit ein bestehendes Produkt ohne
+    # ausdrückliche Freigabe garantiert unangetastet bleibt.
+    nummer = f.get("isbn13_formatiert") or isbn
+    bestehende_id = client.produkt_id_zu_nummer(nummer)
+    if bestehende_id and not ueberschreiben:
+        raise ProduktExistiert(nummer, bestehende_id)
+    if bestehende_id:
+        log(f"Vorhandenes Produkt {nummer} wird überschrieben (bestätigt).")
 
     ordner_id = client.produkt_medien_ordner() if dateien else None
     medien = []
@@ -668,8 +1120,9 @@ def veroeffentliche(f: dict, cfg: dict, bilder: dict | None = None,
         client.medium_hochladen(p, mid, p.stem, ordner_id)
         medien.append({"media_id": mid, "cover": ist_cover, "datei": str(p)})
 
-    payload = baue_produkt(f, cfg, medien)
-    log(f"Lege Produkt an/aktualisiere: {payload['productNumber']} …")
+    payload = baue_produkt(f, eff, medien, bestehende_id)
+    log(f"{'Aktualisiere' if bestehende_id else 'Lege an'}: {nummer} "
+        f"({aktive_umgebung(cfg)}) …")
     client.sync("product", [payload])
-    return {"payload": payload, "medien": medien,
-            "admin_url": client.admin_link(isbn)}
+    return {"payload": payload, "medien": medien, "neu": not bestehende_id,
+            "admin_url": f"{client.base}/admin#/sw/product/detail/{payload['id']}"}

@@ -48,3 +48,7 @@ cover_previews/_NEU_Vorlage/
 Thumbs.db
 .idea/
 .vscode/
+
+# shopware_publisher: Produkt-Dumps (nur lokal, zum Vergleich)
+shopware_publisher/beispiel_produkt.json
+shopware_publisher/dump_*.json

@@ -37,36 +37,86 @@ Danach die Auswahlfelder füllen: **Steuer** (Bücher = 7 %), **Währung** (EUR)
 optional **Kategorie** und **Hersteller**. Die Auswahl landet in der
 `config.json` und wird beim nächsten Start wiederverwendet.
 
-> Die `config.json` liegt neben der .exe und enthält das **Secret im Klartext**.
-> Sie ist per `.gitignore` vom Repo ausgeschlossen — bitte nicht weitergeben.
+### Master-Passwort (Secret-Schutz)
+
+Das Secret gibt vollen Zugriff auf die Admin-API — es liegt deshalb **nie im
+Klartext** auf der Platte:
+
+- **„Secret setzen…“** fragt das Shopware-Secret ab und ein selbst gewähltes
+  **Master-Passwort**. Aus dem Passwort wird per **scrypt** ein Schlüssel
+  abgeleitet, mit dem das Secret **AES-GCM-verschlüsselt** in der `config.json`
+  landet (`secret_enc` + `kdf_salt`).
+- Bei **jedem Start** fragt das Tool das Master-Passwort und entschlüsselt das
+  Secret **nur im Arbeitsspeicher**.
+- Falsches Passwort → kein Shop-Zugriff. Wer die `config.json` kopiert, hat nur
+  Chiffretext; das Passwort steht nirgends (auch kein Hash davon wird gebraucht —
+  AES-GCM ist authentifiziert und scheitert bei falschem Schlüssel von selbst).
+
+> **Least Privilege:** Die Integration braucht keine *Administrator*-Rolle. Eine
+> eigene Rolle mit Schreibrechten auf **Produkte + Medien** und Leserechten auf
+> Steuer/Währung/Kategorie reicht — dann kann ein geleaktes Secret keine Kunden-
+> und Bestelldaten lesen.
 
 ## Dev-Store hinter Caddy (Basic-Auth + TLS)
 
 **Basic-Auth blockt die Admin-API.** Basic und Bearer teilen sich denselben
 `Authorization`-Header — es kann nur eines von beiden gesendet werden. Steht vor
-dem Shop eine Basic-Auth, antwortet der Proxy mit 401, bevor Shopware das Token
-überhaupt sieht. Das lässt sich **nicht** im Tool lösen, sondern nur im Proxy:
-`/api/*` von der Basic-Auth ausnehmen.
+dem Dev-Store eine Basic-Auth, antwortet der Webserver mit 401, bevor Shopware
+das Token überhaupt sieht. Das lässt sich **nicht** im Tool lösen, sondern nur
+in der Server-Konfiguration.
 
-```caddyfile
-dev.example.de {
-    # alles außer der API bleibt passwortgeschützt
-    @geschuetzt not path /api/*
-    basic_auth @geschuetzt {
-        luis $2a$14$…   # bcrypt-Hash (caddy hash-password)
-    }
-    reverse_proxy localhost:8000
-}
+**Nicht** einfach `/api/*` für alle freigeben: Dev und Produktivshop liegen auf
+**demselben Server**. Was auf dem Dev-Store angreifbar ist, steht direkt neben
+dem Livesystem. Die API deshalb nur von der **eigenen IP** durchlassen — im
+**Dev-vHost** (Apache 2.4):
+
+In der `.htaccess` des Dev-Stores (`public/.htaccess`, **oberhalb** der
+`# BEGIN Shopware`-Marker — der Block dazwischen wird überschrieben):
+
+```apache
+SetEnvIf Request_URI ^/api(/|$) is_api=1
+
+AuthType Basic
+AuthName "Staging"
+AuthUserFile /var/www/dev-shopware/.htpasswd
+
+<RequireAny>
+    <RequireAll>
+        <RequireAny>
+            Require env is_api
+            Require env REDIRECT_is_api
+        </RequireAny>
+        # eigene IP / VPN-Netz
+        Require ip 203.0.113.5
+    </RequireAll>
+    Require valid-user
+</RequireAny>
 ```
 
-(Bei Caddy < 2.8 heißt die Direktive `basicauth` statt `basic_auth`.)
+Logik: **(ist `/api` UND aus dem eigenen Netz) ODER Basic-Auth-Benutzer.**
+`Require ip` ist eine Autorisierung *ohne* Authentifizierung — von der eigenen IP
+geht der Bearer-Token unangetastet durch, von überall sonst greift weiterhin die
+Basic-Auth. Das Regex ist **verankert** (`^/api(/|$)`), sonst würde auch eine
+Storefront-URL wie `/buecher/api-design` die Basic-Auth umgehen. `REDIRECT_is_api`
+ist nötig, weil Shopwares Rewrite auf `index.php` intern umleitet und die
+Umgebungsvariable dabei den Präfix bekommt.
 
-Danach `caddy reload`. Der Admin im Browser bleibt geschützt, die API ist für
-das Tool erreichbar. Alternativ das Tool direkt gegen den Shop **hinter** dem
-Proxy laufen lassen (z. B. `http://localhost:8000`).
+> **Achtung:** Apache erlaubt **keine Kommentare am Zeilenende** — ein `#` hinter
+> einer Direktive wird als Argument gelesen und wirft einen **500er**. Kommentare
+> immer in eine eigene Zeile.
 
-**TLS:** Nutzt Caddy für den Dev-Store seine interne CA, kennt Python das
-Zertifikat nicht (`CERTIFICATE_VERIFY_FAILED`). Dann in der `config.json`
+`.htaccess` wird bei jedem Request gelesen — **kein** Apache-Neustart nötig.
+
+> **SSH-Tunnel ist hier keine gute Idee.** Dev und Prod sind namensbasierte
+> vHosts auf demselben Apache — ein Tunnel auf `localhost:443` transportiert den
+> Hostnamen nicht, Apache landet dann im **Default-vHost**. Im schlimmsten Fall
+> schreibt man so in den **Produktivshop**.
+
+**Immer prüfen, auf welchen Shop man schreibt.** Das Tool zeigt die Ziel-URL vor
+dem Anlegen an und fragt nach. Vorher am besten einmal mit **Dry-Run** laufen.
+
+**TLS:** Falls das Zertifikat des Dev-Stores nicht überprüfbar ist
+(`CERTIFICATE_VERIFY_FAILED`, z. B. selbstsigniert), in der `config.json`
 
 ```json
 "tls_pruefen": false
