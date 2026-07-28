@@ -89,7 +89,14 @@ DEFAULT_CONFIG = {
     "muster_2d": "2D_{dpi}_{sc}.jpg",
     "muster_3d": "3D_{dpi}_{sc}.jpg",
     "muster_3d_png": "{sc}.png",
+    "muster_3d_tif": "3D_{dpi}_{sc}.tif",
     "jpeg_qualitaet": 95,
+    # Freigestelltes CMYK-TIF (nur das Buch, ohne Spiegelung/Hintergrund)
+    "tif_erzeugen": True,
+    # Alles unter dieser Deckkraft gilt als Rest und wird ganz durchsichtig
+    # gemacht (die Falz-Ebene wirft einen fast unsichtbaren weißen Schein über
+    # die Buchkante hinaus — der wäre sonst der weiße Strich am Rand).
+    "tif_alpha_min": 8,
     # 3D-Mockup-Vorlagen (ein PSD je Buchformat, im Ordner _NEU_Vorlage)
     "vorlagen_dir": "",            # leer -> mitgelieferter/lokaler _NEU_Vorlage-Ordner
     "vorlagen_tol_cm": 1.0,        # Toleranz beim Format-Abgleich
