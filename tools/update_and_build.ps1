@@ -23,11 +23,17 @@
     $Beigaben - fuer CoverPreviews sind das die Mockup-Vorlagen (_NEU_Vorlage,
     rund 460 MB), die neben der .exe liegen muessen.
 
-    Zusaetzlich werden die fertigen Ordner nach \\C019\d\VR-Tools\ gespiegelt.
-    Von dort kopieren sich die Kollegen ihre Kopie. Uebertragen werden nur die
-    PROGRAMMTEILE (.exe, _internal\, Anleitung.txt, Beigaben) - nicht die
-    Nutzdaten daneben (config.json, kommliste.xlsx, paketnr.txt, Ausgabe-
-    ordner). Die gehoeren dem jeweiligen Anwender und bleiben unangetastet.
+    Zusaetzlich werden die fertigen Ordner auf den Share gespiegelt, zusammen
+    mit dem Launcher (launch.ps1 / Einrichten.cmd, siehe daneben). Die Kollegen
+    kopieren nichts mehr von Hand: ihre Verknuepfung ruft launch.ps1 auf, das
+    die neue Fassung beim Start abholt und dann startet. Veroeffentlichen =
+    dieses Skript laufen lassen, mehr nicht.
+
+    Uebertragen werden dabei nur die PROGRAMMTEILE (.exe, _internal\,
+    Anleitung.txt, Beigaben) - nicht die Nutzdaten daneben (config.json,
+    kommliste.xlsx, paketnr.txt, Ausgabeordner). Die gehoeren dem jeweiligen
+    Anwender und bleiben unangetastet; launch.ps1 zieht dieselbe Grenze in die
+    andere Richtung.
 
     Die virtuelle Umgebung und die PyInstaller-Zwischendateien liegen bewusst
     LOKAL (%LOCALAPPDATA%), nicht auf dem Netzlaufwerk: schneller, portabel
@@ -45,8 +51,8 @@ $ErrorActionPreference = 'Stop'
 # --- Pfade bestimmen --------------------------------------------------------
 $RepoRoot  = Split-Path -Parent $PSScriptRoot   # ...\VR-Tools\repo
 $OutRoot   = Split-Path -Parent $RepoRoot       # ...\VR-Tools  (Ziel der Tools)
-$ShareRoot = '\\C019\d\VR-Tools'                # von dort holen sich die Kollegen
-                                                # ihre Kopie
+$ShareRoot = '\\C019\d\VR-Tools'                # Master: von hier holt der
+                                                # Launcher die neue Fassung
 $ShareBereit = Test-Path $ShareRoot
 
 Write-Host "Repo:    $RepoRoot" -ForegroundColor Cyan
@@ -155,10 +161,22 @@ foreach ($Spec in $Specs) {
     Copy-Programmteile -Src $Src -Dst (Join-Path $OutRoot $Name) `
                        -Anleitung $Anleitung -Beigabe $Beigabe
 
-    # Und auf den Share, damit die Kollegen sich den Ordner kopieren koennen.
+    # Und auf den Share - von dort holt der Launcher die neue Fassung ab.
     if ($ShareBereit) {
         Copy-Programmteile -Src $Src -Dst (Join-Path $ShareRoot $Name) `
                            -Anleitung $Anleitung -Beigabe $Beigabe
+    }
+}
+
+# --- 3b) Launcher veroeffentlichen -----------------------------------------
+# launch.ps1 haelt die Tools auf den Client-PCs aktuell, Einrichten.cmd legt
+# dort einmalig die Verknuepfungen an. Beide muessen NEBEN den Tool-Ordnern auf
+# dem Share liegen: launch.ps1 leitet den Master-Pfad aus dem eigenen Ort ab
+# ($PSScriptRoot), damit der Servername nirgends fest verdrahtet ist.
+if ($ShareBereit) {
+    Write-Host "  -> Launcher (launch.ps1, Einrichten.cmd)" -ForegroundColor Yellow
+    foreach ($Datei in @('launch.ps1', 'einrichten.ps1', 'Einrichten.cmd')) {
+        Copy-Item (Join-Path $PSScriptRoot $Datei) $ShareRoot -Force
     }
 }
 
@@ -169,11 +187,13 @@ foreach ($Spec in $Specs) {
     if (Test-Path $ToolDir) { Write-Host "  $ToolDir" }
 }
 if ($ShareBereit) {
-    Write-Host "`nZum Verteilen (Ordner kopieren, .exe starten):" -ForegroundColor Green
+    Write-Host "`nVeroeffentlicht auf $ShareRoot :" -ForegroundColor Green
     foreach ($Spec in $Specs) {
         $ToolDir = Join-Path $ShareRoot $Spec.BaseName
         if (Test-Path $ToolDir) { Write-Host "  $ToolDir" }
     }
+    Write-Host "`nDie Kollegen bekommen das beim naechsten Start automatisch." -ForegroundColor Green
+    Write-Host "Neuer PC: einmal $ShareRoot\Einrichten.cmd doppelklicken."     -ForegroundColor Green
 }
 
 Write-Host "`nHinweis: Die Tools legen config.json & Co. direkt neben der .exe an"  -ForegroundColor DarkGray

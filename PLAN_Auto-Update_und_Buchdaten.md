@@ -48,7 +48,22 @@ Das ist der offene Punkt aus der WIP-Datei; hier wird er erledigt.
 
 ---
 
-## Phase 1 — Launcher (Auto-Update der Tools)
+## Phase 1 — Launcher (Auto-Update der Tools) — GEBAUT, ungetestet
+
+Umgesetzt am 13.08.2026 als `tools/launch.ps1`, `tools/Einrichten.cmd` +
+`tools/einrichten.ps1`; `tools/update_and_build.ps1` veröffentlicht sie nach
+`$ShareRoot`. **Auf einem Windows-PC noch nicht ausprobiert** — hier gibt es
+kein PowerShell, die Skripte sind also nicht einmal syntaktisch geprüft. Die
+Prüfliste unten unter „Verifikation / Phase 1“ abarbeiten.
+
+Abweichung vom Plan (zum Guten): Phase 1 hängt **nicht** an Phase 0. `launch.ps1`
+liegt auf dem Share neben den Tool-Ordnern und leitet den Master-Pfad aus
+`$PSScriptRoot` ab; `Einrichten.cmd` aus `%~dp0`. Der Servername steht damit
+nirgends im Code — nur im Ziel der Verknüpfungen, und das entsteht beim
+Einrichten aus dem Ort, von dem aus die .cmd gestartet wurde. Zieht der Share
+um, reicht ein erneutes `Einrichten.cmd` vom neuen Ort.
+
+### Ursprünglicher Plan
 
 **Prinzip:** Client-PCs führen eine LOKALE Kopie aus; ein Launcher-Skript auf dem
 NAS synct beim Start die Programmteile delta-weise herunter und startet dann die
@@ -161,6 +176,32 @@ den Zielordner korrekt auf dem NAS auf (Statuszeile „vorhandener Ordner" statt
   wird selbst über Phase 1 verteilt.
 
 ## Offen / später
+
+**Zum Launcher (bewusst zurückgestellt am 13.08.2026 — erst mal Wichtigeres):**
+
+- **Phase 1 auf Windows durchtesten.** Die Skripte sind hier nicht einmal
+  syntaktisch geprüft (kein PowerShell auf dem Linux-Rechner). Prüfliste unter
+  „Verifikation / Phase 1“.
+- **`git push` landet nicht auf dem Share.** Bauen muss auf Windows passieren
+  (PyInstaller kann nicht für Windows querbauen), und `update_and_build.ps1`
+  startet bisher jemand von Hand. Kleinster Weg: eine Aufgabenplanung-Aufgabe
+  auf einem PC, der ohnehin läuft, die genau dieses Skript aufruft — kein Code
+  nötig. Dann aber: SSH-Key des Task-Benutzers ohne Passphrase (sonst hängt der
+  `git pull` still), Bauen überspringen wenn nichts Neues kam, und vor allem
+  **Fehler sichtbar machen** (Log + `_Stand.txt` auf dem Share mit Zeitstempel
+  und Commit) — unbeaufsichtigt merkt sonst niemand, dass seit Wochen nichts
+  mehr durchläuft. GitHub Actions bringt hier nichts: der Runner kommt nicht an
+  den Share, es bräuchte trotzdem etwas on-prem.
+- **Nutzdaten ziehen beim Umstieg nicht mit.** Kanonisch wird
+  `%LOCALAPPDATA%\VR-Tools\<Tool>\`; wer heute `D:\CoverPreviews\` o. Ä. nutzt,
+  lässt seine `config.json` dort zurück — und **BooxpressEtiketten** seine
+  `kommliste.xlsx` und `paketnr.txt`, ohne die es nicht arbeitet. Beim Ausrollen
+  je PC einmal übernehmen (von Hand oder `Einrichten.cmd` beibringen, aber dann
+  muss es raten, wo die alten Ordner liegen).
+- Verknüpfungen und `%LOCALAPPDATA%` sind **pro Windows-Benutzer**: bei mehreren
+  Konten auf einem PC muss jeder einmal `Einrichten.cmd` klicken.
+
+**Sonst:**
 
 - Genauer NAS-Name/Pfad (Phase 0 klärt das).
 - Ob die Tools-.exe signiert werden sollen (SmartScreen/AV-Ruhe) — separat, nicht

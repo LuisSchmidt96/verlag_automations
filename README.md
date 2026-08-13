@@ -25,7 +25,10 @@ verlag_automations/
 │   ├── core.py, app.py, main.py, CoverPreviews.spec, README.md
 │   └── mockups/                ← Photoshop-Mockup-PSDs (lokal, nicht eingecheckt)
 ├── tools/
-│   └── update_and_build.ps1    ← zieht Git-Änderungen & baut alle Tools neu
+│   ├── update_and_build.ps1    ← zieht Git-Änderungen & baut alle Tools neu
+│   ├── launch.ps1              ← startet ein Tool und aktualisiert es dabei
+│   ├── Einrichten.cmd          ← legt auf einem PC die Verknüpfungen an
+│   └── einrichten.ps1          ←   (Logik dazu)
 ├── requirements.txt            ← gemeinsame Python-Abhängigkeiten
 └── README.md
 ```
@@ -58,10 +61,27 @@ Einzelnes Tool (aus dem Repo-Wurzelordner):
 pyinstaller booxpress_etiketten/BooxpressEtiketten.spec
 ```
 
-Alle Tools auf einmal (Windows, holt vorher Git-Änderungen):
+Die fertigen Programme liegen anschließend unter `dist/<Name>/`.
+
+## Verteilen (Windows)
 
 ```
 .\tools\update_and_build.ps1
 ```
 
-Die fertigen Programme liegen anschließend unter `dist/<Name>/`.
+Baut **alle** Tools auf einmal (holt vorher die Git-Änderungen) und
+veröffentlicht sie auf dem Share. Die fertigen Ordner landen dabei nicht in
+`dist/`, sondern in `VR-Tools\<Name>\` neben dem Repo und auf `$ShareRoot`.
+
+Die Kollegen kopieren **nichts** von Hand: sie starten ihre Verknüpfung, und
+`launch.ps1` holt vor dem Start die geänderten Programmteile vom Share in die
+lokale Kopie unter `%LOCALAPPDATA%\VR-Tools\<Name>\`. Ihre Nutzdaten
+(`config.json`, `kommliste.xlsx`, `paketnr.txt`, Ausgabeordner) bleiben dabei
+unangetastet — der Launcher spiegelt nur `_internal\`, `_NEU_Vorlage\`, die
+`.exe` und `Anleitung.txt`. Ist der Share nicht erreichbar, startet er die
+vorhandene lokale Fassung.
+
+**Ein neuer PC** braucht einmalig einen Doppelklick auf `Einrichten.cmd` im
+Share-Ordner — das legt die Verknüpfungen auf Desktop und Startmenü an. Danach
+nie wieder etwas zu tun; auch der Launcher selbst liegt auf dem Share und lässt
+sich zentral ändern.
