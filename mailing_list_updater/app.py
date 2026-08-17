@@ -1015,6 +1015,76 @@ class App(Tk):
             row=len(kandidaten) + 3, column=0, columnspan=anzahl + 1,
             sticky="w", pady=(6, 0))
 
+    def _satzfenster(self, titel, kopf, unterzeile, satz, bei_ok):
+        """Ein Fenster, das den fertigen Satz zeigt und bestätigen lässt.
+
+        Für alle Entscheidungen im Reiter „Unklar" dasselbe Fenster: man sieht,
+        was entsteht, kann es ändern und bleibt hinterher in der Liste stehen.
+        Ohne das musste man in einen anderen Reiter springen, um das Ergebnis
+        überhaupt zu sehen — und fand danach die Stelle nicht wieder, an der
+        man war.
+        """
+        fenster = Toplevel(self)
+        fenster.title(titel)
+        fenster.transient(self)
+        fenster.grab_set()
+
+        ttk.Label(fenster, text=kopf, font=("Segoe UI", 9, "bold")).pack(
+            anchor="w", padx=12, pady=(12, 2))
+        if unterzeile:
+            ttk.Label(fenster, text=unterzeile, foreground="#666666").pack(
+                anchor="w", padx=12, pady=(0, 8))
+
+        felder = ttk.Frame(fenster)
+        felder.pack(fill="both", expand=True, padx=12)
+        vars_ = {}
+        gaengig, _ = core.ordne_felder(satz)
+        for i, (feld, wert) in enumerate(gaengig):
+            r, s = divmod(i, 2)
+            ttk.Label(felder, text=feld + ":", width=18, anchor="e").grid(
+                row=r, column=s * 2, sticky="e", padx=(0, 4), pady=1)
+            var = StringVar(value="" if wert in (None, "") else str(wert))
+            vars_[feld] = var
+            ttk.Entry(felder, textvariable=var, width=34).grid(
+                row=r, column=s * 2 + 1, sticky="w", padx=(0, 12))
+
+        knoepfe = ttk.Frame(fenster)
+        knoepfe.pack(fill="x", padx=12, pady=12)
+        ttk.Button(knoepfe, text="Übernehmen",
+                   command=lambda: (bei_ok(vars_), fenster.destroy())
+                   ).pack(side="right")
+        ttk.Button(knoepfe, text="Abbrechen",
+                   command=fenster.destroy).pack(side="right", padx=8)
+        fenster.wait_window()
+
+    def _uebernimm_aenderungen(self, z, vars_, grundlage: dict):
+        """Was im Fenster vom Ausgangswert abweicht, gilt als Handkorrektur."""
+        for feld, var in vars_.items():
+            if feld == "ID":
+                continue
+            if not core.gleichwertig(feld, var.get(), grundlage.get(feld)):
+                z.aenderungen[feld] = var.get()
+
+    def _weiter_in_liste(self, fall, eintrag):
+        """Nach einer Entscheidung die nächste Zeile auswählen.
+
+        Der erledigte Fall verschwindet aus der Liste; ohne das stünde man
+        ohne Auswahl da und müsste sich die Stelle wieder suchen.
+        """
+        kinder = self.baeume[fall].get_children()
+        if not kinder:
+            return
+        ziel = kinder[min(eintrag, len(kinder) - 1)]
+        self.baeume[fall].selection_set(ziel)
+        self.baeume[fall].see(ziel)
+        self._zeige_detail(fall)
+
+    def _position(self, fall, z) -> int:
+        for i, eintrag in enumerate(self.baeume[fall].get_children()):
+            if self.zeilen[fall][eintrag] is z:
+                return i
+        return 0
+
     def _zusammenlegen(self, z, fall):
         """Mehrere Access-Sätze zu einem machen.
 
@@ -1033,65 +1103,30 @@ class App(Tk):
         # Der gehaltvollste Satz bleibt stehen, die anderen gehen in ihm auf.
         gewaehlt.sort(key=lambda k: core._gehaltvoller(k.access))
         behalten, aufgeloest = gewaehlt[0], gewaehlt[1:]
-        verschmolzen = core.verschmelze_saetze(
-            [k.access for k in gewaehlt])
+        verschmolzen = core.verschmelze_saetze([k.access for k in gewaehlt])
+        stelle = self._position(fall, z)
 
-        fenster = Toplevel(self)
-        fenster.title("Sätze zusammenlegen")
-        fenster.transient(self)
-        fenster.grab_set()
-
-        ttk.Label(fenster, text=f'Access-ID {behalten.access.get("ID")} bleibt '
-                               f'bestehen und übernimmt die Angaben von '
-                               f'{", ".join(str(k.access.get("ID")) for k in aufgeloest)}.',
-                  font=("Segoe UI", 9, "bold")).pack(anchor="w", padx=12,
-                                                     pady=(12, 2))
-        ttk.Label(fenster,
-                  text="E-Mail und Telefon behalten alle Werte, mit Komma "
-                       "verbunden. Alles ist noch änderbar.",
-                  foreground="#666666").pack(anchor="w", padx=12, pady=(0, 8))
-
-        felder = ttk.Frame(fenster)
-        felder.pack(fill="both", expand=True, padx=12)
-        vars_ = {}
-        gaengig, _ = core.ordne_felder(verschmolzen)
-        for i, (feld, wert) in enumerate(gaengig):
-            r, s = divmod(i, 2)
-            ttk.Label(felder, text=feld + ":", width=18, anchor="e").grid(
-                row=r, column=s * 2, sticky="e", padx=(0, 4), pady=1)
-            var = StringVar(value="" if wert in (None, "") else str(wert))
-            vars_[feld] = var
-            ttk.Entry(felder, textvariable=var, width=34).grid(
-                row=r, column=s * 2 + 1, sticky="w", padx=(0, 12))
-
-        knoepfe = ttk.Frame(fenster)
-        knoepfe.pack(fill="x", padx=12, pady=12)
-
-        def uebernehmen():
+        def uebernehmen(vars_):
             z.ziel = behalten.access
             z.aufgeloest_in = [k.access.get("ID") for k in aufgeloest]
             z.aktion = core.AKTION_AKTUALISIEREN
             z.fall = core.FALL_AKTUALISIEREN
             z.beruehrt = True
-            for feld, var in vars_.items():
-                if feld == "ID":
-                    continue
-                if not core.gleichwertig(feld, var.get(),
-                                         behalten.access.get(feld)):
-                    z.aenderungen[feld] = var.get()
-            fenster.destroy()
+            self._uebernimm_aenderungen(z, vars_, behalten.access)
             self._fuelle_alle()
             self._log(f'Kd.-Nr. {z.lexware.get("Kd.-Nr")}: Access-IDs '
                       f'{", ".join(str(i) for i in z.aufgeloest_in)} gehen in '
-                      f'{behalten.access.get("ID")} auf. In kunden_komplett.xlsx '
-                      f'sind sie entfernt; beim Weg über die Einzeldateien '
-                      f'stehen sie in zusammenlegen.xlsx zum Löschen.')
-            self._springe_zu(z, core.FALL_AKTUALISIEREN)
+                      f'{behalten.access.get("ID")} auf.')
+            self._weiter_in_liste(fall, stelle)
 
-        ttk.Button(knoepfe, text="Zusammenlegen",
-                   command=uebernehmen).pack(side="right")
-        ttk.Button(knoepfe, text="Abbrechen",
-                   command=fenster.destroy).pack(side="right", padx=8)
+        self._satzfenster(
+            "Sätze zusammenlegen",
+            f'Access-ID {behalten.access.get("ID")} bleibt bestehen und '
+            f'übernimmt die Angaben von '
+            f'{", ".join(str(k.access.get("ID")) for k in aufgeloest)}.',
+            "E-Mail und Telefon behalten alle Werte, mit Komma verbunden. "
+            "Alles ist noch änderbar.",
+            verschmolzen, uebernehmen)
 
     def _kandidatenknopf(self, gitter, z, k, fall, zeile, spalte, text):
         if k.gesperrt:
@@ -1103,34 +1138,86 @@ class App(Tk):
             row=zeile, column=spalte + 1, sticky="w", padx=8, pady=1)
 
     def _waehle_ziel(self, z, kandidat, fall):
+        """Diesen Access-Satz aktualisieren — mit Vorschau, wenn aus „Unklar"."""
+        stelle = self._position(fall, z)
+
+        def uebernehmen(vars_=None):
+            z.ziel = kandidat.access
+            z.aktion = core.AKTION_AKTUALISIEREN
+            z.fall = core.FALL_AKTUALISIEREN
+            z.beruehrt = True
+            if core.UEBERNAHME_VORGABE:
+                z.uebernehmen = {
+                    f for f, (a_, n_) in core.abweichungen(z).items()
+                    if core.uebernahme_sinnvoll(f, a_, n_, z.ziel)}
+            if vars_:
+                self._uebernimm_aenderungen(z, vars_, kandidat.access)
+            self._fuelle_alle()
+            self._log(f'Kd.-Nr. {z.lexware.get("Kd.-Nr")} → Access-ID '
+                      f'{kandidat.access.get("ID")} (aktualisieren)')
+            self._weiter_in_liste(fall, stelle)
+
+        if fall != core.FALL_UNKLAR:
+            uebernehmen()
+            return
+
+        # Zum Vorführen dieselben Werte berechnen, die hinterher geschrieben
+        # werden — dafür die Entscheidung kurz probeweise setzen.
+        merker = (z.ziel, set(z.uebernehmen))
         z.ziel = kandidat.access
-        z.beruehrt = True
-        z.aktion = core.AKTION_AKTUALISIEREN
-        z.fall = core.FALL_AKTUALISIEREN
         if core.UEBERNAHME_VORGABE:
-            # Gleiche Vorbelegung wie bei den eindeutigen Treffern, sonst
-            # verhielten sich von Hand zugewiesene Fälle anders als der Rest.
             z.uebernehmen = {
-                f for f, (alt, neu) in core.abweichungen(z).items()
-                if core.uebernahme_sinnvoll(f, alt, neu, z.ziel)}
-        self._fuelle_alle()
-        self._log(f'Kd.-Nr. {z.lexware.get("Kd.-Nr")} → Access-ID '
-                  f'{kandidat.access.get("ID")} (aktualisieren)')
-        self._springe_zu(z, core.FALL_AKTUALISIEREN)
+                f for f, (a_, n_) in core.abweichungen(z).items()
+                if core.uebernahme_sinnvoll(f, a_, n_, z.ziel)}
+        vorschau = core.baue_aktualisierung(z, date.today().year, date.today())
+        z.ziel, z.uebernehmen = merker
+
+        geaendert = [f for f in core.ADRESSFELDER
+                     if not core.gleichwertig(f, vorschau.get(f),
+                                              kandidat.access.get(f))]
+        self._satzfenster(
+            "Access-Satz aktualisieren",
+            f'So sieht Access-ID {kandidat.access.get("ID")} hinterher aus.',
+            ("Geändert wird: " + ", ".join(geaendert) if geaendert
+             else "Geändert wird nur das Bestelldatum."),
+            vorschau, uebernehmen)
 
     def _als_neu(self, z, fall):
+        """Einen eigenen Datensatz anlegen — mit Vorschau, wenn aus „Unklar"."""
+        stelle = self._position(fall, z)
+
+        def uebernehmen(vars_=None):
+            z.ziel = None
+            z.aufgeloest_in = []
+            z.aktion = core.AKTION_NEU
+            z.fall = core.FALL_NEU
+            z.beruehrt = True
+            if vars_:
+                self._uebernimm_aenderungen(
+                    z, vars_, core.lexware_werte(z.lexware))
+            self._fuelle_alle()
+            self._log(f'Kd.-Nr. {z.lexware.get("Kd.-Nr")} → neuer Datensatz')
+            self._weiter_in_liste(fall, stelle)
+
+        if fall != core.FALL_UNKLAR:
+            uebernehmen()
+            return
+
+        merker = z.ziel
         z.ziel = None
-        z.beruehrt = True
-        z.aktion = core.AKTION_NEU
-        z.fall = core.FALL_NEU
-        self._fuelle_alle()
-        self._log(f'Kd.-Nr. {z.lexware.get("Kd.-Nr")} → neuer Datensatz')
-        self._springe_zu(z, core.FALL_NEU)
+        vorschau = core.baue_neuen_satz(z, self.access_spalten,
+                                        date.today().year, date.today())
+        z.ziel = merker
+        self._satzfenster(
+            "Neuen Datensatz anlegen",
+            "So wird der neue Access-Satz angelegt.",
+            "Die vorhandenen Sätze bleiben unverändert — auch ihr "
+            "Bestelldatum.",
+            vorschau, uebernehmen)
 
     def _springe_zu(self, z, fall):
-        """Nach einer Entscheidung im Reiter „Unklar" den Fall dort öffnen, wo
-        er gelandet ist — sonst müsste man ihn unter tausend Zeilen suchen,
-        nur um noch eine Kleinigkeit nachzubessern."""
+        """Einen Fall in seinem Reiter öffnen — für das Zurücksetzen, wo man
+        sehen will, wohin er zurückgefallen ist."""
         for eintrag, zz in self.zeilen[fall].items():
             if zz is z:
                 self.reiter.select(list(self.baeume).index(fall))
@@ -1202,9 +1289,109 @@ class App(Tk):
 
     # -- Schreiben ----------------------------------------------------
 
+    def _uebersicht(self) -> bool:
+        """Alles, was gleich geschrieben wird, zum Durchsehen — vor dem Tun.
+
+        Die Reiter zeigen jeweils einen Ausschnitt; hier steht zum ersten Mal
+        beisammen, was der Lauf insgesamt anrichtet. Wer tausend Zeilen
+        entschieden hat, will das einmal am Stück sehen, bevor es nach Access
+        geht.
+        """
+        heute, jahr = date.today(), date.today().year
+        zeilen = []
+        for z in self.zuordnungen:
+            lex = z.lexware
+            kdnr = str(lex.get("Kd.-Nr") or "")
+            if z.aktion == core.AKTION_NEU:
+                satz = core.baue_neuen_satz(z, self.access_spalten, jahr, heute)
+                zeilen.append(("neu anlegen", kdnr, _name(satz),
+                               f'{satz.get("PLZ") or ""} {satz.get("Ort") or ""}',
+                               "", str(satz.get("Bestelldatum") or "—"), ""))
+            elif z.aktion == core.AKTION_AKTUALISIEREN and z.ziel:
+                zeile = core.baue_aktualisierung(z, jahr, heute)
+                geaendert = core.geaenderte_felder(z, zeile)
+                was = ", ".join(geaendert) or "nur Bestelldatum"
+                if z.aufgeloest_in:
+                    was += ("  ⊕ löst auf: "
+                            + ", ".join(str(i) for i in z.aufgeloest_in))
+                zeilen.append(("aktualisieren", kdnr, _name(zeile),
+                               f'{zeile.get("PLZ") or ""} {zeile.get("Ort") or ""}',
+                               str(z.ziel.get("ID")),
+                               str(zeile.get("Bestelldatum") or "—"), was))
+        zeilen.sort(key=lambda r: (r[0], r[2].lower()))
+
+        fenster = Toplevel(self)
+        fenster.title("Änderungen vor dem Schreiben")
+        fenster.transient(self)
+        fenster.grab_set()
+        fenster.geometry("1200x640")
+
+        anlegen = sum(1 for r in zeilen if r[0] == "neu anlegen")
+        aendern = len(zeilen) - anlegen
+        aufgeloest = sum(len(z.aufgeloest_in) for z in self.zuordnungen)
+        offen = sum(1 for z in self.zuordnungen
+                    if z.aktion == core.AKTION_NICHTS and z.bestelljahr)
+        ttk.Label(fenster,
+                  text=f"{aendern} Sätze werden aktualisiert, {anlegen} neu "
+                       f"angelegt"
+                       + (f", {aufgeloest} zusammengelegt" if aufgeloest else "")
+                       + ".",
+                  font=("Segoe UI", 10, "bold")).pack(anchor="w", padx=12,
+                                                      pady=(12, 2))
+        if offen:
+            ttk.Label(fenster,
+                      text=f"Nicht dabei: {offen} Fälle mit einem Bestelljahr, "
+                           f"die auf „Ignorieren“ stehen.",
+                      foreground="#a06000").pack(anchor="w", padx=12)
+
+        spalten = [("was", "Aktion", 110), ("kdnr", "Kd.-Nr.", 74),
+                   ("name", "Name / Firma", 250), ("ort", "PLZ / Ort", 160),
+                   ("id", "Access-ID", 74), ("jahr", "Bestelljahr", 84),
+                   ("aenderung", "was geschieht", 400)]
+        koerper = ttk.Frame(fenster)
+        koerper.pack(fill="both", expand=True, padx=12, pady=8)
+        baum = ttk.Treeview(koerper, columns=[s[0] for s in spalten],
+                            show="headings")
+        for schluessel, titel, breite in spalten:
+            baum.heading(schluessel, text=titel,
+                         command=lambda b=baum, s=schluessel:
+                         self._uebersicht_sortieren(b, s))
+            baum.column(schluessel, width=breite, anchor="w")
+        vs = ttk.Scrollbar(koerper, orient="vertical", command=baum.yview)
+        baum.configure(yscrollcommand=vs.set)
+        baum.pack(side="left", fill="both", expand=True)
+        vs.pack(side="left", fill="y")
+        baum.tag_configure("neu", background="#eef6ee")
+        for r in zeilen:
+            baum.insert("", END, values=r,
+                        tags=("neu",) if r[0] == "neu anlegen" else ())
+
+        ttk.Label(fenster, text="Spaltenkopf anklicken zum Sortieren.",
+                  foreground="#777777").pack(anchor="w", padx=12)
+        entschieden = {"ok": False}
+        knoepfe = ttk.Frame(fenster)
+        knoepfe.pack(fill="x", padx=12, pady=12)
+        ttk.Button(knoepfe, text="Dateien schreiben",
+                   command=lambda: (entschieden.update(ok=True),
+                                    fenster.destroy())).pack(side="right")
+        ttk.Button(knoepfe, text="Zurück",
+                   command=fenster.destroy).pack(side="right", padx=8)
+        fenster.wait_window()
+        return entschieden["ok"]
+
+    @staticmethod
+    def _uebersicht_sortieren(baum, schluessel):
+        eintraege = [(baum.set(k, schluessel), k) for k in baum.get_children("")]
+        eintraege.sort(key=lambda t: _sortwert(t[0]))
+        for i, (_, k) in enumerate(eintraege):
+            baum.move(k, "", i)
+
     def _schreiben(self):
         if not self.zuordnungen:
             messagebox.showwarning("Nichts da", "Erst abgleichen.")
+            return
+        if not self._uebersicht():
+            self._log("Schreiben abgebrochen.")
             return
         try:
             ordner = self._ausgabeordner()

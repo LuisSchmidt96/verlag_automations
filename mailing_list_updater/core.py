@@ -1165,13 +1165,17 @@ def auffaelligkeiten(lex: dict, satz: dict) -> list[str]:
         probleme.append(grund)
 
     plz, land = wert("PLZ"), wert("Land")
+    # Ausländische Postleitzahlen sind oft keine reinen Zahlen — „6721 CR"
+    # ist ein gültiger niederländischer Code. Beanstandet wird deshalb nur,
+    # was ohne Landangabe von der deutschen Form abweicht: dann ist entweder
+    # die Straße ins PLZ-Feld geraten oder das Land fehlt.
     if not plz:
         probleme.append("keine PLZ")
-    elif not plz.replace(" ", "").isdigit():
-        # Klassiker: in Lexware ist die Straße ins PLZ-Feld geraten.
-        probleme.append(f"PLZ ist keine Zahl ({plz})")
-    elif not land and len(plz) != 5:
-        probleme.append(f"PLZ hat {len(plz)} Stellen, kein Land gesetzt")
+    elif not land:
+        if not plz.replace(" ", "").isdigit():
+            probleme.append(f"PLZ ist keine Zahl ({plz}) und kein Land gesetzt")
+        elif len(plz) != 5:
+            probleme.append(f"PLZ hat {len(plz)} Stellen, kein Land gesetzt")
 
     if not wert("Straße"):
         probleme.append("keine Straße")
@@ -1314,7 +1318,7 @@ def geaenderte_felder(z: Zuordnung, zeile: dict) -> list[str]:
     """
     if not z.ziel:
         return []
-    return [f for f in ADRESSFELDER
+    return [f for f in AKTUALISIERBAR
             if not gleichwertig(f, zeile.get(f), z.ziel.get(f))]
 
 
@@ -1483,12 +1487,22 @@ def ordne_felder(satz: dict) -> tuple[list, list]:
     return gaengig, rest
 
 
-# Felder, die beim Aktualisieren überhaupt in Frage kommen.
+# Felder, die mit Lexware verglichen und zur Übernahme angeboten werden.
 ADRESSFELDER = [
     "Anrede", "Name", "Vorname", "Institution", "Abteilung",
     "PLZ", "Ort", "Straße", "Hausnummer", "Land",
     "Telefon1", "Telefon2", "Telefon3", "Telefax", "eMail",
 ]
+
+# Einordnende Felder. Sie werden von einer Aktualisierung mitgeschrieben —
+# damit sich eine falsche Kategorie beim Durchsehen richten lässt — aber
+# NIEMALS aus Lexware vorgeschlagen: die dortige Kundengruppe ist gröber als
+# die über Jahre gepflegte Einordnung in Access, und `merkmale()` rät sie
+# obendrein. Ändern kann sie nur der Bediener von Hand.
+MERKMALFELDER = ["Titel 2", "VIP/W/K/X", "Autor", "Presse/ZS"]
+
+# Was eine Aktualisierung insgesamt schreibt.
+AKTUALISIERBAR = ADRESSFELDER + MERKMALFELDER
 # Diese setzt das Tool immer selbst, sie sind nicht verhandelbar.
 STAMMFELDER = ["Bestelldatum", "Lexware-Kd-Nr", "Quelle", "erfaßt/geprüft am"]
 
@@ -1551,8 +1565,10 @@ def baue_aktualisierung(z: Zuordnung, laufjahr: int, heute) -> dict:
     lex = lexware_werte(z.lexware)
     zeile = {"ID": acc.get("ID")}
 
-    for feld in ADRESSFELDER:
-        # Nur was ausdrücklich übernommen wurde, sonst der Access-Wert.
+    for feld in AKTUALISIERBAR:
+        # Nur was ausdrücklich übernommen wurde, sonst der Access-Wert. Die
+        # Merkmalfelder stehen nie in `uebernehmen`, bleiben also unberührt,
+        # solange sie niemand von Hand ändert.
         zeile[feld] = lex.get(feld) if feld in z.uebernehmen else acc.get(feld)
 
     alt = acc.get("Bestelldatum")
@@ -1597,8 +1613,19 @@ def gleiche_alle_ab(kunden: list[dict], access: list[dict],
                 # Zurücksetzen diesen Schutz wieder auf und die Kollision wäre
                 # still zurück.
                 z.fall_urspruenglich = FALL_UNKLAR
+                # Die anderen Kundennummern benennen. „Mehrere Lexware-Kunden"
+                # allein half niemandem: man sah nicht, welche gemeint sind,
+                # und erst recht nicht, dass das Werkzeug sie beim Schreiben
+                # ohnehin zusammenführt.
+                andere = [str(a.lexware.get("Kd.-Nr") or "")
+                          for a in gruppe if a is not z]
                 z.unklar_grund.append(
-                    "mehrere Lexware-Kunden zeigen auf denselben Access-Satz")
+                    f"Kd.-Nr. {', '.join(andere)} "
+                    f"{'zeigt' if len(andere) == 1 else 'zeigen'} auf "
+                    f"denselben Access-Satz — offenbar in Lexware doppelt "
+                    f"angelegt. Bei „aktualisieren\" werden sie zu EINER Zeile "
+                    f"zusammengeführt, mit allen Kundennummern im Feld "
+                    f"Lexware-Kd-Nr.")
                 _vorbelegen(z)
     return ergebnis
 
@@ -1653,7 +1680,7 @@ def _verschmelze(a: dict, az: Zuordnung, b: dict, bz: Zuordnung,
     # der ihn stehen lässt. Ändern beide dasselbe Feld, gewinnt die jüngere
     # Bestellung — die aktuellere Anschrift.
     juenger = (bz.bestelljahr or 0) > (az.bestelljahr or 0)
-    for feld in ADRESSFELDER:
+    for feld in AKTUALISIERBAR:
         alt = norm_text(ziel.get(feld))
         a_aendert = norm_text(a.get(feld)) != alt
         b_aendert = norm_text(b.get(feld)) != alt
@@ -1707,7 +1734,7 @@ def schreibe_neu_anlegen(pfad, zuordnungen: list[Zuordnung],
 
 def schreibe_aktualisieren(pfad, zuordnungen: list[Zuordnung],
                            laufjahr: int, heute):
-    spalten = ["ID"] + STAMMFELDER + ADRESSFELDER
+    spalten = ["ID"] + STAMMFELDER + AKTUALISIERBAR
     zeilen, _ = verschmolzene_aktualisierungen(zuordnungen, laufjahr, heute)
     _schreibe_blatt(pfad, spalten, zeilen)
     return len(zeilen)
@@ -1809,6 +1836,135 @@ def schreibe_protokoll(pfad, zuordnungen: list[Zuordnung], befund=None):
     return len(zeilen)
 
 
+def schreibe_pflege(pfad, zuordnungen: list[Zuordnung],
+                    access: list[dict]) -> str:
+    """Was in Lexware und Access aufzuräumen wäre.
+
+    Der Abgleich stolpert jedes Jahr über dieselben Nachlässigkeiten: eine
+    Hausnummer im Straßenfeld, ein doppelt angelegter Kunde, eine PLZ, die
+    keine ist. Behoben wird das nicht hier, sondern in der Quelle — dafür muss
+    aber jemand wissen, wo. Deshalb diese Liste; sie ändert nichts, sie zeigt.
+    """
+    def kdnr(z):
+        return str(z.lexware.get("Kd.-Nr") or "")
+
+    def wer(z):
+        name = " ".join(x for x in (str(z.lexware.get("Vorname") or ""),
+                                    str(z.lexware.get("Name") or "")) if x)
+        firma = str(z.lexware.get("Firma") or "")
+        return (f"{name} · {firma}" if name and firma else name or firma
+                or "(ohne Namen)")
+
+    abschnitte = []
+
+    # --- Lexware: derselbe Mensch mehrfach angelegt
+    doppelt = {}
+    for z in zuordnungen:
+        for grund in z.unklar_grund:
+            if "denselben Access-Satz" in grund and z.ziel is not None:
+                doppelt.setdefault(z.ziel.get("ID"), []).append(z)
+            elif "denselben Access-Satz" in grund and z.bester:
+                doppelt.setdefault(z.bester.access.get("ID"), []).append(z)
+    if doppelt:
+        zeilen = []
+        for gruppe in doppelt.values():
+            nummern = ", ".join(sorted(kdnr(z) for z in gruppe))
+            zeilen.append(f"  {nummern:<24} {wer(gruppe[0])}")
+        abschnitte.append((
+            "LEXWARE: derselbe Kunde mehrfach angelegt",
+            f"{len(doppelt)} Fälle. Beim naechsten Auftrag landet die Bestellung "
+            f"mal unter der einen, mal unter der anderen Nummer.",
+            sorted(zeilen)))
+
+    # --- Lexware: Angaben im falschen Feld
+    hausnr_in_strasse, plz_kaputt, ohne_strasse, ohne_hausnr = [], [], [], []
+    for z in zuordnungen:
+        roh_str = str(z.lexware.get("Straße") or "").strip()
+        roh_nr = str(z.lexware.get("Haus Nr.") or "").strip()
+        if not roh_nr and teile_strasse(roh_str)[1]:
+            hausnr_in_strasse.append(f"  {kdnr(z):<10} „{roh_str}“   {wer(z)}")
+        plz = str(z.lexware.get("Plz") or "").strip()
+        land = str(z.lexware.get("Land") or "").strip()
+        if not plz:
+            plz_kaputt.append(f"  {kdnr(z):<10} PLZ fehlt   {wer(z)}")
+        elif not land and not plz.replace(" ", "").isdigit():
+            # Mit Landangabe wäre „6721 CR" völlig in Ordnung — ohne sie ist
+            # entweder die Straße ins Feld geraten oder das Land vergessen.
+            plz_kaputt.append(f"  {kdnr(z):<10} PLZ = „{plz}“, kein Land   "
+                              f"{wer(z)}")
+        if not roh_str:
+            ohne_strasse.append(f"  {kdnr(z):<10} {wer(z)}")
+        elif not roh_nr and not teile_strasse(roh_str)[1]:
+            ohne_hausnr.append(f"  {kdnr(z):<10} „{roh_str}“   {wer(z)}")
+
+    for titel, erklaerung, zeilen in (
+            ("LEXWARE: Hausnummer steht im Straßenfeld",
+             "Gehört ins Feld „Haus Nr.“. Das Werkzeug trennt es beim Lesen "
+             "selbst, aber der Adressdruck tut das nicht.", hausnr_in_strasse),
+            ("LEXWARE: PLZ fehlt oder ist keine Zahl",
+             "Meist ist die Straße ins PLZ-Feld gerutscht.", plz_kaputt),
+            ("LEXWARE: keine Straße erfasst", "", ohne_strasse),
+            ("LEXWARE: keine Hausnummer erfasst",
+             "Ohne sie lassen sich Nachbarn nicht unterscheiden.",
+             ohne_hausnr)):
+        if zeilen:
+            abschnitte.append((titel, erklaerung, zeilen))
+
+    # --- Lexware: Kundengruppe/Branche unbekannt
+    unbekannt = []
+    for z in zuordnungen:
+        _, grund = merkmale(z.lexware)
+        if grund:
+            unbekannt.append(f"  {kdnr(z):<10} {grund}   {wer(z)}")
+    if unbekannt:
+        abschnitte.append((
+            "LEXWARE: Kundengruppe oder Branche unbekannt",
+            "Das Werkzeug hat „K“ angenommen. Entweder in Lexware nachtragen "
+            "oder die Tabellen in core.py ergänzen.", unbekannt))
+
+    # --- Access: gleichlautende Sätze
+    gruppen = defaultdict(list)
+    for satz in access:
+        kennung = dubletten_kennung(satz)
+        if any(kennung):
+            gruppen[kennung].append(satz)
+    access_doppelt = [g for g in gruppen.values() if len(g) > 1]
+    if access_doppelt:
+        zeilen = []
+        for gruppe in access_doppelt:
+            ids = ", ".join(str(s.get("ID")) for s in gruppe)
+            name = " ".join(x for x in (str(gruppe[0].get("Vorname") or ""),
+                                        str(gruppe[0].get("Name") or ""),
+                                        str(gruppe[0].get("Institution") or ""))
+                            if x)
+            zeilen.append(f"  IDs {ids:<20} {name}")
+        abschnitte.append((
+            "ACCESS: gleichlautende Datensätze",
+            f"{len(access_doppelt)} Gruppen. Sie bekommen jeder einen eigenen "
+            f"Brief an dieselbe Anschrift.", sorted(zeilen)))
+
+    grenze = 200
+    teile = ["Was in den Quellsystemen aufzuräumen wäre",
+             "=" * 44, "",
+             "Diese Liste ändert nichts. Sie sammelt, worüber der Abgleich "
+             "gestolpert ist —", "behoben wird es in Lexware bzw. Access, "
+             "sonst steht es nächstes Jahr wieder da.", ""]
+    for titel, erklaerung, zeilen in abschnitte:
+        teile += ["", titel, "-" * len(titel)]
+        if erklaerung:
+            teile.append(erklaerung)
+        teile.append(f"{len(zeilen)} Stück:")
+        teile += zeilen[:grenze]
+        if len(zeilen) > grenze:
+            teile.append(f"  … und {len(zeilen) - grenze} weitere "
+                         f"(hier gekürzt, vollständig in protokoll.xlsx)")
+    if not abschnitte:
+        teile.append("Nichts gefunden — die Quelldaten sind sauber.")
+
+    Path(pfad).write_text("\n".join(teile) + "\n", encoding="utf-8")
+    return f"{len(abschnitte)} Abschnitte"
+
+
 def schreibe_zusammenlegen(pfad, zuordnungen: list[Zuordnung]):
     """Welche Access-Sätze in welchen aufgehen sollen.
 
@@ -1852,7 +2008,7 @@ def schreibe_access_import(pfad, tabelle: str = "Kunden",
     Die Feldliste ist zu lang, um sie von Hand abzutippen, und ein Tippfehler
     darin fällt erst auf, wenn Daten falsch stehen — also erzeugt sie das Tool.
     """
-    felder = STAMMFELDER + ADRESSFELDER
+    felder = STAMMFELDER + AKTUALISIERBAR
     setzt = ",\n".join(
         f"    [{tabelle}].[{f}] = [_Import_Aktualisieren].[{f}]" for f in felder)
 
@@ -1990,6 +2146,8 @@ def schreibe_alles(ordner, zuordnungen: list[Zuordnung], access: list[dict],
         ergebnis["kunden_komplett.xlsx"] = schreibe_gesamttabelle(
             gesamt_pfad, access, zuordnungen, access_spalten, laufjahr, heute)
 
+    ergebnis["pflege.txt"] = schreibe_pflege(
+        ordner / "pflege.txt", zuordnungen, access)
     ergebnis["zusammenlegen.xlsx"] = schreibe_zusammenlegen(
         ordner / "zusammenlegen.xlsx", zuordnungen)
     ergebnis["protokoll.xlsx"] = schreibe_protokoll(

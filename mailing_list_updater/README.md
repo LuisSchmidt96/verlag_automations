@@ -87,6 +87,19 @@ und Zusatzspalten sind egal, die Kopfzeile wird gesucht.
    nach Häkchen und Handkorrekturen. Steht dort „nur Bestelldatum", bleibt die
    Anschrift, wie sie ist.
 
+   **Jede Entscheidung wird vorher gezeigt.** *Diesen aktualisieren*,
+   *neu anlegen* und *zusammenlegen* öffnen ein Fenster mit dem fertigen Satz —
+   änderbar, mit der Angabe, welche Felder sich ändern. Danach bleibt man im
+   Reiter „Unklar" stehen und die Auswahl rückt auf den nächsten Fall vor;
+   man muss also nicht in einen anderen Reiter springen und die Stelle
+   wiederfinden.
+
+   Beim Aktualisieren lassen sich dort auch `VIP/W/K/X`, `Autor`, `Presse/ZS`
+   und `Titel 2` setzen — wer beim Durchsehen merkt, dass jemand als `K` statt
+   `BUHA` geführt wird, kann das gleich richten. Aus Lexware **vorgeschlagen**
+   werden diese Felder nie: die dortige Kundengruppe ist gröber als die über
+   Jahre gepflegte Einordnung in Access.
+
    **Jede Entscheidung ist umkehrbar.** Ein als Zweitadresse angelegter Fall
    zeigt im Reiter „Neu anlegen" weiter seine Access-Kandidaten und lässt sich
    mit einem Klick zurück auf *aktualisieren* stellen — ohne den Abgleich neu
@@ -99,7 +112,7 @@ und Zusatzspalten sind egal, die Kopfzeile wird gesucht.
    muss er selbst noch einen aktuellen Kauf vorweisen oder ein Merkmal tragen.
 
    **Mehrere Access-Sätze zusammenlegen.** Im Reiter „Unklar" lassen sich
-   Kandidaten ankreuzen und über *Ausgewählte zusammenlegen…* zu einem Satz
+   Kandidaten ankreuzen und über *Ausgewählte zusammenlegen …* zu einem Satz
    vereinen — für Dubletten, die sich in einer Kleinigkeit unterscheiden und
    deshalb nicht automatisch erkannt werden („Ellwangen (Jagst)" gegen
    „Ellwangen"). Der gehaltvollste Satz bleibt, E-Mail und Telefon behalten
@@ -142,7 +155,11 @@ und Zusatzspalten sind egal, die Kopfzeile wird gesucht.
    Schlüssel, über den verbunden wird.
 
 4. **Dateien schreiben**. Alles landet in `mailing_output/<Jahr>/`.
-5. Nach Access übertragen — wie, steht in `access_import.txt`.
+5. Vor dem Schreiben zeigt das Tool **alle Änderungen am Stück**: sortierbar,
+   scrollbar, eine Zeile je Satz mit dem, was geschieht. Die Reiter zeigen
+   jeweils nur einen Ausschnitt — hier steht es zum ersten Mal beisammen.
+6. Nach Access übertragen — wie, steht in `access_import.txt`.
+7. `pflege.txt` an die Kolleginnen geben, die Lexware pflegen.
 
 Entscheidungen werden laufend in `entscheidungen.json` gesichert und beim
 nächsten Start zurückgeladen. Die Durchsicht von über tausend Fällen überlebt
@@ -159,6 +176,7 @@ so eine Mittagspause.
 | `zuordnung.xlsx` | Kd.-Nr. ↔ Access-ID, Sicherung neben dem Access-Feld |
 | `zusammenlegen.xlsx` | welche Access-Sätze in welchen aufgehen — in `kunden_komplett.xlsx` schon entfernt, beim zweiten Weg von Hand zu löschen |
 | `access_import.txt` | beide Wege nach Access, Schritt für Schritt |
+| **`pflege.txt`** | **was in Lexware und Access aufzuräumen wäre** — Dubletten, Hausnummern im Straßenfeld, fehlende PLZ. Ändert nichts, zeigt nur; behoben wird es in der Quelle, sonst steht es nächstes Jahr wieder da |
 
 ### Der einfache Weg: eine Jahresdatei
 
