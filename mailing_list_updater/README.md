@@ -63,6 +63,7 @@ und Zusatzspalten sind egal, die Kopfzeile wird gesucht.
    | **Neu anlegen** | Liste sichten, Auffälligkeiten sind orange hervorgehoben |
    | **Aktualisieren** | je Feld ankreuzen, was aus Lexware übernommen wird; das Bestelldatum wird immer gesetzt. Über *Stattdessen* lässt sich der Fall auch als Zweitadresse neu anlegen oder ganz übergehen |
    | **Unklar** | je Fall entscheiden: *diesen aktualisieren* · *neu anlegen (Zweitadresse)* · *nichts tun*. Danach springt die Ansicht in den Reiter, in dem der Fall gelandet ist |
+   | ↳ Spalte *Folge* | **wichtigste Spalte des Reiters.** Steht dort „bekommt Post ohnehin", ist die Entscheidung folgenlos — der Empfänger ist über seine Kategorie dauerhaft im Mailing. Solche Fälle stehen unten und dürfen liegen bleiben. Im Probelauf: 262 von 344 folgenlos, **82 entscheiden wirklich etwas** |
    | **Ohne Auftrag** | sollte fast leer sein; ist er voll, fehlt eine Aufträge-Datei |
 
    Die Listen sind so vorsortiert, dass **die fragwürdigen Fälle oben stehen**:
@@ -185,6 +186,27 @@ Zwei Sicherungen, die aus der Erprobung stammen:
 Als Kauf zählt nur eine Rechnung (`RG`/`SR`) mit Umsatz > 0. Rezensions- und
 Autorenexemplare gehen auf Lieferschein raus; die Betroffenen werden angelegt,
 bekommen aber kein Bestelldatum — ihr Brief kommt über das Merkmal.
+
+### Für wen das Bestelldatum überhaupt zählt
+
+Nur für Kategorie **`K`**. Alle anderen sind über ihre Kategorie dauerhaft im
+Mailing — abgelesen am Export selbst, denn der ist die Mailing-Abfrage:
+
+| `VIP/W/K/X` | im Filter ohne aktuellen Kauf | mit |
+|---|---|---|
+| `K` | 5 278 | 2 766 |
+| `VIP` | 4 005 | 143 |
+| `BUHA` | 2 411 | 83 |
+| `P` | 1 783 | 79 |
+| `Wiss` | 832 | 32 |
+| `V`, `VHS`, `MS`, `SH` | 869 | 26 |
+
+Bei `K` halten sich beide Gruppen die Waage, überall sonst stehen 91–100 %
+ohne aktuellen Kauf im Filter. Buchhandel, Presse, Wissenschaft, Vereine und
+VIP bekommen also Post, gleichgültig wann sie zuletzt gekauft haben. Genau
+deshalb weist die Spalte *Folge* im Reiter „Unklar" solche Fälle als
+folgenlos aus und sortiert sie nach unten (`KATEGORIE_KAUFABHAENGIG` in
+`core.py`).
 
 ### Zwei Kundennummern auf einem Access-Satz
 

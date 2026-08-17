@@ -39,10 +39,11 @@ SPALTEN = {
                               ("jahr", "Bestelljahr", 80),
                               ("abw", "wird in Access geändert", 260)],
     core.FALL_UNKLAR: [("sel", "", 34), ("kdnr", "Kd.-Nr.", 70),
-                       ("name", "Name / Firma", 210), ("kand", "Kand.", 50),
-                       ("punkte", "bester", 55), ("abstand", "Abstand", 60),
-                       ("jahr", "Bestelljahr", 80),
-                       ("hinweis", "warum unklar", 300)],
+                       ("name", "Name / Firma", 200), ("kand", "Kand.", 46),
+                       ("punkte", "bester", 52), ("abstand", "Abstand", 58),
+                       ("jahr", "Bestelljahr", 76),
+                       ("folge", "Folge", 190),
+                       ("hinweis", "warum unklar", 260)],
     core.FALL_OHNE_AUFTRAG: [("sel", "", 34), ("kdnr", "Kd.-Nr.", 70),
                              ("name", "Name / Firma", 240),
                              ("ort", "PLZ / Ort", 150),
@@ -431,7 +432,13 @@ class App(Tk):
             # einem macht. Die zuerst.
             zweiter = z.kandidaten[1].punkte if len(z.kandidaten) > 1 else 0.0
             abstand = punkte - zweiter if len(z.kandidaten) > 1 else 999
-            if z.bester and z.bester.gesperrt:
+            # Wer ohnehin Post bekommt, ganz nach unten: dort ist die
+            # Entscheidung folgenlos, und Zeit hat man nur einmal.
+            folgenlos = bool(z.kandidaten) and all(
+                core.dauerhaft_im_mailing(k.access) for k in z.kandidaten)
+            if folgenlos:
+                rang = 3
+            elif z.bester and z.bester.gesperrt:
                 rang = 0
             elif zweiter >= core.SCHWELLE_UNKLAR:
                 rang = 1
@@ -482,9 +489,21 @@ class App(Tk):
             zweiter = z.kandidaten[1].punkte if len(z.kandidaten) > 1 else None
             abstand = (f"+{z.bester.punkte - zweiter:.0f}"
                        if z.bester and zweiter is not None else "—")
+            # Was hängt an der Entscheidung? Steht der Empfänger über seine
+            # Kategorie ohnehin dauerhaft im Mailing, ändert das Bestelldatum
+            # nichts daran, ob ein Brief kommt. Solche Fälle darf man mit
+            # gutem Gewissen liegen lassen.
+            dauerhaft = {core.dauerhaft_im_mailing(k.access)
+                         for k in z.kandidaten}
+            dauerhaft.discard("")
+            if z.kandidaten and all(core.dauerhaft_im_mailing(k.access)
+                                    for k in z.kandidaten):
+                folge = f"bekommt Post ohnehin ({'/'.join(sorted(dauerhaft))})"
+            else:
+                folge = "Brief hängt am Bestelldatum"
             return ((haken, kdnr, _name(lex), len(z.kandidaten),
                      f"{z.bester.punkte:.0f}" if z.bester else "",
-                     abstand, z.bestelljahr or "—",
+                     abstand, z.bestelljahr or "—", folge,
                      " | ".join(z.unklar_grund)), True)
 
         return ((haken, kdnr, _name(lex),

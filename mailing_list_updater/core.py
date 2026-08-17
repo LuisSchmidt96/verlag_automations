@@ -510,6 +510,23 @@ def pruefe_zeitraeume(kunden: list[dict], lage: Auftragslage,
 MERKMALSFELDER = ("Autor", "Kommunen", "Bürgermeister", "Verein", "Schule",
                   "Medium", "Presse/ZS", "Veranstalter", "VIP/W/K/X")
 
+# `K` ist die einzige Kategorie, die am Kauf hängt — bei ihr halten sich
+# Sätze mit und ohne aktuelles Bestelldatum die Waage (5 278 zu 2 766). Alle
+# anderen stehen zu 91–100 % OHNE aktuellen Kauf im Mailing-Filter, sind also
+# über ihre Kategorie dauerhaft dabei: Buchhandel, Presse, Wissenschaft,
+# Vereine, VIP. Für sie ändert ein neues Bestelldatum nichts daran, ob ein
+# Brief kommt — nur daran, was in der Datenbank steht.
+#
+# Abgelesen am Export selbst, denn der IST die Mailing-Abfrage.
+KATEGORIE_KAUFABHAENGIG = {"K", ""}
+
+
+def dauerhaft_im_mailing(acc: dict) -> str:
+    """Kategorie, wenn der Satz unabhängig vom Bestelldatum Post bekommt."""
+    kat = str(acc.get("VIP/W/K/X") or "").strip()
+    return "" if kat.upper() in {k.upper() for k in KATEGORIE_KAUFABHAENGIG} \
+        else kat
+
 
 def pruefe_access_vollstaendigkeit(access: list[dict], laufjahr: int,
                                    jahre: int = 3) -> str | None:
