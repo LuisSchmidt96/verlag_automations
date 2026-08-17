@@ -321,6 +321,32 @@ def norm_hausnr(wert) -> str:
     return re.sub(r"[^a-z0-9]", "", str(wert).strip().lower())
 
 
+# Hausnummer am Ende eines Straßenfeldes: "Untere Hauptstr. 54", "Am Berg 3a",
+# "Wilhelmstr. 14-18". Der Straßenteil muss dabei übrig bleiben und lang genug
+# sein — sonst zerlegte die Regel Mannheimer Quadrate wie "C 5" in die Straße
+# "C" und die Hausnummer "5", und die halbe Innenstadt fände sich nicht mehr.
+_HAUSNR_AM_ENDE = re.compile(
+    r"^(.{3,}?)[\s,]+(\d+\s*[a-zA-Z]?(?:\s*[-/]\s*\d+\s*[a-zA-Z]?)?)$")
+
+
+def teile_strasse(strasse, hausnr="") -> tuple[str, str]:
+    """(Straße, Hausnummer) — auch wenn beides in einem Feld steht.
+
+    Lexware führt die Hausnummer mal getrennt, mal am Ende der Straße. Ohne
+    diese Trennung gilt „Untere Hauptstr. 54" gegen „Untere Hauptstr." + „54"
+    als Abweichung, obwohl es dieselbe Anschrift ist.
+    """
+    s = str(strasse or "").strip()
+    n = str(hausnr or "").strip()
+    if n or not s:
+        return s, n
+    treffer = _HAUSNR_AM_ENDE.match(s)
+    if treffer:
+        return treffer.group(1).strip(), re.sub(r"\s+", "",
+                                                treffer.group(2))
+    return s, n
+
+
 def teile_plz_ort(wert) -> tuple[str, str]:
     """Die Aufträge-Datei führt PLZ und Ort in EINEM Feld ("36244 Bad
     Hersfeld"). Auslandsadressen haben teils Buchstabenpräfixe (CH-8000)."""
@@ -641,7 +667,13 @@ class Kandidat:
 # nur den Vorschlag fest.
 AKTION_NEU = "neu anlegen"
 AKTION_AKTUALISIEREN = "aktualisieren"
-AKTION_NICHTS = "nichts tun"
+AKTION_NICHTS = "ignorieren"
+
+# Felder, die beim Zusammenlegen mehrere Werte vertragen, statt dass einer
+# gewinnt. Zwei Adressen desselben Menschen haben oft zwei E-Mail-Adressen,
+# und beide sind richtig — wegzuwerfen wäre schade.
+MEHRWERTIG = ("eMail", "Telefon1", "Telefon2", "Telefon3", "Telefax")
+TRENNER_MEHRWERTIG = ", "
 
 
 @dataclass
@@ -666,6 +698,10 @@ class Zuordnung:
     ziel: dict | None = None          # der zu aktualisierende Access-Satz
     uebernehmen: set = field(default_factory=set)  # Felder aus Lexware
     aenderungen: dict = field(default_factory=dict)  # von Hand editiert
+    # Access-IDs, die in `ziel` aufgehen sollen. Sie verschwinden aus der
+    # Gesamttabelle; beim Weg über die Einzeldateien müssen sie von Hand
+    # gelöscht werden (siehe zusammenlegen.xlsx).
+    aufgeloest_in: list = field(default_factory=list)
     # Hat der Bediener diesen Fall angefasst? Nur solche werden gesichert.
     # Andernfalls konservierte entscheidungen.json den Vorschlag eines alten
     # Programmstands und machte jede Verbesserung am Abgleich wirkungslos.
@@ -778,8 +814,9 @@ def _punkte(lex: dict, acc: dict,
     lex_vorname = norm_text(lex.get("Vorname"))
     lex_firma = norm_text(lex.get("Firma"))
     lex_plz = norm_plz(lex.get("Plz"))
-    lex_str = norm_strasse(lex.get("Straße"))
-    lex_hnr = norm_hausnr(lex.get("Haus Nr."))
+    _lex_str, _lex_hnr = teile_strasse(lex.get("Straße"), lex.get("Haus Nr."))
+    lex_str = norm_strasse(_lex_str)
+    lex_hnr = norm_hausnr(_lex_hnr)
     lex_mail = norm_mail(lex.get("E-Mail"))
 
     acc_name = norm_text(acc.get("Name"))
@@ -899,7 +936,8 @@ def finde_zuordnung(lex: dict, indizes: dict) -> list[Kandidat]:
     if mail:
         for satz in indizes["mail"].get(mail, ()):
             roh[id(satz)] = satz
-    strasse = norm_strasse(lex.get("Straße"))
+    strasse = norm_strasse(teile_strasse(lex.get("Straße"),
+                                         lex.get("Haus Nr."))[0])
     if plz and strasse:
         for satz in indizes["strasse"].get((plz, strasse), ()):
             roh[id(satz)] = satz
@@ -1095,7 +1133,12 @@ def _vorbelegen(z: Zuordnung) -> None:
     if z.fall == FALL_AKTUALISIEREN:
         z.aktion = AKTION_AKTUALISIEREN
         z.ziel = z.bester.access if z.bester else None
-        z.uebernehmen = set(abweichungen(z)) if UEBERNAHME_VORGABE else set()
+        # Vorgehakt wird nur, was nichts verliert. Der Rest steht mit einem
+        # Warnzeichen daneben und wartet auf eine ausdrückliche Entscheidung.
+        z.uebernehmen = {
+            f for f, (alt, neu) in abweichungen(z).items()
+            if uebernahme_sinnvoll(f, alt, neu, z.ziel)
+        } if UEBERNAHME_VORGABE else set()
     elif z.fall == FALL_NEU:
         z.aktion = AKTION_NEU
     else:
@@ -1150,6 +1193,23 @@ VERGLEICHSFELDER = ["Name", "Vorname", "Institution", "PLZ", "Ort",
 GLEICH, ANDERS, UNBEKANNT = "gleich", "anders", "unbekannt"
 
 
+def gleichwertig(feld: str, a, b) -> bool:
+    """Bedeuten zwei Werte dieses Feldes dasselbe?
+
+    Je Feld die passende Normalisierung — „Kirchstraße" und „Kirchstr." sind
+    dieselbe Straße und dürfen nicht als Abweichung erscheinen. Eine einzige
+    Funktion dafür, damit Anzeige, Vorbelegung und Ausgabe nicht mit der Zeit
+    auseinanderlaufen und dasselbe Feld mal als geändert gilt und mal nicht.
+    """
+    if feld == "Straße":
+        return norm_strasse(a) == norm_strasse(b)
+    if feld == "Hausnummer":
+        return norm_hausnr(a) == norm_hausnr(b)
+    if feld == "eMail":
+        return norm_mail(a) == norm_mail(b)
+    return norm_text(a) == norm_text(b)
+
+
 def vergleiche(lex: dict, acc: dict) -> list[tuple]:
     """Feld für Feld: (Feld, Lexware-Wert, Access-Wert, Befund).
 
@@ -1164,15 +1224,83 @@ def vergleiche(lex: dict, acc: dict) -> list[tuple]:
         a = str(acc.get(feld) or "").strip()
         if not l or not a:
             befund = UNBEKANNT
-        elif feld == "Straße":
-            befund = GLEICH if norm_strasse(l) == norm_strasse(a) else ANDERS
-        elif feld == "Hausnummer":
-            befund = GLEICH if norm_hausnr(l) == norm_hausnr(a) else ANDERS
-        elif feld == "eMail":
-            befund = GLEICH if norm_mail(l) == norm_mail(a) else ANDERS
         else:
-            befund = GLEICH if norm_text(l) == norm_text(a) else ANDERS
+            befund = GLEICH if gleichwertig(feld, l, a) else ANDERS
         ergebnis.append((feld, l, a, befund))
+    return ergebnis
+
+
+def wert_geht_verloren(alt, neu) -> bool:
+    """Verliert der Access-Wert Angaben, wenn `neu` ihn ersetzt?
+
+    Nicht dasselbe wie „ist kürzer": „Mannheim" statt „Neckargemünd" ist ein
+    Umzug, kein Verlust, auch wenn es vier Zeichen weniger sind. Verlust ist
+    es, wenn der neue Wert im alten bereits steckt oder ihn nur abkürzt:
+
+        Vaihingen                    steckt in  Vaihingen/Enz
+        07224 40133                  steckt in  zzz_keine Werbeanrufe! 07224 40133
+        Württemb. Landesbibliothek   kürzt ab   Württembergische Landesbibliothek
+
+    Solche Übernahmen löschen etwas, das jemand einmal absichtlich erfasst hat.
+    """
+    a, n = norm_text(alt), norm_text(neu)
+    if not a or not n or a == n:
+        return False
+    if n in a:
+        return True
+    worte_a, worte_n = a.split(), n.split()
+    return (len(worte_n) <= len(worte_a)
+            and all(any(wa.startswith(wn) for wa in worte_a)
+                    for wn in worte_n))
+
+
+ANREDE_SAMMEL = "damen und herren"
+
+
+def uebernahme_sinnvoll(feld: str, alt, neu, ziel: dict) -> bool:
+    """Soll diese Übernahme überhaupt vorgeschlagen werden?
+
+    Der Grundsatz: eine Übernahme darf die Anschrift ändern, aber nicht
+    ärmer machen. Was Angaben verliert, wird angezeigt und gekennzeichnet,
+    aber nicht vorgehakt — der Bediener kann es trotzdem anhaken.
+    """
+    if wert_geht_verloren(alt, neu):
+        return False
+    # „Damen und Herren" ist die Anrede für eine Einrichtung ohne
+    # Ansprechperson. Kennt Access dort einen Namen, ist die persönliche
+    # Anrede die bessere, und Lexware weiß es bloß nicht besser.
+    if (feld == "Anrede" and norm_text(neu) == ANREDE_SAMMEL and alt
+            and (str(ziel.get("Name") or "").strip()
+                 or str(ziel.get("Vorname") or "").strip())):
+        return False
+    return True
+
+
+def verschmelze_saetze(saetze: list[dict]) -> dict:
+    """Mehrere Access-Sätze zu einem verschmelzen.
+
+    Je Feld gewinnt der erste nicht leere Wert — die Reihenfolge bestimmt also
+    der Aufrufer, indem er den zu behaltenden Satz nach vorn stellt. Bei
+    E-Mail und Telefon werden stattdessen ALLE verschiedenen Werte behalten
+    und mit Komma verbunden: zwei Anschriften desselben Menschen haben oft
+    zwei Adressen, und keine davon ist falsch.
+    """
+    if not saetze:
+        return {}
+    ergebnis = dict(saetze[0])
+    for feld in set().union(*(s.keys() for s in saetze)):
+        werte = []
+        for satz in saetze:
+            for teil in str(satz.get(feld) or "").split(TRENNER_MEHRWERTIG):
+                teil = teil.strip()
+                if teil and teil not in werte:
+                    werte.append(teil)
+        if not werte:
+            continue
+        ergebnis[feld] = (TRENNER_MEHRWERTIG.join(werte)
+                          if feld in MEHRWERTIG else werte[0])
+    # Die ID des behaltenen Satzes bleibt, sonst zeigte der Import ins Leere.
+    ergebnis["ID"] = saetze[0].get("ID")
     return ergebnis
 
 
@@ -1187,7 +1315,7 @@ def geaenderte_felder(z: Zuordnung, zeile: dict) -> list[str]:
     if not z.ziel:
         return []
     return [f for f in ADRESSFELDER
-            if norm_text(zeile.get(f)) != norm_text(z.ziel.get(f))]
+            if not gleichwertig(f, zeile.get(f), z.ziel.get(f))]
 
 
 def abweichungen(z: Zuordnung) -> dict[str, tuple]:
@@ -1204,7 +1332,7 @@ def abweichungen(z: Zuordnung) -> dict[str, tuple]:
     for feld in ADRESSFELDER:
         neu = str(lex.get(feld) or "").strip()
         alt = str(z.ziel.get(feld) or "").strip()
-        if neu and norm_text(neu) != norm_text(alt):
+        if neu and not gleichwertig(feld, neu, alt):
             ergebnis[feld] = (alt, neu)
     return ergebnis
 
@@ -1370,6 +1498,7 @@ def lexware_werte(lex: dict) -> dict:
     titel, vorname = trenne_titel(lex.get("Vorname"))
     firma = str(lex.get("Firma") or "").strip()
     name = str(lex.get("Name") or "").strip()
+    strasse, hausnr = teile_strasse(lex.get("Straße"), lex.get("Haus Nr."))
     # Steht bei einer Firma kein Personenname, wandert die Firma nicht
     # zusätzlich ins Namensfeld — Access trennt das sauber.
     werte = {
@@ -1381,8 +1510,8 @@ def lexware_werte(lex: dict) -> dict:
         "Abteilung": str(lex.get("Zusatz") or "").strip(),
         "PLZ": str(lex.get("Plz") or "").strip(),
         "Ort": str(lex.get("Ort") or "").strip(),
-        "Straße": str(lex.get("Straße") or "").strip(),
-        "Hausnummer": str(lex.get("Haus Nr.") or "").strip(),
+        "Straße": strasse,
+        "Hausnummer": hausnr,
         "Land": str(lex.get("Land") or "").strip(),
         "Telefon1": str(lex.get("Tel1") or "").strip(),
         "Telefon2": str(lex.get("Mobil") or "").strip(),
@@ -1603,8 +1732,15 @@ def schreibe_gesamttabelle(pfad, access: list[dict], zuordnungen: list[Zuordnung
         zuordnungen, laufjahr, heute)
     aenderungen = {zeile.get("ID"): zeile for zeile in zusammengefasst}
 
+    # Zusammengelegte Sätze fallen ersatzlos weg — ihre Angaben stecken im
+    # behaltenen Satz. Nur über die Gesamttabelle ist ein Zusammenlegen
+    # überhaupt möglich; ein Anfüge-Import kann nichts entfernen.
+    aufgeloest = {i for z in zuordnungen for i in z.aufgeloest_in}
+
     zeilen = []
     for satz in access:
+        if satz.get("ID") in aufgeloest:
+            continue
         zeile = dict(satz)
         neu = aenderungen.get(satz.get("ID"))
         if neu:
@@ -1670,6 +1806,29 @@ def schreibe_protokoll(pfad, zuordnungen: list[Zuordnung], befund=None):
         ws.column_dimensions["A"].width = 120
         ws["A2"].alignment = openpyxl.styles.Alignment(wrapText=True)
         wb.save(pfad)
+    return len(zeilen)
+
+
+def schreibe_zusammenlegen(pfad, zuordnungen: list[Zuordnung]):
+    """Welche Access-Sätze in welchen aufgehen sollen.
+
+    In kunden_komplett.xlsx sind sie bereits weg. Wer den Weg über die
+    Einzeldateien geht, muss sie von Hand löschen — dafür ist diese Liste da.
+    """
+    spalten = ["behalten (ID)", "auflösen (ID)", "Kd.-Nr", "Lexware"]
+    zeilen = []
+    for z in zuordnungen:
+        if not z.aufgeloest_in or not z.ziel:
+            continue
+        name = " ".join(x for x in (str(z.lexware.get("Vorname") or ""),
+                                    str(z.lexware.get("Name") or ""),
+                                    str(z.lexware.get("Firma") or "")) if x)
+        for alt in z.aufgeloest_in:
+            zeilen.append({"behalten (ID)": z.ziel.get("ID"),
+                           "auflösen (ID)": alt,
+                           "Kd.-Nr": str(z.lexware.get("Kd.-Nr") or ""),
+                           "Lexware": name})
+    _schreibe_blatt(pfad, spalten, zeilen)
     return len(zeilen)
 
 
@@ -1831,6 +1990,8 @@ def schreibe_alles(ordner, zuordnungen: list[Zuordnung], access: list[dict],
         ergebnis["kunden_komplett.xlsx"] = schreibe_gesamttabelle(
             gesamt_pfad, access, zuordnungen, access_spalten, laufjahr, heute)
 
+    ergebnis["zusammenlegen.xlsx"] = schreibe_zusammenlegen(
+        ordner / "zusammenlegen.xlsx", zuordnungen)
     ergebnis["protokoll.xlsx"] = schreibe_protokoll(
         ordner / "protokoll.xlsx", zuordnungen, befund)
     ergebnis["zuordnung.xlsx"] = schreibe_zuordnung(

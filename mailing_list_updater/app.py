@@ -21,13 +21,18 @@ import json
 import traceback
 from datetime import date
 from pathlib import Path
-from tkinter import (Tk, Canvas, StringVar, Text, END, TclError, filedialog,
-                     messagebox, ttk, Listbox, SINGLE)
+from tkinter import (Tk, Toplevel, Canvas, StringVar, BooleanVar, Text, END,
+                     TclError, filedialog, messagebox, ttk, Listbox, SINGLE)
 
 from mailing_list_updater import core
 
 
-# Spalten der vier Listen. Die erste ist immer das Häkchen.
+# Kein Fall des Abgleichs, sondern ein Zustand: hier sammelt sich, was der
+# Bediener ausdrücklich beiseitegelegt hat. So sieht man, was man durch hat —
+# die Vorbelegung "ignorieren" der unklaren Fälle zählt NICHT dazu.
+FALL_IGNORIERT = "ignoriert"
+
+# Spalten der fünf Listen. Die erste ist immer das Häkchen.
 SPALTEN = {
     core.FALL_NEU: [("sel", "", 34), ("kdnr", "Kd.-Nr.", 70),
                     ("name", "Name / Firma", 240), ("ort", "PLZ / Ort", 150),
@@ -49,6 +54,11 @@ SPALTEN = {
                              ("ort", "PLZ / Ort", 150),
                              ("gruppe", "Kundengruppe", 160),
                              ("hinweis", "Hinweis", 260)],
+    FALL_IGNORIERT: [("sel", "", 34), ("kdnr", "Kd.-Nr.", 70),
+                     ("name", "Name / Firma", 240), ("ort", "PLZ / Ort", 150),
+                     ("jahr", "Bestelljahr", 80),
+                     ("herkunft", "kam aus", 130),
+                     ("hinweis", "Hinweis", 260)],
 }
 
 # Spalte, welche die anfängliche Sortierung am ehesten beschreibt. Sie
@@ -59,6 +69,7 @@ VORGABE_SPALTE = {
     core.FALL_AKTUALISIEREN: "abw",
     core.FALL_UNKLAR: "hinweis",
     core.FALL_OHNE_AUFTRAG: "hinweis",
+    FALL_IGNORIERT: "kdnr",
 }
 
 REITER_TITEL = {
@@ -66,6 +77,7 @@ REITER_TITEL = {
     core.FALL_AKTUALISIEREN: "Aktualisieren",
     core.FALL_UNKLAR: "Unklar",
     core.FALL_OHNE_AUFTRAG: "Ohne Auftrag",
+    FALL_IGNORIERT: "Ignoriert",
 }
 
 HAKEN_AN, HAKEN_AUS = "☑", "☐"
@@ -186,7 +198,8 @@ class App(Tk):
         self.reiter = ttk.Notebook(self)
         self.reiter.pack(fill="both", expand=True, **pad)
         for fall in (core.FALL_NEU, core.FALL_AKTUALISIEREN,
-                     core.FALL_UNKLAR, core.FALL_OHNE_AUFTRAG):
+                     core.FALL_UNKLAR, core.FALL_OHNE_AUFTRAG,
+                     FALL_IGNORIERT):
             self._baue_reiter(fall)
 
         self.verlauf = Text(self, height=6, wrap="word")
@@ -365,13 +378,17 @@ class App(Tk):
         # Wer auf "nichts tun" steht, erzeugt keine einzige Ausgabezeile —
         # sein Bestelldatum bleibt also alt, und er kann aus dem Mailing
         # fallen. Diese Zahl gehört sichtbar neben die Töpfe.
-        uebergangen = sum(1 for z in self.zuordnungen
-                          if z.aktion == core.AKTION_NICHTS)
+        # Getrennt ausweisen: was noch offen ist und was ausdrücklich
+        # beiseitegelegt wurde. Vorher hiess beides "übergangen", und der
+        # Zähler behauptete gleich nach dem Abgleich, 359 Fälle seien
+        # übergangen worden — dabei war nur noch nichts entschieden.
+        offen = n[core.FALL_UNKLAR] + n[core.FALL_OHNE_AUFTRAG]
         self.zaehler.set(
             f"neu {n[core.FALL_NEU]} · aktualisieren "
             f"{n[core.FALL_AKTUALISIEREN]} · unklar {n[core.FALL_UNKLAR]} · "
-            f"ohne Auftrag {n[core.FALL_OHNE_AUFTRAG]}"
-            f"   —   {uebergangen} übergangen (ohne Bestelldatum-Update)")
+            f"ohne Auftrag {n[core.FALL_OHNE_AUFTRAG]} · "
+            f"ignoriert {n[FALL_IGNORIERT]}"
+            f"   —   {offen} noch zu entscheiden")
 
     def _fuelle(self, fall):
         baum = self.baeume[fall]
@@ -384,7 +401,7 @@ class App(Tk):
         # lässt sich jederzeit anders sortieren.
         zeilen = []
         for z in self.zuordnungen:
-            if z.fall != fall:
+            if self._reiter_von(z) != fall:
                 continue
             werte, auffaellig = self._zeilenwerte(fall, z)
             zeilen.append((self._sortschluessel(fall, z, auffaellig),
@@ -412,6 +429,18 @@ class App(Tk):
                 tags.append("aus")
             eintrag = baum.insert("", END, values=werte, tags=tags)
             self.zeilen[fall][eintrag] = z
+
+    def _reiter_von(self, z) -> str:
+        """In welchen Reiter der Fall gehört.
+
+        Ausdrücklich Ignoriertes sammelt sich im eigenen Reiter — aber erst,
+        wenn jemand es angefasst hat. Die Vorbelegung "ignorieren" der
+        unklaren Fälle bleibt dort stehen, sonst wäre der Reiter "Unklar"
+        gleich nach dem Abgleich leer und "Ignoriert" voll.
+        """
+        if z.aktion == core.AKTION_NICHTS and z.beruehrt:
+            return FALL_IGNORIERT
+        return z.fall
 
     def _sortschluessel(self, fall, z, auffaellig):
         """Kleiner Wert = weiter oben = eher anzusehen."""
@@ -505,6 +534,12 @@ class App(Tk):
                      f"{z.bester.punkte:.0f}" if z.bester else "",
                      abstand, z.bestelljahr or "—", folge,
                      " | ".join(z.unklar_grund)), True)
+
+        if fall == FALL_IGNORIERT:
+            return ((haken, kdnr, _name(lex),
+                     f'{lex.get("Plz") or ""} {lex.get("Ort") or ""}'.strip(),
+                     z.bestelljahr or "—", REITER_TITEL.get(z.fall, z.fall),
+                     " | ".join(z.unklar_grund or z.hinweise)), False)
 
         return ((haken, kdnr, _name(lex),
                  f'{lex.get("Plz") or ""} {lex.get("Ort") or ""}'.strip(),
@@ -767,11 +802,11 @@ class App(Tk):
                           font=("Segoe UI", 9, "bold")).grid(
                     row=0, column=spalte, sticky="w", padx=8, pady=(0, 2))
             for i, (feld, (alt, neu)) in enumerate(sorted(abw.items())):
-                # Ist der Access-Wert deutlich länger, steht dort meist mehr
-                # als in Lexware — ein ausgeschriebener Name oder ein Vermerk
-                # wie "zzz_keine Werbeanrufe!". Übernehmen löscht das. Deshalb
-                # hervorheben, damit es beim Durchsehen nicht untergeht.
-                aermer = bool(alt) and len(alt) > len(neu) + 3
+                # Warnen nur, wenn wirklich etwas verlorengeht — der neue
+                # Wert also im alten schon steckt oder ihn abkürzt. Ein bloßer
+                # Längenvergleich markierte auch Umzüge ("Mannheim" statt
+                # "Neckargemünd") und damit die halbe Tabelle.
+                aermer = not core.uebernahme_sinnvoll(feld, alt, neu, z.ziel)
                 ttk.Label(tabelle, text=("⚠ " if aermer else "") + feld,
                           foreground="#a06000" if aermer else "black").grid(
                     row=i + 1, column=0, sticky="w", padx=8)
@@ -801,7 +836,7 @@ class App(Tk):
         ttk.Button(leiste, text="neuen Datensatz anlegen (Zweitadresse)",
                    command=lambda zz=z, fa=fall: self._als_neu(zz, fa)).pack(
             side="left", padx=6)
-        ttk.Button(leiste, text="nichts tun",
+        ttk.Button(leiste, text="Ignorieren",
                    command=lambda zz=z, fa=fall: self._als_nichts(zz, fa)).pack(
             side="left")
 
@@ -861,7 +896,7 @@ class App(Tk):
         ttk.Button(frage, text="stattdessen neu anlegen (Zweitadresse)",
                    command=lambda zz=z, fa=fall: self._als_neu(zz, fa)).pack(
             side="right")
-        ttk.Button(frage, text="nichts tun",
+        ttk.Button(frage, text="Ignorieren",
                    command=lambda zz=z, fa=fall:
                    self._als_nichts(zz, fa)).pack(side="right", padx=6)
 
@@ -937,8 +972,13 @@ class App(Tk):
         ttk.Separator(gitter, orient="horizontal").grid(
             row=2, column=0, columnspan=anzahl + 3, sticky="ew", pady=3)
 
+        self.zusammen_wahl = {}
         for i, k in enumerate(kandidaten):
             r = i + 3
+            wahl = BooleanVar(value=False)
+            self.zusammen_wahl[id(k)] = (wahl, k)
+            ttk.Checkbutton(gitter, variable=wahl).grid(
+                row=r, column=anzahl + 3, sticky="w", padx=(12, 0))
             vorsprung = ""
             if i == 0 and len(kandidaten) > 1:
                 vorsprung = f" (+{k.punkte - kandidaten[1].punkte:.0f})"
@@ -960,12 +1000,98 @@ class App(Tk):
             self._kandidatenknopf(gitter, z, k, fall, r, anzahl + 1,
                                   "diesen aktualisieren")
 
+        ttk.Label(gitter, text="zusammen-\nlegen", foreground="#555555",
+                  font=("Segoe UI", 8, "bold"), justify="center").grid(
+            row=0, column=anzahl + 3, padx=(12, 0))
+        ttk.Button(gitter, text="Ausgewählte zusammenlegen …",
+                   command=lambda zz=z, fa=fall:
+                   self._zusammenlegen(zz, fa)).grid(
+            row=len(kandidaten) + 3, column=anzahl + 1, columnspan=3,
+            sticky="w", padx=8, pady=(6, 0))
         ttk.Label(gitter,
                   text="grün = stimmt mit Lexware überein   ·   "
                        "rot = weicht ab   ·   grau = auf einer Seite leer",
                   foreground="#777777", font=("Segoe UI", 8)).grid(
-            row=len(kandidaten) + 3, column=0, columnspan=anzahl + 3,
+            row=len(kandidaten) + 3, column=0, columnspan=anzahl + 1,
             sticky="w", pady=(6, 0))
+
+    def _zusammenlegen(self, z, fall):
+        """Mehrere Access-Sätze zu einem machen.
+
+        Der Anlass: Sätze, die dieselbe Person meinen, sich aber in einer
+        Kleinigkeit unterscheiden — „Ellwangen (Jagst)" gegen „Ellwangen" —
+        und deshalb von der Dublettenerkennung nicht erfasst werden.
+        """
+        gewaehlt = [k for wahl, k in self.zusammen_wahl.values() if wahl.get()]
+        if len(gewaehlt) < 2:
+            messagebox.showinfo(
+                "Zu wenig ausgewählt",
+                "Mindestens zwei Sätze ankreuzen, die zusammengelegt werden "
+                "sollen.")
+            return
+
+        # Der gehaltvollste Satz bleibt stehen, die anderen gehen in ihm auf.
+        gewaehlt.sort(key=lambda k: core._gehaltvoller(k.access))
+        behalten, aufgeloest = gewaehlt[0], gewaehlt[1:]
+        verschmolzen = core.verschmelze_saetze(
+            [k.access for k in gewaehlt])
+
+        fenster = Toplevel(self)
+        fenster.title("Sätze zusammenlegen")
+        fenster.transient(self)
+        fenster.grab_set()
+
+        ttk.Label(fenster, text=f'Access-ID {behalten.access.get("ID")} bleibt '
+                               f'bestehen und übernimmt die Angaben von '
+                               f'{", ".join(str(k.access.get("ID")) for k in aufgeloest)}.',
+                  font=("Segoe UI", 9, "bold")).pack(anchor="w", padx=12,
+                                                     pady=(12, 2))
+        ttk.Label(fenster,
+                  text="E-Mail und Telefon behalten alle Werte, mit Komma "
+                       "verbunden. Alles ist noch änderbar.",
+                  foreground="#666666").pack(anchor="w", padx=12, pady=(0, 8))
+
+        felder = ttk.Frame(fenster)
+        felder.pack(fill="both", expand=True, padx=12)
+        vars_ = {}
+        gaengig, _ = core.ordne_felder(verschmolzen)
+        for i, (feld, wert) in enumerate(gaengig):
+            r, s = divmod(i, 2)
+            ttk.Label(felder, text=feld + ":", width=18, anchor="e").grid(
+                row=r, column=s * 2, sticky="e", padx=(0, 4), pady=1)
+            var = StringVar(value="" if wert in (None, "") else str(wert))
+            vars_[feld] = var
+            ttk.Entry(felder, textvariable=var, width=34).grid(
+                row=r, column=s * 2 + 1, sticky="w", padx=(0, 12))
+
+        knoepfe = ttk.Frame(fenster)
+        knoepfe.pack(fill="x", padx=12, pady=12)
+
+        def uebernehmen():
+            z.ziel = behalten.access
+            z.aufgeloest_in = [k.access.get("ID") for k in aufgeloest]
+            z.aktion = core.AKTION_AKTUALISIEREN
+            z.fall = core.FALL_AKTUALISIEREN
+            z.beruehrt = True
+            for feld, var in vars_.items():
+                if feld == "ID":
+                    continue
+                if not core.gleichwertig(feld, var.get(),
+                                         behalten.access.get(feld)):
+                    z.aenderungen[feld] = var.get()
+            fenster.destroy()
+            self._fuelle_alle()
+            self._log(f'Kd.-Nr. {z.lexware.get("Kd.-Nr")}: Access-IDs '
+                      f'{", ".join(str(i) for i in z.aufgeloest_in)} gehen in '
+                      f'{behalten.access.get("ID")} auf. In kunden_komplett.xlsx '
+                      f'sind sie entfernt; beim Weg über die Einzeldateien '
+                      f'stehen sie in zusammenlegen.xlsx zum Löschen.')
+            self._springe_zu(z, core.FALL_AKTUALISIEREN)
+
+        ttk.Button(knoepfe, text="Zusammenlegen",
+                   command=uebernehmen).pack(side="right")
+        ttk.Button(knoepfe, text="Abbrechen",
+                   command=fenster.destroy).pack(side="right", padx=8)
 
     def _kandidatenknopf(self, gitter, z, k, fall, zeile, spalte, text):
         if k.gesperrt:
@@ -984,7 +1110,9 @@ class App(Tk):
         if core.UEBERNAHME_VORGABE:
             # Gleiche Vorbelegung wie bei den eindeutigen Treffern, sonst
             # verhielten sich von Hand zugewiesene Fälle anders als der Rest.
-            z.uebernehmen = set(core.abweichungen(z))
+            z.uebernehmen = {
+                f for f, (alt, neu) in core.abweichungen(z).items()
+                if core.uebernahme_sinnvoll(f, alt, neu, z.ziel)}
         self._fuelle_alle()
         self._log(f'Kd.-Nr. {z.lexware.get("Kd.-Nr")} → Access-ID '
                   f'{kandidat.access.get("ID")} (aktualisieren)')

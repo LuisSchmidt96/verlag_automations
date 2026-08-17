@@ -56,15 +56,16 @@ und Zusatzspalten sind egal, die Kopfzeile wird gesucht.
    **Abgleichen**.
 2. Warnungen oben lesen. Sie stehen da nicht zur Zierde — beide bisher
    eingebauten Prüfungen haben in der Erprobung echte Lücken gefunden.
-3. Die vier Reiter durchgehen:
+3. Die fünf Reiter durchgehen:
 
    | Reiter | was zu tun ist |
    |---|---|
    | **Neu anlegen** | Liste sichten, Auffälligkeiten sind orange hervorgehoben |
    | **Aktualisieren** | je Feld ankreuzen, was aus Lexware übernommen wird; das Bestelldatum wird immer gesetzt. Über *Stattdessen* lässt sich der Fall auch als Zweitadresse neu anlegen oder ganz übergehen |
-   | **Unklar** | je Fall entscheiden: *diesen aktualisieren* · *neu anlegen (Zweitadresse)* · *nichts tun*. Danach springt die Ansicht in den Reiter, in dem der Fall gelandet ist |
+   | **Unklar** | je Fall entscheiden: *diesen aktualisieren* · *neu anlegen (Zweitadresse)* · *Ignorieren*. Danach springt die Ansicht in den Reiter, in dem der Fall gelandet ist |
    | ↳ Spalte *Folge* | **wichtigste Spalte des Reiters.** Steht dort „bekommt Post ohnehin", ist die Entscheidung folgenlos — der Empfänger ist über seine Kategorie dauerhaft im Mailing. Solche Fälle stehen unten und dürfen liegen bleiben. Im Probelauf: 262 von 344 folgenlos, **82 entscheiden wirklich etwas** |
    | **Ohne Auftrag** | sollte fast leer sein; ist er voll, fehlt eine Aufträge-Datei |
+   | **Ignoriert** | was du ausdrücklich beiseitegelegt hast — damit du siehst, was du durch hast. Die Vorbelegung der unklaren Fälle zählt **nicht** dazu, sonst wäre der Reiter gleich nach dem Abgleich voll |
 
    Die Listen sind so vorsortiert, dass **die fragwürdigen Fälle oben stehen**:
    im Reiter „Aktualisieren" die mit Abweichungen und schwachem Treffer, in
@@ -97,13 +98,43 @@ und Zusatzspalten sind egal, die Kopfzeile wird gesucht.
    **unverändert** — auch sein Bestelldatum. Soll er weiter Post bekommen,
    muss er selbst noch einen aktuellen Kauf vorweisen oder ein Merkmal tragen.
 
+   **Mehrere Access-Sätze zusammenlegen.** Im Reiter „Unklar" lassen sich
+   Kandidaten ankreuzen und über *Ausgewählte zusammenlegen…* zu einem Satz
+   vereinen — für Dubletten, die sich in einer Kleinigkeit unterscheiden und
+   deshalb nicht automatisch erkannt werden („Ellwangen (Jagst)" gegen
+   „Ellwangen"). Der gehaltvollste Satz bleibt, E-Mail und Telefon behalten
+   **alle** Werte mit Komma verbunden, alles ist im Fenster noch änderbar.
+
+   In `kunden_komplett.xlsx` sind die aufgelösten Sätze entfernt — nur über
+   die Gesamttabelle ist ein Zusammenlegen überhaupt möglich, ein
+   Anfüge-Import kann nichts löschen. Wer den Weg über die Einzeldateien geht,
+   findet die zu löschenden IDs in `zusammenlegen.xlsx`.
+
    **Abweichende Adressfelder sind vorgehakt** (`UEBERNAHME_VORGABE` in
    `core.py`): Lexware ist das System, in dem täglich gearbeitet wird, und eine
    Anschrift, unter der gerade geliefert wurde, ist aktueller als der
-   Access-Stand. Zwei Ausnahmen sind mit ⚠ markiert und wollen angesehen
-   werden — wenn der Access-Wert deutlich länger ist, steht dort meist mehr:
-   ein ausgeschriebener Name (`Württembergische` statt `Württemb.`) oder ein
-   Vermerk wie `zzz_keine Werbeanrufe!` im Telefonfeld. Übernehmen löscht das.
+   Access-Stand — aber **nur, wenn nichts verlorengeht**. Wo
+   die Übernahme Angaben löschen würde, steht ein ⚠ und das Häkchen fehlt;
+   anhaken kann man es trotzdem. Als Verlust gilt, wenn der Lexware-Wert im
+   Access-Wert schon steckt oder ihn abkürzt:
+
+   ```
+   Vaihingen/Enz                    ->  Vaihingen
+   Württembergische Landesbibliothek->  Württemb. Landesbibliothek
+   zzz_keine Werbeanrufe! 07224 …   ->  07224 40133
+   ```
+
+   Ein bloßer Längenvergleich reichte dafür nicht: „Mannheim" statt
+   „Neckargemünd" ist kürzer, aber ein Umzug und kein Verlust. Ebenso wird
+   eine Sammelanrede nicht über eine persönliche vorgeschlagen — kennt Access
+   „Frau" und Margot Zander, ist „Damen und Herren" aus Lexware die ärmere
+   Angabe.
+
+   Keine Abweichung sind unterschiedliche **Schreibweisen**: `Kirchstraße`
+   und `Kirchstr.` gelten als dasselbe, ebenso `Untere Hauptstr. 54` gegen
+   `Untere Hauptstr.` + Hausnummer `54` — Lexware führt die Hausnummer mal
+   getrennt, mal am Ende der Straße. Mannheimer Quadrate wie `C 5` bleiben
+   dabei unangetastet.
 
    Im Reiter **Aktualisieren** werden genau die Felder gezeigt, welche die
    UPDATE-Abfrage schreibt: was dort steht, steht hinterher in Access, nicht
@@ -126,6 +157,7 @@ so eine Mittagspause.
 | `aktualisieren.xlsx` | nur die geänderten, `ID` plus alle Felder mit dem Endwert |
 | `protokoll.xlsx` | jede Entscheidung mit Punktzahl und Begründung |
 | `zuordnung.xlsx` | Kd.-Nr. ↔ Access-ID, Sicherung neben dem Access-Feld |
+| `zusammenlegen.xlsx` | welche Access-Sätze in welchen aufgehen — in `kunden_komplett.xlsx` schon entfernt, beim zweiten Weg von Hand zu löschen |
 | `access_import.txt` | beide Wege nach Access, Schritt für Schritt |
 
 ### Der einfache Weg: eine Jahresdatei
