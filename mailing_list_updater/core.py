@@ -2000,30 +2000,36 @@ def schreibe_zuordnung(pfad, zuordnungen: list[Zuordnung]):
     return len(zeilen)
 
 
-def schreibe_access_import(pfad, tabelle: str = "Kunden",
-                           gesamt_moeglich: bool = True,
-                           laufjahr: int = 0) -> str:
-    """Die fertige UPDATE-Abfrage zum Einfügen in Access.
+def schreibe_anleitung(pfad, tabelle: str = "Kunden", laufjahr: int = 0,
+                       access_warnung=None) -> str:
+    """Wie die eine Datei nach Access kommt."""
+    warnung = ""
+    if access_warnung:
+        warnung = f"""
+ACHTUNG — die geladene Access-Datei war unvollstaendig
+=======================================================
 
-    Die Feldliste ist zu lang, um sie von Hand abzutippen, und ein Tippfehler
-    darin fällt erst auf, wenn Daten falsch stehen — also erzeugt sie das Tool.
-    """
-    felder = STAMMFELDER + AKTUALISIERBAR
-    setzt = ",\n".join(
-        f"    [{tabelle}].[{f}] = [_Import_Aktualisieren].[{f}]" for f in felder)
+{access_warnung}
 
-    einfach = f"""
-DER EINFACHE WEG - eine Jahresdatei, keine Abfrage
-===================================================
+Die Jahresdatei enthaelt daher nur die Saetze aus dieser Abfrage. Solange in
+Schritt 1 eine KOPIE angelegt wird, ist nichts verloren: die bisherige Datei
+bleibt unberuehrt, und man kann den Lauf mit dem richtigen Export wiederholen.
+Zum Verschicken taugt das Ergebnis aber noch nicht.
 
-Dafuer ist  kunden_komplett.xlsx  da: die vollstaendige Kundentabelle, schon
-aktualisiert, mit den neuen Kunden hinten dran.
+"""
 
-Der Kniff: es wird nichts an der bisherigen Datei geaendert. Jedes Jahr
-entsteht eine neue, die alte bleibt als Archiv liegen. Geht etwas schief,
-loescht man die neue Datei und faengt von vorn an.
+    text = f"""So kommt die Jahresdatei nach Access
+=====================================
+{warnung}
+Es gibt genau EINE Datei zum Importieren: kunden_komplett.xlsx. Sie enthaelt
+den vollstaendigen Kundenstamm, bereits aktualisiert, mit den neuen Kunden
+hinten dran und den zusammengelegten Saetzen entfernt.
 
-  1. Die Access-Datei kopieren und die Kopie nach dem Jahr benennen,
+Der Kniff: an der bisherigen Datei wird nichts geaendert. Jedes Jahr entsteht
+eine neue, die alte bleibt als Archiv liegen. Geht etwas schief, loescht man
+die neue und faengt von vorn an.
+
+  1. Die Access-Datei KOPIEREN und die Kopie nach dem Jahr benennen,
      z. B.  Adressen_{laufjahr}.accdb
      Ab hier wird nur noch in DIESER Kopie gearbeitet.
 
@@ -2031,7 +2037,7 @@ loescht man die neue Datei und faengt von vorn an.
      In der Tabelle [{tabelle}] ein Feld  Lexware-Kd-Nr  anlegen (Text, 20).
 
   3. In der Kopie die Tabelle [{tabelle}] oeffnen, alle Datensaetze markieren
-     (Strg+A) und loeschen. Die Tabelle ist danach leer - das ist so gewollt,
+     (Strg+A) und loeschen. Die Tabelle ist danach leer — das ist so gewollt,
      und es betrifft nur die Kopie.
 
   4. Externe Daten -> Neue Datenquelle -> Aus Datei -> Excel
@@ -2046,115 +2052,67 @@ loescht man die neue Datei und faengt von vorn an.
      links mit der Zeilenzahl in kunden_komplett.xlsx vergleichen.
 
   7. Von jetzt an ist  Adressen_{laufjahr}.accdb  die gueltige Datei.
-     Die vorherige nicht loeschen - sie ist der Stand des Vorjahres.
+     Die vorherige nicht loeschen — sie ist der Stand des Vorjahres.
 
 
 WICHTIG: NICHT "in eine neue Tabelle importieren"
 --------------------------------------------------
 In Schritt 4 muss es "an die Tabelle anfuegen" heissen. Wer stattdessen eine
-neue Tabelle importieren laesst, ueberlaesst Access das Raten der Feldtypen -
+neue Tabelle importieren laesst, ueberlaesst Access das Raten der Feldtypen —
 und dann wird aus der Postleitzahl 04103 die Zahl 4103. Betroffen waeren
 225 Postleitzahlen und 9913 Telefonnummern, und die ID verloere ihre
-AutoWert-Eigenschaft. Die vorhandene Tabelle hat diese Typen korrekt; deshalb
-wird in sie hinein angefuegt und nicht neben sie.
-"""
-
-    ohne_gesamt = """
-DER EINFACHE WEG STEHT DIESMAL NICHT ZUR VERFUEGUNG
-====================================================
-
-kunden_komplett.xlsx wurde NICHT geschrieben, weil die geladene Access-Datei
-nicht die vollstaendige Kundentabelle ist, sondern die Mailing-Abfrage.
-
-Diese Datei wuerde den Bestand ersetzen - und alles, was in der Abfrage nicht
-vorkommt, waere hinterher geloescht. Das sind mehrere tausend Adressen.
-
-Abhilfe: in Access die komplette Kundentabelle exportieren (nicht die
-Abfrage), das Tool erneut laufen lassen. Bis dahin bleibt nur der zweite Weg.
-"""
-
-    text = f"""So kommen die Aenderungen nach Access
-======================================
-{einfach if gesamt_moeglich else ohne_gesamt}
-
-DER ZWEITE WEG - zwei Dateien und eine Abfrage
-===============================================
-
-Umstaendlicher, dafuer wird nichts geloescht: der Bestand bleibt stehen und
-wird nur veraendert. Wer der Loeschaktion oben nicht traut, nimmt diesen.
-
-  1. Access-Datei kopieren.
-
-  2. Einmalig: Feld  Lexware-Kd-Nr  anlegen (Text, 20).
-
-  3. aktualisieren.xlsx importieren
-     Externe Daten -> Excel -> "Daten in eine neue Tabelle importieren"
-     Zieltabelle:  _Import_Aktualisieren
-     (beim naechsten Mal diese Tabelle vorher loeschen)
-
-  4. Einmalig diese Abfrage anlegen (Erstellen -> Abfrageentwurf ->
-     SQL-Ansicht), als  qry_Import_Aktualisieren  speichern und ausfuehren.
-     In den Folgejahren nur noch doppelklicken:
-
-UPDATE [{tabelle}]
-INNER JOIN [_Import_Aktualisieren]
-        ON [{tabelle}].[ID] = [_Import_Aktualisieren].[ID]
-SET
-{setzt};
-
-  5. neu_anlegen.xlsx anfuegen
-     Externe Daten -> Excel -> "Datensaetze an die Tabelle [{tabelle}]
-     anhaengen"
+AutoWert-Eigenschaft. Deshalb wird in die vorhandene Tabelle hinein angefuegt:
+sie hat die Feldtypen seit 25 Jahren korrekt.
 
 
-ZUR KONTROLLE
-=============
+DIE ANDEREN DATEIEN
+===================
 
-protokoll.xlsx enthaelt jede Entscheidung mit Punktzahl und Begruendung.
-Enthaelt die Mappe ein Blatt "Warnung", beruhte der Lauf auf lueckenhaften
-Eingaben - dann erst lesen, dann importieren.
+protokoll.xlsx   jede Entscheidung mit Punktzahl und Begruendung — zum
+                 Nachvollziehen, warum ein Satz so aussieht wie er aussieht.
+                 Enthaelt die Mappe ein Blatt "Warnung", beruhte der Lauf auf
+                 lueckenhaften Eingaben.
+
+pflege.txt       was in Lexware und Access aufzuraeumen waere: doppelt
+                 angelegte Kunden, Hausnummern im Strassenfeld, fehlende
+                 Postleitzahlen. Das behebt dieses Werkzeug nicht — es zeigt
+                 nur, wo es klemmt. Wer es in der Quelle richtet, hat es
+                 naechstes Jahr nicht wieder.
 """
     Path(pfad).write_text(text, encoding="utf-8")
-    return "Anleitung geschrieben"
+    return "geschrieben"
 
 
 def schreibe_alles(ordner, zuordnungen: list[Zuordnung], access: list[dict],
                    access_spalten: list[str], laufjahr: int, heute,
                    befund=None, access_warnung=None) -> dict:
-    """Alle Ausgabedateien auf einmal. Gibt die Zeilenzahlen zurück."""
+    """Die Ausgabe: eine Datei zum Importieren, drei zum Nachlesen.
+
+    Es gab einmal fünf Excel-Dateien für zwei verschiedene Importwege. Das war
+    für einen Vorgang, den jemand einmal im Jahr macht, eine Zumutung — und
+    der zweite Weg brauchte obendrein eine SQL-Abfrage. Geblieben ist die
+    Gesamttabelle: eine Datei, ein Import.
+    """
     ordner = Path(ordner)
     ordner.mkdir(parents=True, exist_ok=True)
 
-    ergebnis = {
-        "neu_anlegen.xlsx": schreibe_neu_anlegen(
-            ordner / "neu_anlegen.xlsx", zuordnungen, access_spalten,
-            laufjahr, heute),
-        "aktualisieren.xlsx": schreibe_aktualisieren(
-            ordner / "aktualisieren.xlsx", zuordnungen, laufjahr, heute),
+    # Was frühere Fassungen erzeugt haben, hier wegräumen. Sonst lägen im
+    # Ordner fünf Excel-Dateien nebeneinander und niemand wüsste, welche die
+    # gültige ist — der Grund, aus dem es nur noch eine gibt.
+    for veraltet in ("neu_anlegen.xlsx", "aktualisieren.xlsx",
+                     "zuordnung.xlsx", "zusammenlegen.xlsx",
+                     "access_import.txt"):
+        (ordner / veraltet).unlink(missing_ok=True)
+
+    return {
+        "kunden_komplett.xlsx": schreibe_gesamttabelle(
+            ordner / "kunden_komplett.xlsx", access, zuordnungen,
+            access_spalten, laufjahr, heute),
+        "anleitung.txt": schreibe_anleitung(
+            ordner / "anleitung.txt", laufjahr=laufjahr,
+            access_warnung=access_warnung),
+        "pflege.txt": schreibe_pflege(
+            ordner / "pflege.txt", zuordnungen, access),
+        "protokoll.xlsx": schreibe_protokoll(
+            ordner / "protokoll.xlsx", zuordnungen, befund),
     }
-
-    # Die Gesamttabelle ersetzt beim Import den kompletten Bestand. Steht als
-    # Eingabe nur die Mailing-Abfrage zur Verfügung, wäre das ein Löschbefehl
-    # für alles, was der Filter nicht zeigt. Dann lieber gar nicht schreiben:
-    # eine fehlende Datei fällt auf, ein stiller Datenverlust nicht.
-    gesamt_pfad = ordner / "kunden_komplett.xlsx"
-    if access_warnung:
-        gesamt_pfad.unlink(missing_ok=True)
-        ergebnis["kunden_komplett.xlsx"] = (
-            "NICHT geschrieben — Access-Datei ist nur die Mailing-Abfrage")
-    else:
-        ergebnis["kunden_komplett.xlsx"] = schreibe_gesamttabelle(
-            gesamt_pfad, access, zuordnungen, access_spalten, laufjahr, heute)
-
-    ergebnis["pflege.txt"] = schreibe_pflege(
-        ordner / "pflege.txt", zuordnungen, access)
-    ergebnis["zusammenlegen.xlsx"] = schreibe_zusammenlegen(
-        ordner / "zusammenlegen.xlsx", zuordnungen)
-    ergebnis["protokoll.xlsx"] = schreibe_protokoll(
-        ordner / "protokoll.xlsx", zuordnungen, befund)
-    ergebnis["zuordnung.xlsx"] = schreibe_zuordnung(
-        ordner / "zuordnung.xlsx", zuordnungen)
-    ergebnis["access_import.txt"] = schreibe_access_import(
-        ordner / "access_import.txt", gesamt_moeglich=not access_warnung,
-        laufjahr=laufjahr)
-    return ergebnis

@@ -18,6 +18,9 @@ Bauen als .exe (Windows):
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
 import traceback
 from datetime import date
 from pathlib import Path
@@ -186,6 +189,10 @@ class App(Tk):
                    command=self._abgleichen).pack(side="left")
         ttk.Button(leiste, text="Dateien schreiben",
                    command=self._schreiben).pack(side="left", padx=8)
+        self.knopf_ordner = ttk.Button(leiste, text="Ordner öffnen",
+                                       command=self._oeffne_ordner,
+                                       state="disabled")
+        self.knopf_ordner.pack(side="left")
         self.zaehler = StringVar(value="noch nicht abgeglichen")
         ttk.Label(leiste, textvariable=self.zaehler).pack(side="left", padx=16)
 
@@ -833,7 +840,7 @@ class App(Tk):
         leiste = ttk.Frame(rahmen)
         leiste.pack(fill="x", padx=8, pady=(8, 0))
         ttk.Label(leiste, text="Stattdessen:").pack(side="left")
-        ttk.Button(leiste, text="neuen Datensatz anlegen (Zweitadresse)",
+        ttk.Button(leiste, text="Neu anlegen",
                    command=lambda zz=z, fa=fall: self._als_neu(zz, fa)).pack(
             side="left", padx=6)
         ttk.Button(leiste, text="Ignorieren",
@@ -893,7 +900,7 @@ class App(Tk):
         # Diese beiden Knöpfe stehen ÜBER der Liste, nicht darunter: bei acht
         # Kandidaten waren sie sonst aus dem sichtbaren Bereich geschoben und
         # damit unerreichbar.
-        ttk.Button(frage, text="stattdessen neu anlegen (Zweitadresse)",
+        ttk.Button(frage, text="Neu anlegen",
                    command=lambda zz=z, fa=fall: self._als_neu(zz, fa)).pack(
             side="right")
         ttk.Button(frage, text="Ignorieren",
@@ -1417,15 +1424,38 @@ class App(Tk):
                     f"{mit_jahr} mit einem Bestelljahr, das damit NICHT nach "
                     f"Access kommt. Wer dort ein altes Datum stehen hat und "
                     f"kein Merkmal trägt, fällt aus dem Mailing.")
+            self.knopf_ordner.state(["!disabled"])
             messagebox.showinfo(
                 "Fertig",
                 f"Dateien liegen in\n{ordner}\n\n"
-                f"neu anlegen: {ergebnis['neu_anlegen.xlsx']}\n"
-                f"aktualisieren: {ergebnis['aktualisieren.xlsx']}\n\n"
-                "Wie sie nach Access kommen, steht in access_import.txt.")
+                f"kunden_komplett.xlsx — {ergebnis['kunden_komplett.xlsx']} "
+                f"Sätze, das ist die Datei für Access.\n"
+                f"anleitung.txt — wie sie hineinkommt.\n"
+                f"pflege.txt — was in Lexware aufzuräumen wäre.\n"
+                f"protokoll.xlsx — jede Entscheidung mit Begründung.")
         except Exception as e:                      # noqa: BLE001
             self._log("FEHLER: " + traceback.format_exc())
             messagebox.showerror("Schreiben fehlgeschlagen", str(e))
+
+    def _oeffne_ordner(self):
+        """Den Ausgabeordner im Dateimanager zeigen.
+
+        Unter Windows tut es der Explorer, unter Linux xdg-open — entwickelt
+        wird hier, eingesetzt dort.
+        """
+        ordner = self._ausgabeordner()
+        if not ordner.exists():
+            messagebox.showinfo("Noch nichts da",
+                                "Der Ordner entsteht beim Schreiben.")
+            return
+        try:
+            if sys.platform == "win32":
+                os.startfile(ordner)                       # noqa: S606
+            else:
+                subprocess.Popen(["xdg-open", str(ordner)])
+        except Exception as e:                             # noqa: BLE001
+            self._log(f"Ordner ließ sich nicht öffnen: {e}")
+            messagebox.showinfo("Ordner", str(ordner))
 
     # -- Verlauf ------------------------------------------------------
 

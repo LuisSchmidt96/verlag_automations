@@ -167,18 +167,20 @@ so eine Mittagspause.
 
 ## Was herauskommt
 
+Nach `mailing_output/<Jahr>/`:
+
 | Datei | Inhalt |
 |---|---|
-| **`kunden_komplett.xlsx`** | **die ganze Kundentabelle, fertig aktualisiert und ergänzt — der einfache Weg** |
-| `neu_anlegen.xlsx` | nur die neuen Sätze, Access-Spalten ohne `ID` |
-| `aktualisieren.xlsx` | nur die geänderten, `ID` plus alle Felder mit dem Endwert |
+| **`kunden_komplett.xlsx`** | **die ganze Kundentabelle, fertig aktualisiert und ergänzt — die einzige Datei, die nach Access geht** |
+| `anleitung.txt` | wie sie hineinkommt, Schritt für Schritt |
+| `pflege.txt` | was in Lexware und Access aufzuräumen wäre |
 | `protokoll.xlsx` | jede Entscheidung mit Punktzahl und Begründung |
-| `zuordnung.xlsx` | Kd.-Nr. ↔ Access-ID, Sicherung neben dem Access-Feld |
-| `zusammenlegen.xlsx` | welche Access-Sätze in welchen aufgehen — in `kunden_komplett.xlsx` schon entfernt, beim zweiten Weg von Hand zu löschen |
-| `access_import.txt` | beide Wege nach Access, Schritt für Schritt |
-| **`pflege.txt`** | **was in Lexware und Access aufzuräumen wäre** — Dubletten, Hausnummern im Straßenfeld, fehlende PLZ. Ändert nichts, zeigt nur; behoben wird es in der Quelle, sonst steht es nächstes Jahr wieder da |
 
-### Der einfache Weg: eine Jahresdatei
+Es gab einmal fünf Excel-Dateien für zwei verschiedene Importwege, einer davon
+mit SQL-Abfrage. Für einen Vorgang, den jemand einmal im Jahr macht, war das
+eine Zumutung. Geblieben ist die Gesamttabelle: **eine Datei, ein Import.**
+
+### Der Weg nach Access
 
 Access-Datei kopieren und die Kopie `Adressen_<Jahr>.accdb` nennen → in der
 Kopie die Tabelle leeren → `kunden_komplett.xlsx` **anfügen** → komprimieren
@@ -189,20 +191,13 @@ man die Kopie und fängt neu an.
 > **Beim Import „an die Tabelle anfügen" wählen, nicht „in eine neue Tabelle
 > importieren".** Sonst rät Access die Feldtypen — und aus der PLZ `04103`
 > wird die Zahl 4103. Betroffen wären 225 Postleitzahlen und 9 913
-> Telefonnummern, und die `ID` verlöre ihre AutoWert-Eigenschaft.
+> Telefonnummern, und die `ID` verlöre ihre AutoWert-Eigenschaft. Die
+> vorhandene Tabelle hat die Feldtypen seit 25 Jahren korrekt.
 
-Wer lieber gar nichts löscht, nimmt den zweiten Weg (`aktualisieren.xlsx` +
-gespeicherte UPDATE-Abfrage + `neu_anlegen.xlsx`); beide stehen in
-`access_import.txt`.
-
-`kunden_komplett.xlsx` wird **nur** geschrieben, wenn die geladene Access-Datei
-nachweislich die volle Tabelle ist. Ist es die Mailing-Abfrage, würde die Datei
-beim Import alles löschen, was der Filter nicht zeigt — dann bleibt sie aus und
-die Anleitung sagt warum.
-
-`aktualisieren.xlsx` trägt in jedem Feld schon den Endwert (unveränderte Felder
-den bisherigen Access-Wert). Dadurch bleibt die UPDATE-Abfrage stumpf und die
-Datei lesbar: man sieht der Zeile an, wie der Datensatz hinterher aussieht.
+Ist die geladene Access-Datei nur die Mailing-Abfrage, wird die Jahresdatei
+trotzdem geschrieben — aber `anleitung.txt` beginnt dann mit einer Warnung,
+dass sie unvollständig ist. Weil in Schritt 1 eine Kopie entsteht, kann dabei
+nichts verlorengehen; der Lauf lässt sich mit dem richtigen Export wiederholen.
 
 ## Wie der Abgleich arbeitet
 
