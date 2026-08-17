@@ -1425,17 +1425,54 @@ class App(Tk):
                     f"Access kommt. Wer dort ein altes Datum stehen hat und "
                     f"kein Merkmal trägt, fällt aus dem Mailing.")
             self.knopf_ordner.state(["!disabled"])
-            messagebox.showinfo(
-                "Fertig",
-                f"Dateien liegen in\n{ordner}\n\n"
-                f"kunden_komplett.xlsx — {ergebnis['kunden_komplett.xlsx']} "
-                f"Sätze, das ist die Datei für Access.\n"
-                f"anleitung.txt — wie sie hineinkommt.\n"
-                f"pflege.txt — was in Lexware aufzuräumen wäre.\n"
-                f"protokoll.xlsx — jede Entscheidung mit Begründung.")
+            self._fertig_fenster(ordner, ergebnis)
         except Exception as e:                      # noqa: BLE001
             self._log("FEHLER: " + traceback.format_exc())
             messagebox.showerror("Schreiben fehlgeschlagen", str(e))
+
+    def _fertig_fenster(self, ordner, ergebnis):
+        """Schlussmeldung mit dem Weg zum Ordner.
+
+        Ein eigenes Fenster statt messagebox: dort steht der Ordner nur als
+        umgebrochener Pfadtext, den man von Hand nachlaufen muss — der Knopf
+        gehört genau hierhin, wo man ihn gerade braucht.
+        """
+        fenster = Toplevel(self)
+        fenster.title("Fertig")
+        fenster.transient(self)
+        fenster.grab_set()
+
+        ttk.Label(fenster, text="Die Dateien sind geschrieben.",
+                  font=("Segoe UI", 11, "bold")).pack(anchor="w", padx=16,
+                                                      pady=(16, 2))
+        ttk.Label(fenster, text=str(ordner), foreground="#555555").pack(
+            anchor="w", padx=16, pady=(0, 12))
+
+        beschreibung = [
+            ("kunden_komplett.xlsx",
+             f"{ergebnis['kunden_komplett.xlsx']} Sätze — diese Datei geht "
+             f"nach Access", True),
+            ("anleitung.txt", "wie sie dort hineinkommt", False),
+            ("pflege.txt", "was in Lexware und Access aufzuräumen wäre", False),
+            ("protokoll.xlsx", "jede Entscheidung mit Begründung", False),
+        ]
+        tabelle = ttk.Frame(fenster)
+        tabelle.pack(fill="x", padx=16)
+        for i, (name, text, wichtig) in enumerate(beschreibung):
+            ttk.Label(tabelle, text=name, width=22, anchor="w",
+                      font=("Segoe UI", 9, "bold") if wichtig else None).grid(
+                row=i, column=0, sticky="w", pady=1)
+            ttk.Label(tabelle, text=text,
+                      foreground="black" if wichtig else "#555555").grid(
+                row=i, column=1, sticky="w", padx=(8, 0))
+
+        knoepfe = ttk.Frame(fenster)
+        knoepfe.pack(fill="x", padx=16, pady=16)
+        ttk.Button(knoepfe, text="Schließen",
+                   command=fenster.destroy).pack(side="right")
+        ttk.Button(knoepfe, text="Ordner öffnen",
+                   command=self._oeffne_ordner).pack(side="right", padx=8)
+        fenster.wait_window()
 
     def _oeffne_ordner(self):
         """Den Ausgabeordner im Dateimanager zeigen.
