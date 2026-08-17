@@ -20,6 +20,11 @@ etiketten_output/
 pi_bi_output/
 cover_cache/
 cover_output/
+mailing_output/
+
+# mailing_list_updater: Kundendaten aus Access und Lexware — personenbezogen,
+# gehören nicht ins Repo. Der Ordner ist die Arbeitsablage vor Ort.
+mailing_list_updater/*.xlsx
 
 # Runtime state (app-mutated)
 config.json
