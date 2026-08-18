@@ -842,17 +842,21 @@ def _punkte(lex: dict, acc: dict,
 
     # Name bzw. Organisation. Über Kreuz vergleichen, weil in Access mal die
     # Firma im Namensfeld steht und mal in `Institution`.
-    s_name = max(
-        aehnlich(lex_name, acc_name),          # Person gegen Person
-        aehnlich_org(lex_firma, acc_inst),     # Einrichtung gegen Einrichtung
-        aehnlich_org(lex_firma, acc_name),     # Firma steht in Access im
-        aehnlich_org(lex_name, acc_inst),      #   Namensfeld — und umgekehrt
-    )
+    # Welche Paarung den Treffer trägt, wird mitgeführt: sonst steht bei
+    # zwei verschiedenen Menschen desselben Vereins nur „Treffer zu schwach",
+    # und niemand versteht, warum sie überhaupt nebeneinander stehen.
+    paarungen = [
+        ("Name", aehnlich(lex_name, acc_name)),            # Person / Person
+        ("Einrichtung", aehnlich_org(lex_firma, acc_inst)),  # Haus / Haus
+        ("Firma im Namensfeld", aehnlich_org(lex_firma, acc_name)),
+        ("Name im Firmenfeld", aehnlich_org(lex_name, acc_inst)),
+    ]
+    woher, s_name = max(paarungen, key=lambda p: p[1])
     teile.append((40.0, s_name))
     if s_name >= 0.99:
-        gruende.append("Name identisch")
+        gruende.append(f"{woher} identisch")
     elif s_name >= 0.8:
-        gruende.append("Name ähnlich")
+        gruende.append(f"{woher} ähnlich")
 
     # Die Einrichtung EIGENS bewerten, wenn beide Seiten eine nennen. Über das
     # Maximum oben fällt sie sonst unter den Tisch: passt der Personenname
@@ -1133,6 +1137,35 @@ def zuruecksetzen(z: Zuordnung) -> None:
     _vorbelegen(z)
 
 
+def aktiviere(z: Zuordnung) -> None:
+    """Einen beiseitegelegten Fall doch behandeln.
+
+    Gebraucht, wenn im Reiter „Ignoriert" oder „Ohne Auftrag" ein Haken
+    gesetzt wird: der Satz soll dann so eingeordnet werden, als läge ein
+    Auftrag vor — bei gutem Access-Treffer also nach „Aktualisieren", sonst
+    nach „Neu anlegen". Vorher machte das Häkchen dort etwas Willkürliches,
+    weil es die Aktion am angezeigten Reiter festmachte.
+    """
+    bester = z.bester
+    if bester and not bester.gesperrt and not bester.vorname_konflikt \
+            and bester.punkte >= SCHWELLE_SICHER:
+        z.fall = FALL_AKTUALISIEREN
+        z.aktion = AKTION_AKTUALISIEREN
+        z.ziel = bester.access
+        if UEBERNAHME_VORGABE:
+            z.uebernehmen = {
+                f for f, (alt, neu) in abweichungen(z).items()
+                if uebernahme_sinnvoll(f, alt, neu, z.ziel)}
+    elif bester:
+        # Kandidaten da, aber keiner sicher — das ist genau der unklare Fall.
+        z.fall = FALL_UNKLAR
+        z.aktion = AKTION_AKTUALISIEREN if z.ziel else AKTION_NEU
+    else:
+        z.fall = FALL_NEU
+        z.aktion = AKTION_NEU
+        z.ziel = None
+
+
 def _vorbelegen(z: Zuordnung) -> None:
     """Vorschlag für die Aktion. Die GUI darf jederzeit anders entscheiden.
 
@@ -1359,17 +1392,54 @@ ANREDE_SAMMEL = "damen und herren"
 # für Funktionen (Bürgermeister, Pfarrer, Dipl.-Ing.). In 18 366 Access-Sätzen
 # steht kein einziges Mal ein Titel im Vornamensfeld — das ist gepflegt und
 # soll so bleiben.
-_TITEL_TOKEN = re.compile(
-    r"^(prof|dr|dres|pd|habil|h\.?c|phil|med|jur|rer|nat)\.?$", re.I)
+# Access trennt drei Arten von Titel, und sie gehören wirklich getrennt:
+#   Titel 1  Berufsbezeichnung   Bürgermeister, Landrat, Dipl.-Ing.
+#   Titel 2  akademisch, vorn    Dr., Prof. Dr., PD Dr.
+#   Titel 3  nachgestellt        M.A., B.A., MdL
+#
+# Lexware kennt nur ein Vornamensfeld, in dem alles zusammen steht. Aus den
+# 18 366 Access-Sätzen abgelesen: Titel 2 kommt 1 647-mal vor, Titel 3 98-mal,
+# Titel 1 1 610-mal — letzteres aber pflegt der Verlag von Hand (1 237 davon
+# tragen Kommunen-/Bürgermeister-Merkmale). In Lexware steht dazu nichts, also
+# wird Titel 1 hier auch nicht geraten.
+_TITEL2_TOKEN = re.compile(
+    r"^(prof|dr|dres|pd|habil|h\.?c|phil|med|jur|rer|nat|ing)\.?$", re.I)
+_TITEL1_VORN = re.compile(r"^dipl\.?[-\s]*(ing|kfm|päd|inf|biol)?\.?$", re.I)
+_TITEL3_TOKEN = re.compile(
+    r"^(m\.?\s?a|b\.?\s?a|m\.?\s?sc|b\.?\s?sc|ll\.?\s?m|mdl|mdb|m\.?ed)\.?$",
+    re.I)
 
 
-def trenne_titel(vorname) -> tuple[str, str]:
-    """("Prof. Dr. Kurt") -> ("Prof. Dr.", "Kurt")"""
+def trenne_titel(vorname) -> tuple[str, str, str, str]:
+    """("Prof. Dr. Kurt M.A.") -> (Titel1, Titel2, Titel3, Vorname).
+
+    „Dipl.-Ing." zählt als Berufsbezeichnung und damit zu Titel 1 — so führt
+    Access es (24-mal), und so hat es der Verlag gemeint.
+    """
     teile = str(vorname or "").split()
-    titel = []
-    while teile and _TITEL_TOKEN.match(teile[0].strip(".,")):
-        titel.append(teile.pop(0))
-    return " ".join(titel), " ".join(teile)
+
+    titel1 = []
+    while teile and _TITEL1_VORN.match(teile[0]):
+        titel1.append(teile.pop(0))
+    # „Dipl. Ing." steht als zwei Wörter da; das zweite gehört dazu.
+    if titel1 and teile and teile[0].strip(".").lower() in (
+            "ing", "kfm", "päd", "paed", "inf", "biol"):
+        titel1.append(teile.pop(0))
+
+    titel2 = []
+    while teile and _TITEL2_TOKEN.match(teile[0].strip(".,")):
+        titel2.append(teile.pop(0))
+
+    titel3 = []
+    while teile and _TITEL3_TOKEN.match(teile[-1].strip(".,")):
+        titel3.insert(0, teile.pop())
+
+    # „Dr," kommt in Lexware vor — beim Übernehmen gleich zu „Dr." glätten.
+    def sauber(teile_):
+        return " ".join(w.rstrip(",") + "." if w.rstrip(",").isalpha()
+                        and not w.endswith(".") else w for w in teile_)
+
+    return (sauber(titel1), sauber(titel2), sauber(titel3), " ".join(teile))
 
 
 def bereinige_anrede(anrede, hat_firma: bool, hat_namen: bool) -> str:
@@ -1528,9 +1598,11 @@ STAMMFELDER = ["Bestelldatum", "Lexware-Kd-Nr", "Quelle", "erfaßt/geprüft am"]
 
 def lexware_werte(lex: dict) -> dict:
     """Der Lexware-Satz, übersetzt in Access-Feldnamen."""
-    titel, vorname = trenne_titel(lex.get("Vorname"))
+    titel1, titel2, titel3, vorname = trenne_titel(lex.get("Vorname"))
     firma = str(lex.get("Firma") or "").strip()
-    name = str(lex.get("Name") or "").strip()
+    # Nachgestellte Grade hängen auch mal am Nachnamen („Müller M.A.").
+    _, _, titel3_name, name = trenne_titel(lex.get("Name"))
+    titel3 = " ".join(x for x in (titel3, titel3_name) if x)
     strasse, hausnr = teile_strasse(lex.get("Straße"), lex.get("Haus Nr."))
 
     # Lexware kennt nur ein „Zusatz"-Feld, Access unterscheidet `Abteilung`
@@ -1556,7 +1628,12 @@ def lexware_werte(lex: dict) -> dict:
                                    bool(vorname or name)),
         "Name": name if name != firma else "",
         "Vorname": vorname,
-        "Titel 2": titel,
+        # Titel 1 bleibt leer: die Berufsbezeichnung (Bürgermeister, Landrat)
+        # pflegt der Verlag in Access von Hand, Lexware weiß davon nichts.
+        # Beim Aktualisieren bleibt der vorhandene Access-Wert deshalb stehen.
+        "Titel 1": titel1,
+        "Titel 2": titel2,
+        "Titel 3": titel3,
         "Institution": firma,
         "Abteilung": abteilung,
         "c/o": care_of,
@@ -1795,7 +1872,8 @@ def schreibe_aktualisieren(pfad, zuordnungen: list[Zuordnung],
 
 
 def schreibe_gesamttabelle(pfad, access: list[dict], zuordnungen: list[Zuordnung],
-                           spalten: list[str], laufjahr: int, heute) -> int:
+                           spalten: list[str], laufjahr: int, heute,
+                           entfernen=None, markieren=None) -> int:
     """Die komplette Kundentabelle, fertig aktualisiert und ergänzt.
 
     Gedacht für den Weg ohne SQL: in Access die Tabelle leeren und diese eine
@@ -1817,12 +1895,21 @@ def schreibe_gesamttabelle(pfad, access: list[dict], zuordnungen: list[Zuordnung
     # behaltenen Satz. Nur über die Gesamttabelle ist ein Zusammenlegen
     # überhaupt möglich; ein Anfüge-Import kann nichts entfernen.
     aufgeloest = {i for z in zuordnungen for i in z.aufgeloest_in}
+    aufgeloest |= set(entfernen or ())
+    markieren = dict(markieren or {})
 
     zeilen = []
     for satz in access:
         if satz.get("ID") in aufgeloest:
             continue
         zeile = dict(satz)
+        # Statt zu entfernen kann man auch nur kennzeichnen — so hält es der
+        # Verlag bisher: 81 Sätze tragen „verzogen", „verstorben" oder
+        # „Mailing kam zurück" und bleiben trotzdem in der Tabelle. Das
+        # bewahrt die Vorgeschichte, die ein Löschen wegwirft.
+        vermerk = markieren.get(satz.get("ID"))
+        if vermerk:
+            zeile["Datensatz gelöscht"] = vermerk
         neu = aenderungen.get(satz.get("ID"))
         if neu:
             for feld, wert in neu.items():
@@ -2139,7 +2226,8 @@ pflege.txt       was in Lexware und Access aufzuraeumen waere: doppelt
 
 def schreibe_alles(ordner, zuordnungen: list[Zuordnung], access: list[dict],
                    access_spalten: list[str], laufjahr: int, heute,
-                   befund=None, access_warnung=None) -> dict:
+                   befund=None, access_warnung=None,
+                   entfernen=None, markieren=None) -> dict:
     """Die Ausgabe: eine Datei zum Importieren, drei zum Nachlesen.
 
     Es gab einmal fünf Excel-Dateien für zwei verschiedene Importwege. Das war
@@ -2161,7 +2249,7 @@ def schreibe_alles(ordner, zuordnungen: list[Zuordnung], access: list[dict],
     return {
         "kunden_komplett.xlsx": schreibe_gesamttabelle(
             ordner / "kunden_komplett.xlsx", access, zuordnungen,
-            access_spalten, laufjahr, heute),
+            access_spalten, laufjahr, heute, entfernen, markieren),
         "anleitung.txt": schreibe_anleitung(
             ordner / "anleitung.txt", laufjahr=laufjahr,
             access_warnung=access_warnung),

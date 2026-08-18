@@ -41,32 +41,51 @@ FALL_IGNORIERT = "ignoriert"
 # taucht so ein Satz im Export auf und niemand weiß, woher.
 FALL_UNVERAENDERT = "unveraendert"
 
-# Spalten der fünf Listen. Die erste ist immer das Häkchen.
+# Access-Sätze, die aus der Jahresdatei verschwinden oder als verzogen bzw.
+# verstorben gekennzeichnet werden sollen.
+FALL_ENTFERNEN = "entfernen"
+
+# Name, Vorname und Firma je eigene Spalte. Zusammengezogen ("Vorname Name ·
+# Firma") liessen sie sich weder sortieren noch vergleichen — und gerade beim
+# Durchsehen will man die Nachnamen untereinander haben.
+NAMENSSPALTEN = [("nachname", "Name", 130), ("vorname", "Vorname", 100),
+                 ("firma", "Firma", 190)]
+
+
+def _namenswerte(satz: dict) -> tuple:
+    return (str(satz.get("Name") or ""), str(satz.get("Vorname") or ""),
+            str(satz.get("Firma") or satz.get("Institution") or ""))
+
+
+# Spalten der Listen. Die erste ist immer das Häkchen.
 SPALTEN = {
     core.FALL_NEU: [("sel", "", 34), ("kdnr", "Kd.-Nr.", 70),
-                    ("name", "Name / Firma", 240), ("ort", "PLZ / Ort", 150),
-                    ("strasse", "Straße", 180), ("jahr", "Bestelljahr", 80),
+                    *NAMENSSPALTEN, ("ort", "PLZ / Ort", 140),
+                    ("strasse", "Straße", 150), ("jahr", "Jahr", 56),
                     ("hinweis", "Auffälligkeit", 260)],
     core.FALL_AKTUALISIEREN: [("sel", "", 34), ("kdnr", "Kd.-Nr.", 70),
-                              ("name", "Name / Firma", 220),
-                              ("id", "Access-ID", 70), ("punkte", "Punkte", 60),
-                              ("jahr", "Bestelljahr", 80),
+                              *NAMENSSPALTEN,
+                              ("id", "Access-ID", 70), ("punkte", "Punkte", 56),
+                              ("jahr", "Jahr", 56),
                               ("abw", "wird in Access geändert", 260)],
-    core.FALL_UNKLAR: [("sel", "", 34), ("kdnr", "Kd.-Nr.", 70),
-                       ("name", "Name / Firma", 200), ("kand", "Kand.", 46),
+    # Ohne Häkchen: hier entscheiden die Knöpfe in den Einzelheiten, wohin
+    # der Fall geht. Ein Kästchen daneben suggeriert eine zweite, konkurrierende
+    # Bedienung, die es gar nicht gibt.
+    core.FALL_UNKLAR: [("kdnr", "Kd.-Nr.", 70),
+                       *NAMENSSPALTEN, ("kand", "Kand.", 46),
                        ("punkte", "bester", 52), ("abstand", "Abstand", 58),
                        ("jahr", "Bestelljahr", 76),
                        ("folge", "Folge", 190),
                        ("hinweis", "warum unklar", 260)],
     core.FALL_OHNE_AUFTRAG: [("sel", "", 34), ("kdnr", "Kd.-Nr.", 70),
-                             ("name", "Name / Firma", 240),
-                             ("ort", "PLZ / Ort", 150),
-                             ("gruppe", "Kundengruppe", 160),
+                             *NAMENSSPALTEN,
+                             ("ort", "PLZ / Ort", 140),
+                             ("gruppe", "Kundengruppe", 140),
                              ("hinweis", "Hinweis", 260)],
     FALL_IGNORIERT: [("sel", "", 34), ("kdnr", "Kd.-Nr.", 70),
-                     ("name", "Name / Firma", 240), ("ort", "PLZ / Ort", 150),
-                     ("jahr", "Bestelljahr", 80),
-                     ("herkunft", "kam aus", 130),
+                     *NAMENSSPALTEN, ("ort", "PLZ / Ort", 140),
+                     ("jahr", "Jahr", 56),
+                     ("herkunft", "kam aus", 110),
                      ("hinweis", "Hinweis", 260)],
 }
 
@@ -88,6 +107,7 @@ REITER_TITEL = {
     core.FALL_OHNE_AUFTRAG: "Ohne Auftrag",
     FALL_IGNORIERT: "Ignoriert",
     FALL_UNVERAENDERT: "Unverändert",
+    FALL_ENTFERNEN: "Entfernen",
 }
 
 HAKEN_AN, HAKEN_AUS = "☑", "☐"
@@ -127,6 +147,8 @@ class App(Tk):
 
         self.zuordnungen: list[core.Zuordnung] = []
         self.access: list[dict] = []
+        # Access-ID -> "" (entfernen) oder Vermerk ("verzogen", "verstorben")
+        self.entfernen: dict = {}
         self.access_spalten: list[str] = []
         self.befund = None
         self.access_warnung = None
@@ -136,6 +158,12 @@ class App(Tk):
         # Reiter -> (Spalte, absteigend) oder None für die inhaltliche
         # Vorgabe „Fragwürdiges zuerst“
         self.sortierung: dict[str, tuple | None] = {}
+        self.suche: dict[str, StringVar] = {}
+        # Was gerade entschieden wurde. Der Fall verschwindet aus „Unklar"
+        # und taucht irgendwo unter tausend Zeilen wieder auf — ohne Markierung
+        # findet man ihn nicht wieder. Gemerkt wird id(), weil eine Dataclass
+        # mit eq=True nicht hashbar ist.
+        self.zuletzt: set = set()
         self.detail_rahmen: dict[str, ttk.Frame] = {}
 
         self._baue_ui()
@@ -216,6 +244,7 @@ class App(Tk):
                      FALL_IGNORIERT):
             self._baue_reiter(fall)
         self._baue_reiter_unveraendert()
+        self._baue_reiter_entfernen()
         # Erst beim Ansehen fuellen: 17 000 Zeilen bei jeder Entscheidung neu
         # aufzubauen wuerde jeden Klick spuerbar bremsen.
         self.reiter.bind("<<NotebookTabChanged>>", self._reiter_gewechselt)
@@ -246,9 +275,9 @@ class App(Tk):
         self.unv_suche.trace_add("write",
                                  lambda *_: self._fuelle_unveraendert())
 
-        spalten = [("id", "Access-ID", 80), ("name", "Name / Firma", 300),
-                   ("ort", "PLZ / Ort", 180), ("strasse", "Straße", 200),
-                   ("jahr", "Bestelldatum", 90), ("kat", "Kategorie", 90)]
+        spalten = [("id", "Access-ID", 80), *NAMENSSPALTEN,
+                   ("ort", "PLZ / Ort", 160), ("strasse", "Straße", 160),
+                   ("jahr", "Jahr", 56), ("kat", "Kategorie", 80)]
         koerper = ttk.Frame(rahmen)
         koerper.pack(fill="both", expand=True)
         baum = ttk.Treeview(koerper, columns=[s[0] for s in spalten],
@@ -262,8 +291,91 @@ class App(Tk):
         baum.configure(yscrollcommand=vs.set)
         baum.pack(side="left", fill="both", expand=True)
         vs.pack(side="left", fill="y")
+        werkzeug = ttk.Frame(rahmen)
+        werkzeug.pack(fill="x", pady=(4, 0))
+        ttk.Label(werkzeug, text="Ausgewählte:").pack(side="left")
+        for text, vermerk in (("entfernen", ""), ("verzogen", "verzogen"),
+                              ("verstorben", "verstorben")):
+            ttk.Button(werkzeug, text=text,
+                       command=lambda v=vermerk: self._vormerken(
+                           [int(baum.set(e, "id"))
+                            for e in baum.selection()], v)
+                       ).pack(side="left", padx=4)
         self.unv_baum = baum
         self.unv_frisch = False
+
+    def _baue_reiter_entfernen(self):
+        """Access-Sätze, die aus der Jahresdatei sollen.
+
+        Zwei Wege, weil der Verlag bisher den zweiten geht: 81 Sätze tragen
+        „verzogen" oder „verstorben" und bleiben trotzdem in der Tabelle. Das
+        bewahrt die Vorgeschichte. Wirklich entfernen kann man auch — die
+        Vorjahresdatei behält den Satz ja.
+        """
+        rahmen = ttk.Frame(self.reiter)
+        self.reiter.add(rahmen, text=REITER_TITEL[FALL_ENTFERNEN])
+
+        kopf = ttk.Frame(rahmen)
+        kopf.pack(fill="x", pady=(0, 4))
+        self.ent_zahl = StringVar(value="nichts vorgemerkt")
+        ttk.Label(kopf, textvariable=self.ent_zahl).pack(side="left")
+        ttk.Button(kopf, text="Vormerkung aufheben",
+                   command=self._entfernen_zuruecknehmen).pack(side="right")
+
+        spalten = [("id", "Access-ID", 80), ("was", "was geschieht", 190),
+                   *NAMENSSPALTEN, ("ort", "PLZ / Ort", 160),
+                   ("jahr", "Jahr", 56)]
+        koerper = ttk.Frame(rahmen)
+        koerper.pack(fill="both", expand=True)
+        baum = ttk.Treeview(koerper, columns=[s[0] for s in spalten],
+                            show="headings")
+        for schluessel, titel, breite in spalten:
+            baum.heading(schluessel, text=titel,
+                         command=lambda b=baum, s=schluessel:
+                         self._uebersicht_sortieren(b, s))
+            baum.column(schluessel, width=breite, anchor="w")
+        vs = ttk.Scrollbar(koerper, orient="vertical", command=baum.yview)
+        baum.configure(yscrollcommand=vs.set)
+        baum.pack(side="left", fill="both", expand=True)
+        vs.pack(side="left", fill="y")
+        self.ent_baum = baum
+
+    def _vormerken(self, ids, vermerk=""):
+        """`vermerk` leer = Satz fällt weg, sonst Eintrag in „Datensatz
+        gelöscht"."""
+        for i in ids:
+            if i is not None:
+                self.entfernen[i] = vermerk
+        self._fuelle_entfernen()
+        art = f"als {vermerk} gekennzeichnet" if vermerk else "entfernt"
+        self._log(f"{len(list(ids))} Access-Satz/-Sätze werden {art}.")
+
+    def _entfernen_zuruecknehmen(self):
+        for eintrag in self.ent_baum.selection():
+            self.entfernen.pop(int(self.ent_baum.set(eintrag, "id")), None)
+        self._fuelle_entfernen()
+
+    def _fuelle_entfernen(self):
+        baum = getattr(self, "ent_baum", None)
+        if baum is None:
+            return
+        baum.delete(*baum.get_children())
+        nach_id = {a.get("ID"): a for a in self.access}
+        for ident, vermerk in sorted(self.entfernen.items(),
+                                     key=lambda p: str(p[0])):
+            satz = nach_id.get(ident, {})
+            baum.insert("", END, values=(
+                ident,
+                f"als {vermerk} kennzeichnen" if vermerk
+                else "aus der Jahresdatei entfernen",
+                *_namenswerte(satz),
+                f'{satz.get("PLZ") or ""} {satz.get("Ort") or ""}'.strip(),
+                satz.get("Bestelldatum") or "—"))
+        weg = sum(1 for v in self.entfernen.values() if not v)
+        markiert = len(self.entfernen) - weg
+        self.ent_zahl.set(
+            f"{weg} Sätze werden entfernt, {markiert} nur gekennzeichnet"
+            if self.entfernen else "nichts vorgemerkt")
 
     def _reiter_gewechselt(self, _ereignis=None):
         if (self.reiter.tab(self.reiter.select(), "text")
@@ -298,7 +410,7 @@ class App(Tk):
                 continue
             gezeigt += 1
             baum.insert("", END, values=(
-                satz.get("ID"), name,
+                satz.get("ID"), *_namenswerte(satz),
                 f'{satz.get("PLZ") or ""} {satz.get("Ort") or ""}'.strip(),
                 f'{satz.get("Straße") or ""} '
                 f'{satz.get("Hausnummer") or ""}'.strip(),
@@ -347,6 +459,7 @@ class App(Tk):
 
         baum.tag_configure("aus", foreground="#999999")
         baum.tag_configure("auffaellig", background="#fff4e0")
+        baum.tag_configure("frisch", background="#dff0d8")
         baum.bind("<Button-1>", lambda e, f=fall: self._klick(e, f))
         baum.bind("<<TreeviewSelect>>", lambda e, f=fall: self._zeige_detail(f))
         self.baeume[fall] = baum
@@ -354,11 +467,18 @@ class App(Tk):
 
         werkzeug = ttk.Frame(rahmen)
         werkzeug.pack(fill="x", pady=(4, 0))
-        ttk.Button(werkzeug, text="Alle anhaken",
-                   command=lambda f=fall: self._alle(f, True)).pack(side="left")
-        ttk.Button(werkzeug, text="Alle abwählen",
-                   command=lambda f=fall: self._alle(f, False)
-                   ).pack(side="left", padx=6)
+        ttk.Label(werkzeug, text="suchen:").pack(side="left")
+        such = StringVar()
+        self.suche[fall] = such
+        ttk.Entry(werkzeug, textvariable=such, width=26).pack(side="left",
+                                                              padx=(4, 14))
+        such.trace_add("write", lambda *_, f=fall: self._fuelle(f))
+        if SPALTEN[fall][0][0] == "sel":
+            ttk.Button(werkzeug, text="Alle anhaken",
+                       command=lambda f=fall: self._alle(f, True)).pack(side="left")
+            ttk.Button(werkzeug, text="Alle abwählen",
+                       command=lambda f=fall: self._alle(f, False)
+                       ).pack(side="left", padx=6)
         ttk.Separator(werkzeug, orient="vertical").pack(side="left", fill="y",
                                                         padx=10)
         ttk.Button(werkzeug, text="Zeile zurücksetzen",
@@ -518,6 +638,13 @@ class App(Tk):
             zeilen.append((self._sortschluessel(fall, z, auffaellig),
                            werte, auffaellig, z))
 
+        # Suchfeld: über alle angezeigten Spalten, damit man nach Name,
+        # Ort oder Kd.-Nr. gleichermaßen suchen kann.
+        such = core.norm_text(self.suche[fall].get()) if fall in self.suche else ""
+        if such:
+            zeilen = [zz for zz in zeilen
+                      if such in core.norm_text(" ".join(str(w) for w in zz[1]))]
+
         gewaehlt = self.sortierung.get(fall)
         if gewaehlt is None:
             zeilen.sort(key=lambda t: t[0])
@@ -534,7 +661,9 @@ class App(Tk):
 
         for _, werte, auffaellig, z in zeilen:
             tags = []
-            if auffaellig:
+            if id(z) in self.zuletzt:
+                tags.append("frisch")
+            elif auffaellig:
                 tags.append("auffaellig")
             if z.aktion == core.AKTION_NICHTS:
                 tags.append("aus")
@@ -605,7 +734,7 @@ class App(Tk):
                                         date.today().year, date.today())
             probleme = core.auffaelligkeiten(lex, satz) + z.hinweise
             auffaellig = bool(probleme)
-            return ((haken, kdnr, _name(satz),
+            return ((haken, kdnr, *_namenswerte(satz),
                      f'{satz.get("PLZ") or ""} {satz.get("Ort") or ""}'.strip(),
                      f'{satz.get("Straße") or ""} '
                      f'{satz.get("Hausnummer") or ""}'.strip(),
@@ -615,7 +744,7 @@ class App(Tk):
         if fall == core.FALL_AKTUALISIEREN:
             zeile = core.baue_aktualisierung(z, date.today().year, date.today())
             geaendert = core.geaenderte_felder(z, zeile)
-            return ((haken, kdnr, _name(zeile),
+            return ((haken, kdnr, *_namenswerte(zeile),
                      (z.ziel or {}).get("ID", ""),
                      f"{z.bester.punkte:.0f}" if z.bester else "",
                      zeile.get("Bestelldatum") or "—",
@@ -641,18 +770,19 @@ class App(Tk):
                 folge = f"bekommt Post ohnehin ({'/'.join(sorted(dauerhaft))})"
             else:
                 folge = "Brief hängt am Bestelldatum"
-            return ((haken, kdnr, _name(lex), len(z.kandidaten),
+            return ((kdnr, *_namenswerte(core.lexware_werte(lex)),
+                     len(z.kandidaten),
                      f"{z.bester.punkte:.0f}" if z.bester else "",
                      abstand, z.bestelljahr or "—", folge,
                      " | ".join(z.unklar_grund)), True)
 
         if fall == FALL_IGNORIERT:
-            return ((haken, kdnr, _name(lex),
+            return ((haken, kdnr, *_namenswerte(core.lexware_werte(lex)),
                      f'{lex.get("Plz") or ""} {lex.get("Ort") or ""}'.strip(),
                      z.bestelljahr or "—", REITER_TITEL.get(z.fall, z.fall),
                      " | ".join(z.unklar_grund or z.hinweise)), False)
 
-        return ((haken, kdnr, _name(lex),
+        return ((haken, kdnr, *_namenswerte(core.lexware_werte(lex)),
                  f'{lex.get("Plz") or ""} {lex.get("Ort") or ""}'.strip(),
                  f'{lex.get("Kundengruppe") or ""}/{lex.get("Branche") or ""}',
                  " | ".join(z.hinweise)), False)
@@ -691,30 +821,49 @@ class App(Tk):
             return
         if baum.identify_column(ereignis.x) != "#1":
             return
+        if SPALTEN[fall][0][0] != "sel":
+            return
         eintrag = baum.identify_row(ereignis.y)
         if eintrag:
             self._umschalten(fall, eintrag)
             return "break"
 
-    def _umschalten(self, fall, eintrag, an=None):
+    def _umschalten(self, fall, eintrag, an=None, neu_aufbauen=True):
         z = self.zeilen[fall][eintrag]
         aus = z.aktion == core.AKTION_NICHTS
         an = aus if an is None else an
-        if an:
+        if an and fall in (FALL_IGNORIERT, core.FALL_OHNE_AUFTRAG):
+            # Zurück in den Reiter, in den der Fall gehört: bei gutem
+            # Access-Treffer nach „Aktualisieren", sonst nach „Neu anlegen".
+            # Vorher machte das Häkchen hier die Aktion am angezeigten Reiter
+            # fest — was in diesen beiden Reitern willkürlich war.
+            core.aktiviere(z)
+        elif an:
             z.aktion = (core.AKTION_AKTUALISIEREN
                         if fall == core.FALL_AKTUALISIEREN and z.ziel
                         else core.AKTION_NEU)
         else:
             z.aktion = core.AKTION_NICHTS
         z.beruehrt = True
+        if an and fall in (FALL_IGNORIERT, core.FALL_OHNE_AUFTRAG):
+            # Der Fall wechselt den Reiter. Beim Einzelklick gleich neu
+            # aufbauen; bei „Alle anhaken" erst am Ende, sonst würden der
+            # Schleife nach dem ersten Umschalten die Zeilen unter den
+            # Händen weggezogen.
+            if neu_aufbauen:
+                self._fuelle_alle()
+                self._log(f'Kd.-Nr. {z.lexware.get("Kd.-Nr")} → '
+                          f'{REITER_TITEL.get(z.fall, z.fall)}')
+            return
         baum = self.baeume[fall]
         baum.set(eintrag, "sel", HAKEN_AN if an else HAKEN_AUS)
         tags = [t for t in baum.item(eintrag, "tags") if t != "aus"]
         baum.item(eintrag, tags=tags if an else tags + ["aus"])
 
     def _alle(self, fall, an):
-        for eintrag in self.baeume[fall].get_children():
-            self._umschalten(fall, eintrag, an)
+        for eintrag in list(self.baeume[fall].get_children()):
+            self._umschalten(fall, eintrag, an, neu_aufbauen=False)
+        self._fuelle_alle()
 
     # -- Zurücksetzen -------------------------------------------------
 
@@ -1001,15 +1150,16 @@ class App(Tk):
                   text=(f"{anzahl} passender Satz in Access." if anzahl == 1
                         else f"{anzahl} passende Sätze in Access."),
                   font=("Segoe UI", 9, "bold")).pack(side="left")
-        # Diese beiden Knöpfe stehen ÜBER der Liste, nicht darunter: bei acht
-        # Kandidaten waren sie sonst aus dem sichtbaren Bereich geschoben und
-        # damit unerreichbar.
+        # Über der Liste, nicht darunter: bei acht Kandidaten waren sie sonst
+        # aus dem sichtbaren Bereich geschoben. Und links neben der Zeile, nicht
+        # am Fensterrand — dort sucht man sie nicht, wenn der Blick bei den
+        # Datensätzen ist.
         ttk.Button(frage, text="Neu anlegen",
                    command=lambda zz=z, fa=fall: self._als_neu(zz, fa)).pack(
-            side="right")
+            side="left", padx=(16, 6))
         ttk.Button(frage, text="Ignorieren",
                    command=lambda zz=z, fa=fall:
-                   self._als_nichts(zz, fa)).pack(side="right", padx=6)
+                   self._als_nichts(zz, fa)).pack(side="left")
 
         gitter = self._scrollbereich(rahmen)
         self._kandidatengitter(gitter, z, fall)
@@ -1066,9 +1216,10 @@ class App(Tk):
         anzahl = len(core.VERGLEICHSFELDER)
 
         # Kopfzeile mit den FELDNAMEN. Ohne sie weiß niemand, was in Spalte 4
-        # steht — die Werte allein sagen es nicht.
+        # steht — die Werte allein sagen es nicht. Spalte 1 bleibt für den
+        # Knopf frei: er gehört neben die Punktzahl, nicht ans Fensterende.
         ttk.Label(gitter, text="", width=16).grid(row=0, column=0)
-        for s, feld in enumerate(core.VERGLEICHSFELDER, start=1):
+        for s, feld in enumerate(core.VERGLEICHSFELDER, start=2):
             ttk.Label(gitter, text=feld, font=("Segoe UI", 8, "bold"),
                       foreground="#555555").grid(row=0, column=s, sticky="w",
                                                  padx=6)
@@ -1076,7 +1227,7 @@ class App(Tk):
         # Die Bezugszeile: das, wogegen alles darunter verglichen wird.
         ttk.Label(gitter, text="Lexware", font=("Segoe UI", 9, "bold")).grid(
             row=1, column=0, sticky="w", padx=(0, 8))
-        for s, feld in enumerate(core.VERGLEICHSFELDER, start=1):
+        for s, feld in enumerate(core.VERGLEICHSFELDER, start=2):
             ttk.Label(gitter, text=str(werte.get(feld) or "—")[:22],
                       font=("Segoe UI", 9, "bold")).grid(row=1, column=s,
                                                          sticky="w", padx=6)
@@ -1101,14 +1252,15 @@ class App(Tk):
                       foreground="#a00000" if k.gesperrt else "black").grid(
                 row=r, column=0, sticky="w", padx=(0, 8))
             for s, (feld, l, a, befund) in enumerate(
-                    core.vergleiche(z.lexware, k.access), start=1):
+                    core.vergleiche(z.lexware, k.access), start=2):
                 ttk.Label(gitter, text=(a or "—")[:22],
                           foreground=self.FARBE[befund]).grid(
                     row=r, column=s, sticky="w", padx=6)
-            # Beschriftung ausgeschrieben: "übernehmen" liest sich wie
-            # "diesen Satz neu anlegen", gemeint ist aber das Gegenteil —
-            # in diesen vorhandenen Access-Satz hineinschreiben.
-            self._kandidatenknopf(gitter, z, k, fall, r, anzahl + 1,
+            # Spalte 1, also direkt hinter Punktzahl und ID: am Fensterrand
+            # hinter acht Feldspalten fand ihn der Blick nicht, der bei den
+            # Daten war. Beschriftung ausgeschrieben, weil „übernehmen" sich
+            # wie „neu anlegen" liest — gemeint ist das Gegenteil.
+            self._kandidatenknopf(gitter, z, k, fall, r, 1,
                                   "diesen aktualisieren")
 
         ttk.Label(gitter, text="zusammen-\nlegen", foreground="#555555",
@@ -1117,13 +1269,13 @@ class App(Tk):
         ttk.Button(gitter, text="Ausgewählte zusammenlegen …",
                    command=lambda zz=z, fa=fall:
                    self._zusammenlegen(zz, fa)).grid(
-            row=len(kandidaten) + 3, column=anzahl + 1, columnspan=3,
+            row=len(kandidaten) + 3, column=1, columnspan=3,
             sticky="w", padx=8, pady=(6, 0))
         ttk.Label(gitter,
                   text="grün = stimmt mit Lexware überein   ·   "
                        "rot = weicht ab   ·   grau = auf einer Seite leer",
                   foreground="#777777", font=("Segoe UI", 8)).grid(
-            row=len(kandidaten) + 3, column=0, columnspan=anzahl + 1,
+            row=len(kandidaten) + 4, column=0, columnspan=anzahl + 3,
             sticky="w", pady=(6, 0))
 
     def _satzfenster(self, titel, kopf, unterzeile, satz, bei_ok):
@@ -1176,6 +1328,24 @@ class App(Tk):
             if not core.gleichwertig(feld, var.get(), grundlage.get(feld)):
                 z.aenderungen[feld] = var.get()
 
+    def _zeige_zuletzt(self, z):
+        """Sagen, wohin der Fall gewandert ist — mit Reiter und Zeilennummer.
+
+        Ohne das verschwindet er aus „Unklar" und steht als Zeile 71 unter
+        1 290 anderen; man hält ihn für verloren. Grün hinterlegt ist er
+        zusätzlich.
+        """
+        ziel = self._reiter_von(z)
+        baum = self.baeume.get(ziel)
+        if baum is None:
+            return
+        for i, eintrag in enumerate(baum.get_children(), start=1):
+            if self.zeilen[ziel][eintrag] is z:
+                self._log(f'   steht jetzt in „{REITER_TITEL[ziel]}“, '
+                          f'Zeile {i} von {len(baum.get_children())} '
+                          f'(grün hinterlegt; über das Suchfeld findbar)')
+                return
+
     def _weiter_in_liste(self, fall, eintrag):
         """Nach einer Entscheidung die nächste Zeile auswählen.
 
@@ -1224,10 +1394,12 @@ class App(Tk):
             z.fall = core.FALL_AKTUALISIEREN
             z.beruehrt = True
             self._uebernimm_aenderungen(z, vars_, behalten.access)
+            self.zuletzt.add(id(z))
             self._fuelle_alle()
             self._log(f'Kd.-Nr. {z.lexware.get("Kd.-Nr")}: Access-IDs '
                       f'{", ".join(str(i) for i in z.aufgeloest_in)} gehen in '
                       f'{behalten.access.get("ID")} auf.')
+            self._zeige_zuletzt(z)
             self._weiter_in_liste(fall, stelle)
 
         self._satzfenster(
@@ -1240,13 +1412,16 @@ class App(Tk):
             verschmolzen, uebernehmen)
 
     def _kandidatenknopf(self, gitter, z, k, fall, zeile, spalte, text):
-        if k.gesperrt:
-            ttk.Label(gitter, text=f"⛔ {k.sperrgrund}",
-                      foreground="#a00000").grid(row=zeile, column=spalte,
-                                                 sticky="w", padx=8)
+        """Der Knopf steht in `spalte`; ein Sperrvermerk kommt hinter die
+        Felder, damit er dem Knopf nicht den Platz nimmt."""
         ttk.Button(gitter, text=text,
                    command=lambda: self._waehle_ziel(z, k, fall)).grid(
-            row=zeile, column=spalte + 1, sticky="w", padx=8, pady=1)
+            row=zeile, column=spalte, sticky="w", padx=(0, 10), pady=1)
+        if k.gesperrt:
+            ttk.Label(gitter, text=f"⛔ {k.sperrgrund}",
+                      foreground="#a00000").grid(
+                row=zeile, column=len(core.VERGLEICHSFELDER) + 2,
+                sticky="w", padx=8)
 
     def _waehle_ziel(self, z, kandidat, fall):
         """Diesen Access-Satz aktualisieren — mit Vorschau, wenn aus „Unklar"."""
@@ -1263,9 +1438,11 @@ class App(Tk):
                     if core.uebernahme_sinnvoll(f, a_, n_, z.ziel)}
             if vars_:
                 self._uebernimm_aenderungen(z, vars_, kandidat.access)
+            self.zuletzt.add(id(z))
             self._fuelle_alle()
             self._log(f'Kd.-Nr. {z.lexware.get("Kd.-Nr")} → Access-ID '
                       f'{kandidat.access.get("ID")} (aktualisieren)')
+            self._zeige_zuletzt(z)
             self._weiter_in_liste(fall, stelle)
 
         if fall != core.FALL_UNKLAR:
@@ -1306,8 +1483,10 @@ class App(Tk):
             if vars_:
                 self._uebernimm_aenderungen(
                     z, vars_, core.lexware_werte(z.lexware))
+            self.zuletzt.add(id(z))
             self._fuelle_alle()
             self._log(f'Kd.-Nr. {z.lexware.get("Kd.-Nr")} → neuer Datensatz')
+            self._zeige_zuletzt(z)
             self._weiter_in_liste(fall, stelle)
 
         if fall != core.FALL_UNKLAR:
@@ -1415,7 +1594,7 @@ class App(Tk):
             kdnr = str(lex.get("Kd.-Nr") or "")
             if z.aktion == core.AKTION_NEU:
                 satz = core.baue_neuen_satz(z, self.access_spalten, jahr, heute)
-                zeilen.append(("neu anlegen", kdnr, _name(satz),
+                zeilen.append(("neu anlegen", kdnr, *_namenswerte(satz),
                                f'{satz.get("PLZ") or ""} {satz.get("Ort") or ""}',
                                "", str(satz.get("Bestelldatum") or "—"), ""))
             elif z.aktion == core.AKTION_AKTUALISIEREN and z.ziel:
@@ -1425,11 +1604,11 @@ class App(Tk):
                 if z.aufgeloest_in:
                     was += ("  ⊕ löst auf: "
                             + ", ".join(str(i) for i in z.aufgeloest_in))
-                zeilen.append(("aktualisieren", kdnr, _name(zeile),
+                zeilen.append(("aktualisieren", kdnr, *_namenswerte(zeile),
                                f'{zeile.get("PLZ") or ""} {zeile.get("Ort") or ""}',
                                str(z.ziel.get("ID")),
                                str(zeile.get("Bestelldatum") or "—"), was))
-        zeilen.sort(key=lambda r: (r[0], r[2].lower()))
+        zeilen.sort(key=lambda r: (r[0], r[2].lower(), r[4].lower()))
 
         fenster = Toplevel(self)
         fenster.title("Änderungen vor dem Schreiben")
@@ -1455,10 +1634,10 @@ class App(Tk):
                            f"die auf „Ignorieren“ stehen.",
                       foreground="#a06000").pack(anchor="w", padx=12)
 
-        spalten = [("was", "Aktion", 110), ("kdnr", "Kd.-Nr.", 74),
-                   ("name", "Name / Firma", 250), ("ort", "PLZ / Ort", 160),
-                   ("id", "Access-ID", 74), ("jahr", "Bestelljahr", 84),
-                   ("aenderung", "was geschieht", 400)]
+        spalten = [("was", "Aktion", 106), ("kdnr", "Kd.-Nr.", 70),
+                   *NAMENSSPALTEN, ("ort", "PLZ / Ort", 150),
+                   ("id", "Access-ID", 70), ("jahr", "Jahr", 52),
+                   ("aenderung", "was geschieht", 330)]
         koerper = ttk.Frame(fenster)
         koerper.pack(fill="both", expand=True, padx=12, pady=8)
         baum = ttk.Treeview(koerper, columns=[s[0] for s in spalten],
@@ -1510,7 +1689,9 @@ class App(Tk):
             ergebnis = core.schreibe_alles(
                 ordner, self.zuordnungen, self.access, self.access_spalten,
                 date.today().year, date.today(), self.befund,
-                self.access_warnung)
+                self.access_warnung,
+                entfernen=[i for i, v in self.entfernen.items() if not v],
+                markieren={i: v for i, v in self.entfernen.items() if v})
             self._log(f"Geschrieben nach {ordner}:")
             for name, wert in ergebnis.items():
                 self._log(f"   {name}: {wert}")
