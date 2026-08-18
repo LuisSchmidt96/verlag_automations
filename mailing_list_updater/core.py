@@ -325,8 +325,12 @@ def norm_hausnr(wert) -> str:
 # "Wilhelmstr. 14-18". Der Straßenteil muss dabei übrig bleiben und lang genug
 # sein — sonst zerlegte die Regel Mannheimer Quadrate wie "C 5" in die Straße
 # "C" und die Hausnummer "5", und die halbe Innenstadt fände sich nicht mehr.
+# Höchstens vier Ziffern je Teil: „14-18" ist eine Hausnummernspanne,
+# „60191-1234" eine amerikanische ZIP+4, die zufällig am Ende einer Zeile
+# steht. Ohne die Grenze wurde aus „Wood Dale IL 60191-1234" die Straße
+# „Wood Dale IL" mit der Hausnummer „60191-1234".
 _HAUSNR_AM_ENDE = re.compile(
-    r"^(.{3,}?)[\s,]+(\d+\s*[a-zA-Z]?(?:\s*[-/]\s*\d+\s*[a-zA-Z]?)?)$")
+    r"^(.{3,}?)[\s,]+(\d{1,4}\s*[a-zA-Z]?(?:\s*[-/]\s*\d{1,4}\s*[a-zA-Z]?)?)$")
 
 
 def teile_strasse(strasse, hausnr="") -> tuple[str, str]:
@@ -351,7 +355,12 @@ def teile_plz_ort(wert) -> tuple[str, str]:
     """Die Aufträge-Datei führt PLZ und Ort in EINEM Feld ("36244 Bad
     Hersfeld"). Auslandsadressen haben teils Buchstabenpräfixe (CH-8000)."""
     s = str(wert or "").strip()
-    treffer = re.match(r"^\s*([A-Za-z]{1,3}-)?(\d{4,5})\s+(.*)$", s)
+    # Der Bindestrich gehört bei polnischen („59-241") und amerikanischen
+    # („60191-1234") Postleitzahlen zur Zahl und darf sie nicht beenden.
+    # Zwei bis fünf Ziffern, weil polnische Codes „59-241" vorn nur zwei
+    # haben. Das Feld enthält immer PLZ + Ort, deshalb kann die Zahl am
+    # Anfang nichts anderes sein.
+    treffer = re.match(r"^\s*([A-Za-z]{1,3}-)?(\d{2,5}(?:-\d{2,4})?)\s+(.*)$", s)
     if treffer:
         return treffer.group(2), treffer.group(3).strip()
     return "", s
@@ -559,43 +568,43 @@ def pruefe_access_vollstaendigkeit(access: list[dict], laufjahr: int,
     """Erkennt, ob statt der Kundentabelle nur die Mailing-Abfrage exportiert
     wurde.
 
-    Das ist der teuerste Fehler, den dieses Tool machen kann: wer vor Jahren
-    gekauft hat und kein Merkmal trägt, steht nicht im Filter — wird also
-    nicht gefunden und als Neukunde ein zweites Mal angelegt. Bei tausend
-    Sätzen fällt das niemandem einzeln auf.
+    Der Kronzeuge sind **Kunden der Kategorie K mit altem Bestelldatum**. Nur
+    bei ihnen hängt der Brief am Kaufjahr; wer 2015 zuletzt gekauft hat, wäre
+    aus einer Mailing-Abfrage „letzte drei Jahre" herausgefallen. Stehen
+    trotzdem viele davon im Export, ist es die volle Tabelle.
 
-    Die Signatur ist eindeutig: im Filter trägt praktisch JEDER Satz mit altem
-    oder fehlendem Bestelldatum ein Merkmal — denn sonst wäre er nicht drin.
-    In der vollen Tabelle ist das ein gutes Stück anders.
+    Ein früherer Versuch prüfte, ob Sätze ohne aktuelles Bestelldatum ein
+    Merkmal tragen — und war doppelt untauglich: `VIP/W/K/X` ist bei praktisch
+    jedem Satz gefüllt, und ein Bestelldatum führt der Verlag ohnehin nur bei
+    K-Kunden. Die Meldung erschien deshalb immer.
     """
     if not access:
         return None
     grenze = laufjahr - jahre
-    alt_ohne_merkmal = 0
-    alt_gesamt = 0
+    k_alt = k_gesamt = 0
     for satz in access:
+        if str(satz.get("VIP/W/K/X") or "").strip().upper() != "K":
+            continue
+        k_gesamt += 1
         jahr = satz.get("Bestelldatum")
-        jahr = jahr if isinstance(jahr, int) else None
-        if jahr is not None and jahr >= grenze:
-            continue                       # frischer Käufer, sagt nichts aus
-        alt_gesamt += 1
-        if not any(str(satz.get(f) or "").strip() for f in MERKMALSFELDER):
-            alt_ohne_merkmal += 1
+        if not isinstance(jahr, int) or jahr < grenze:
+            k_alt += 1
 
-    if not alt_gesamt:
-        return None
-    anteil = alt_ohne_merkmal / alt_gesamt
-    if anteil >= 0.02:
-        return None                        # sieht nach der vollen Tabelle aus
+    if k_gesamt < 50:
+        return None                        # zu wenig Material für ein Urteil
+    anteil = k_alt / k_gesamt
+    if anteil >= 0.10:
+        return None                        # klar die volle Tabelle
 
     return (
-        f"Die Access-Datei sieht nach der Mailing-Abfrage aus, nicht nach der "
-        f"vollen Kundentabelle: von {alt_gesamt} Sätzen ohne aktuelles "
-        f"Bestelldatum trägt nur {alt_ohne_merkmal} kein VIP-/Presse-/Autoren-"
-        f"Merkmal ({anteil:.1%}). In der vollen Tabelle wären das deutlich "
-        f"mehr. Folge: Altkunden außerhalb des Filters werden nicht gefunden "
-        f"und als Neukunden ein ZWEITES Mal angelegt. Bitte die komplette "
-        f"Kundentabelle exportieren, nicht die Mailing-Abfrage.")
+        f"Die Access-Datei könnte die Mailing-Abfrage sein statt der vollen "
+        f"Kundentabelle: von {k_gesamt} Sätzen der Kategorie K haben nur "
+        f"{k_alt} ein Bestelldatum, das älter als {grenze} ist ({anteil:.1%}). "
+        f"Bei K hängt der Brief am Kaufjahr — eine Abfrage „letzte {jahre} "
+        f"Jahre“ enthielte solche Sätze gar nicht, die volle Tabelle dagegen "
+        f"reichlich. Folge: Altkunden würden nicht gefunden und ein ZWEITES "
+        f"Mal angelegt. Bitte prüfen, ob wirklich die ganze Tabelle "
+        f"exportiert wurde.")
 
 
 def pruefe_spalten(access_spalten: list[str], kunden_spalten: list[str],
@@ -674,6 +683,7 @@ AKTION_NICHTS = "ignorieren"
 # und beide sind richtig — wegzuwerfen wäre schade.
 MEHRWERTIG = ("eMail", "Telefon1", "Telefon2", "Telefon3", "Telefax")
 TRENNER_MEHRWERTIG = ", "
+TRENNER_BEMERKUNG = " · "
 
 
 @dataclass
@@ -1258,9 +1268,6 @@ def wert_geht_verloren(alt, neu) -> bool:
                     for wn in worte_n))
 
 
-ANREDE_SAMMEL = "damen und herren"
-
-
 def uebernahme_sinnvoll(feld: str, alt, neu, ziel: dict) -> bool:
     """Soll diese Übernahme überhaupt vorgeschlagen werden?
 
@@ -1345,6 +1352,8 @@ def abweichungen(z: Zuordnung) -> dict[str, tuple]:
 # Feldabbildung Lexware -> Access
 # ---------------------------------------------------------------------
 
+ANREDE_SAMMEL = "damen und herren"
+
 # Lexware führt akademische Titel im Vornamen ("Dr. Raimund Waibel"), Access
 # hält sie getrennt: `Titel 2` für die akademischen (Dr., Prof. Dr.), `Titel 1`
 # für Funktionen (Bürgermeister, Pfarrer, Dipl.-Ing.). In 18 366 Access-Sätzen
@@ -1364,12 +1373,22 @@ def trenne_titel(vorname) -> tuple[str, str]:
 
 
 def bereinige_anrede(anrede, hat_firma: bool, hat_namen: bool) -> str:
-    """Tippfehler glätten; Einrichtungen ohne Ansprechperson bekommen die in
-    Access übliche Sammelanrede (3 172 von 3 178 solcher Sätze führen sie)."""
+    """Tippfehler glätten und die Sammelanrede richtig setzen.
+
+    „Damen und Herren" gehört an Einrichtungen ohne Ansprechperson — 3 172 von
+    3 178 solcher Access-Sätze führen sie. Sobald aber ein Name dasteht, ist
+    sie falsch: dann wird die Person angeschrieben, nicht das Haus. Beide
+    Richtungen werden hier hergestellt, damit niemand sie von Hand nachziehen
+    muss.
+    """
     s = str(anrede or "").strip()
     ersatz = {"herrn": "Herr", "herr": "Herr", "fraz": "Frau", "frau": "Frau"}
     s = ersatz.get(s.lower(), s)
-    if not s and hat_firma and not hat_namen:
+
+    if hat_namen:
+        # Mit Namen keine Sammelanrede — lieber gar keine als eine falsche.
+        return "" if norm_text(s) == ANREDE_SAMMEL else s
+    if not s and hat_firma:
         return "Damen und Herren"
     return s
 
@@ -1513,15 +1532,35 @@ def lexware_werte(lex: dict) -> dict:
     firma = str(lex.get("Firma") or "").strip()
     name = str(lex.get("Name") or "").strip()
     strasse, hausnr = teile_strasse(lex.get("Straße"), lex.get("Haus Nr."))
+
+    # Lexware kennt nur ein „Zusatz"-Feld, Access unterscheidet `Abteilung`
+    # (Fachbereich im Haus) und `c/o` (Empfang über jemand anderen). Ein
+    # „c/o …" gehört in die Zustellzeile, nicht in die Abteilung — sonst
+    # steht es im Brief an der falschen Stelle.
+    # Die drei Freifelder aus Lexware sind Notizen derselben Art, die in
+    # Access unter `Bemerkungen` stehen („Freie Journalistin", „MA: Räume des
+    # Glaubens"). Sie werden zusammengefasst, damit nichts davon verlorengeht.
+    freifelder = TRENNER_BEMERKUNG.join(
+        w for w in (str(lex.get(f) or "").strip()
+                    for f in ("Freifeld1", "Freifeld2", "Freifeld3")) if w)
+
+    zusatz = str(lex.get("Zusatz") or "").strip()
+    care_of = zusatz if norm_text(zusatz).startswith("c o") else ""
+    abteilung = "" if care_of else zusatz
     # Steht bei einer Firma kein Personenname, wandert die Firma nicht
     # zusätzlich ins Namensfeld — Access trennt das sauber.
     werte = {
-        "Anrede": bereinige_anrede(lex.get("Anrede"), bool(firma), bool(vorname)),
+        # `hat_namen` muss BEIDE Namensteile sehen: ein Satz mit Nachnamen,
+        # aber ohne Vornamen ist trotzdem an eine Person gerichtet.
+        "Anrede": bereinige_anrede(lex.get("Anrede"), bool(firma),
+                                   bool(vorname or name)),
         "Name": name if name != firma else "",
         "Vorname": vorname,
         "Titel 2": titel,
         "Institution": firma,
-        "Abteilung": str(lex.get("Zusatz") or "").strip(),
+        "Abteilung": abteilung,
+        "c/o": care_of,
+        "Bemerkungen": freifelder,
         "PLZ": str(lex.get("Plz") or "").strip(),
         "Ort": str(lex.get("Ort") or "").strip(),
         "Straße": strasse,
@@ -1563,13 +1602,28 @@ def baue_aktualisierung(z: Zuordnung, laufjahr: int, heute) -> dict:
     """
     acc = z.ziel or {}
     lex = lexware_werte(z.lexware)
-    zeile = {"ID": acc.get("ID")}
 
-    for feld in AKTUALISIERBAR:
-        # Nur was ausdrücklich übernommen wurde, sonst der Access-Wert. Die
-        # Merkmalfelder stehen nie in `uebernehmen`, bleiben also unberührt,
-        # solange sie niemand von Hand ändert.
-        zeile[feld] = lex.get(feld) if feld in z.uebernehmen else acc.get(feld)
+    # Vom vollständigen Access-Satz ausgehen, nicht von einer Auswahl: seit
+    # die Ausgabe die ganze Tabelle schreibt, gibt es keinen Grund mehr,
+    # Felder auszusparen — und die Eingabemaske zeigt in beiden Reitern
+    # dieselben Felder. Unberührtes trägt weiterhin den Access-Wert.
+    zeile = dict(acc)
+
+    for feld in ADRESSFELDER:
+        if feld in z.uebernehmen:
+            zeile[feld] = lex.get(feld)
+
+    # Bemerkungen werden ANGEHÄNGT, nie ersetzt: in Access steht dort oft
+    # etwas, das jemand vor Jahren notiert hat, und die Lexware-Freifelder
+    # sagen etwas anderes. Die Prüfung auf „steckt schon drin" macht das
+    # wiederholbar — ein zweiter Lauf verdoppelt den Text nicht.
+    notiz = str(lex.get("Bemerkungen") or "").strip()
+    if notiz:
+        vorhanden = str(acc.get("Bemerkungen") or "").strip()
+        if not vorhanden:
+            zeile["Bemerkungen"] = notiz
+        elif norm_text(notiz) not in norm_text(vorhanden):
+            zeile["Bemerkungen"] = vorhanden + TRENNER_BEMERKUNG + notiz
 
     alt = acc.get("Bestelldatum")
     alt = alt if isinstance(alt, int) else None

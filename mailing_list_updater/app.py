@@ -35,6 +35,12 @@ from mailing_list_updater import core
 # die Vorbelegung "ignorieren" der unklaren Fälle zählt NICHT dazu.
 FALL_IGNORIERT = "ignoriert"
 
+# Access-Sätze, die dieser Lauf nicht anfasst. Sie stehen in der Ausgabedatei —
+# die ist ja die ganze Tabelle —, sind aber nie jemandem zur Entscheidung
+# vorgelegt worden, weil kein Lexware-Kunde auf sie zeigt. Ohne diesen Reiter
+# taucht so ein Satz im Export auf und niemand weiß, woher.
+FALL_UNVERAENDERT = "unveraendert"
+
 # Spalten der fünf Listen. Die erste ist immer das Häkchen.
 SPALTEN = {
     core.FALL_NEU: [("sel", "", 34), ("kdnr", "Kd.-Nr.", 70),
@@ -81,6 +87,7 @@ REITER_TITEL = {
     core.FALL_UNKLAR: "Unklar",
     core.FALL_OHNE_AUFTRAG: "Ohne Auftrag",
     FALL_IGNORIERT: "Ignoriert",
+    FALL_UNVERAENDERT: "Unverändert",
 }
 
 HAKEN_AN, HAKEN_AUS = "☑", "☐"
@@ -208,10 +215,102 @@ class App(Tk):
                      core.FALL_UNKLAR, core.FALL_OHNE_AUFTRAG,
                      FALL_IGNORIERT):
             self._baue_reiter(fall)
+        self._baue_reiter_unveraendert()
+        # Erst beim Ansehen fuellen: 17 000 Zeilen bei jeder Entscheidung neu
+        # aufzubauen wuerde jeden Klick spuerbar bremsen.
+        self.reiter.bind("<<NotebookTabChanged>>", self._reiter_gewechselt)
 
         self.verlauf = Text(self, height=6, wrap="word")
         self.verlauf.pack(fill="x", **pad)
         self._log("Bereit. Dateien wählen und auf Abgleichen klicken.")
+
+    def _baue_reiter_unveraendert(self):
+        """Die Access-Sätze, die dieser Lauf nicht anfasst.
+
+        Eigener Reiter statt „Ignoriert": ignoriert hat der Bediener etwas,
+        das ihm vorgelegt wurde. Diese hier kamen nie zur Entscheidung, weil
+        kein Lexware-Kunde auf sie zeigt — sie stehen einfach unverändert in
+        der Ausgabedatei. Ohne diese Liste findet man einen Satz im Export und
+        kann nicht nachvollziehen, woher er kommt.
+        """
+        rahmen = ttk.Frame(self.reiter)
+        self.reiter.add(rahmen, text=REITER_TITEL[FALL_UNVERAENDERT])
+
+        kopf = ttk.Frame(rahmen)
+        kopf.pack(fill="x", pady=(0, 4))
+        self.unv_zahl = StringVar(value="")
+        ttk.Label(kopf, textvariable=self.unv_zahl).pack(side="left")
+        ttk.Label(kopf, text="   suchen:").pack(side="left")
+        self.unv_suche = StringVar()
+        ttk.Entry(kopf, textvariable=self.unv_suche, width=32).pack(side="left")
+        self.unv_suche.trace_add("write",
+                                 lambda *_: self._fuelle_unveraendert())
+
+        spalten = [("id", "Access-ID", 80), ("name", "Name / Firma", 300),
+                   ("ort", "PLZ / Ort", 180), ("strasse", "Straße", 200),
+                   ("jahr", "Bestelldatum", 90), ("kat", "Kategorie", 90)]
+        koerper = ttk.Frame(rahmen)
+        koerper.pack(fill="both", expand=True)
+        baum = ttk.Treeview(koerper, columns=[s[0] for s in spalten],
+                            show="headings")
+        for schluessel, titel, breite in spalten:
+            baum.heading(schluessel, text=titel,
+                         command=lambda b=baum, s=schluessel:
+                         self._uebersicht_sortieren(b, s))
+            baum.column(schluessel, width=breite, anchor="w")
+        vs = ttk.Scrollbar(koerper, orient="vertical", command=baum.yview)
+        baum.configure(yscrollcommand=vs.set)
+        baum.pack(side="left", fill="both", expand=True)
+        vs.pack(side="left", fill="y")
+        self.unv_baum = baum
+        self.unv_frisch = False
+
+    def _reiter_gewechselt(self, _ereignis=None):
+        if (self.reiter.tab(self.reiter.select(), "text")
+                == REITER_TITEL[FALL_UNVERAENDERT] and not self.unv_frisch):
+            self._fuelle_unveraendert()
+
+    def _fuelle_unveraendert(self):
+        baum = getattr(self, "unv_baum", None)
+        if baum is None:
+            return
+        baum.delete(*baum.get_children())
+        if not self.access:
+            self.unv_zahl.set("noch nicht abgeglichen")
+            return
+
+        angefasst = {z.ziel.get("ID") for z in self.zuordnungen if z.ziel}
+        angefasst |= {i for z in self.zuordnungen for i in z.aufgeloest_in}
+        suche = core.norm_text(self.unv_suche.get())
+
+        gezeigt = gesamt = 0
+        for satz in self.access:
+            if satz.get("ID") in angefasst:
+                continue
+            gesamt += 1
+            name = _name(satz)
+            if suche and suche not in core.norm_text(
+                    f'{name} {satz.get("Ort") or ""} {satz.get("ID")}'):
+                continue
+            # Bei 17 000 Zeilen wird die Liste zäh und unbrauchbar; wer etwas
+            # Bestimmtes sucht, tippt es ins Suchfeld.
+            if gezeigt >= 1500:
+                continue
+            gezeigt += 1
+            baum.insert("", END, values=(
+                satz.get("ID"), name,
+                f'{satz.get("PLZ") or ""} {satz.get("Ort") or ""}'.strip(),
+                f'{satz.get("Straße") or ""} '
+                f'{satz.get("Hausnummer") or ""}'.strip(),
+                satz.get("Bestelldatum") or "—",
+                satz.get("VIP/W/K/X") or ""))
+
+        rest = gesamt - gezeigt if not suche else 0
+        self.unv_zahl.set(
+            f"{gesamt} Sätze übernimmt der Lauf unverändert aus Access"
+            + (f" · {gezeigt} angezeigt, {rest} weitere über die Suche"
+               if rest else f" · {gezeigt} angezeigt" if suche else ""))
+        self.unv_frisch = True
 
     def _dateizeile(self, eltern, beschriftung, var):
         z = ttk.Frame(eltern)
@@ -381,6 +480,7 @@ class App(Tk):
     def _fuelle_alle(self):
         for fall in self.baeume:
             self._fuelle(fall)
+        self.unv_frisch = False
         n = {f: len(self.zeilen[f]) for f in self.baeume}
         # Wer auf "nichts tun" steht, erzeugt keine einzige Ausgabezeile —
         # sein Bestelldatum bleibt also alt, und er kann aus dem Mailing
@@ -390,12 +490,16 @@ class App(Tk):
         # Zähler behauptete gleich nach dem Abgleich, 359 Fälle seien
         # übergangen worden — dabei war nur noch nichts entschieden.
         offen = n[core.FALL_UNKLAR] + n[core.FALL_OHNE_AUFTRAG]
+        angefasst = {z.ziel.get("ID") for z in self.zuordnungen if z.ziel}
+        angefasst |= {i for z in self.zuordnungen for i in z.aufgeloest_in}
         self.zaehler.set(
             f"neu {n[core.FALL_NEU]} · aktualisieren "
             f"{n[core.FALL_AKTUALISIEREN]} · unklar {n[core.FALL_UNKLAR]} · "
             f"ohne Auftrag {n[core.FALL_OHNE_AUFTRAG]} · "
             f"ignoriert {n[FALL_IGNORIERT]}"
-            f"   —   {offen} noch zu entscheiden")
+            f"   —   {offen} noch zu entscheiden"
+            + (f"   ·   {len(self.access) - len(angefasst)} Access-Sätze "
+               f"unverändert" if self.access else ""))
 
     def _fuelle(self, fall):
         baum = self.baeume[fall]
