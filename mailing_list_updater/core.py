@@ -1225,10 +1225,11 @@ def auffaelligkeiten(lex: dict, satz: dict) -> list[str]:
     elif not wert("Hausnummer"):
         probleme.append("keine Hausnummer")
 
-    if wert("Institution") and not wert("Name"):
-        probleme.append("Firma ohne Ansprechperson")
-    if land:
-        probleme.append("Ausland")
+    # Nicht beanstandet: eine Firma ohne Ansprechperson (Access führt 3 178
+    # solcher Sätze, das ist der Normalfall) und eine Auslandsadresse (es gibt
+    # schlicht Kunden in der Schweiz und den Niederlanden). Beides stand hier
+    # einmal und färbte hunderte Zeilen ein, ohne dass etwas zu tun war —
+    # eine Auffälligkeit, die überall aufleuchtet, ist keine.
     return probleme
 
 
