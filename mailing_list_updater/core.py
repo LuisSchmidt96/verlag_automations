@@ -1653,6 +1653,30 @@ def lexware_werte(lex: dict) -> dict:
     return werte
 
 
+# Felder, die in Access eine Zahl sind. Aus der Eingabemaske kommt jeder Wert
+# als Text — und aus entscheidungen.json ebenso, dort wird alles als
+# Zeichenkette abgelegt. Ohne Umwandlung trifft die getippte „2026" später auf
+# die 2025 aus Access, und der Vergleich beim Zusammenführen scheitert mit
+# „'>' not supported between instances of str and int".
+ZAHLENFELDER = ("Bestelldatum",)
+
+
+def typisiere(feld: str, wert):
+    """Einen Wert aus der Eingabemaske in den Typ bringen, den Access führt."""
+    if feld not in ZAHLENFELDER:
+        return wert
+    text = str(wert if wert is not None else "").strip()
+    if not text:
+        return None
+    treffer = re.search(r"\d{4}", text)
+    return int(treffer.group(0)) if treffer else None
+
+
+def handkorrekturen(z: Zuordnung) -> dict:
+    """Die Änderungen des Bedieners, typrichtig."""
+    return {f: typisiere(f, w) for f, w in z.aenderungen.items()}
+
+
 def baue_neuen_satz(z: Zuordnung, spalten: list[str], laufjahr: int,
                     heute) -> dict:
     """Ein anlagefertiger Access-Satz, Spalte für Spalte."""
@@ -1668,7 +1692,7 @@ def baue_neuen_satz(z: Zuordnung, spalten: list[str], laufjahr: int,
     satz["Bestelldatum"] = z.bestelljahr        # None bleibt leer (Freiexemplar)
     satz["Lexware-Kd-Nr"] = str(z.lexware.get("Kd.-Nr") or "").strip()
 
-    satz.update(z.aenderungen)                  # Handkorrekturen zuletzt
+    satz.update(handkorrekturen(z))             # Handkorrekturen zuletzt
     return satz
 
 
@@ -1707,13 +1731,13 @@ def baue_aktualisierung(z: Zuordnung, laufjahr: int, heute) -> dict:
     alt = alt if isinstance(alt, int) else None
     # Nur anheben, nie senken: ein älteres Bestelljahr aus einer Nachlieferung
     # darf ein neueres in Access nicht überschreiben.
-    zeile["Bestelldatum"] = max(x for x in (alt, z.bestelljahr) if x is not None) \
-        if (alt is not None or z.bestelljahr is not None) else None
+    jahre = [x for x in (alt, z.bestelljahr) if isinstance(x, int)]
+    zeile["Bestelldatum"] = max(jahre) if jahre else None
     zeile["Lexware-Kd-Nr"] = str(z.lexware.get("Kd.-Nr") or "").strip()
     zeile["Quelle"] = f"Lexware Kunden {laufjahr}"
     zeile["erfaßt/geprüft am"] = heute
 
-    zeile.update(z.aenderungen)
+    zeile.update(handkorrekturen(z))
     return zeile
 
 
@@ -1794,8 +1818,11 @@ def _verschmelze(a: dict, az: Zuordnung, b: dict, bz: Zuordnung,
     """Zwei Aktualisierungen desselben Access-Satzes zu einer machen."""
     neu = dict(a)
 
-    jahre = [j for j in (a.get("Bestelldatum"), b.get("Bestelldatum"))
-             if j is not None]
+    # isinstance statt "is not None": ein Fremdtyp darf hier nicht den ganzen
+    # Lauf abbrechen, nachdem jemand tausend Fälle durchgesehen hat.
+    jahre = [typisiere("Bestelldatum", j)
+             for j in (a.get("Bestelldatum"), b.get("Bestelldatum"))]
+    jahre = [j for j in jahre if isinstance(j, int)]
     neu["Bestelldatum"] = max(jahre) if jahre else None
 
     # Beide Kundennummern behalten. Nächstes Jahr findet Stufe 0 den Satz
