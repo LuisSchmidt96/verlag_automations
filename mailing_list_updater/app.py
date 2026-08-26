@@ -762,14 +762,16 @@ class App(Tk):
             # Kategorie ohnehin dauerhaft im Mailing, ändert das Bestelldatum
             # nichts daran, ob ein Brief kommt. Solche Fälle darf man mit
             # gutem Gewissen liegen lassen.
-            dauerhaft = {core.dauerhaft_im_mailing(k.access)
-                         for k in z.kandidaten}
-            dauerhaft.discard("")
-            if z.kandidaten and all(core.dauerhaft_im_mailing(k.access)
-                                    for k in z.kandidaten):
-                folge = f"bekommt Post ohnehin ({'/'.join(sorted(dauerhaft))})"
-            else:
+            # Drei Zustände, nicht zwei: „immer im Mailing" und „gar nicht im
+            # Mailing" sind beide folgenlos, aber aus völlig verschiedenen
+            # Gründen — und wer die Liste durchsieht, soll den Grund lesen.
+            lagen = [core.mailing_lage(k.access) for k in z.kandidaten]
+            if not lagen:
                 folge = "Brief hängt am Bestelldatum"
+            elif any(h for h, _ in lagen):
+                folge = "Brief hängt am Bestelldatum"
+            else:
+                folge = " / ".join(sorted({txt for _, txt in lagen}))
             return ((kdnr, *_namenswerte(core.lexware_werte(lex)),
                      len(z.kandidaten),
                      f"{z.bester.punkte:.0f}" if z.bester else "",

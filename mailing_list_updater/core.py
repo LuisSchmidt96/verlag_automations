@@ -545,22 +545,43 @@ def pruefe_zeitraeume(kunden: list[dict], lage: Auftragslage,
 MERKMALSFELDER = ("Autor", "Kommunen", "Bürgermeister", "Verein", "Schule",
                   "Medium", "Presse/ZS", "Veranstalter", "VIP/W/K/X")
 
-# `K` ist die einzige Kategorie, die am Kauf hängt — bei ihr halten sich
-# Sätze mit und ohne aktuelles Bestelldatum die Waage (5 278 zu 2 766). Alle
-# anderen stehen zu 91–100 % OHNE aktuellen Kauf im Mailing-Filter, sind also
-# über ihre Kategorie dauerhaft dabei: Buchhandel, Presse, Wissenschaft,
-# Vereine, VIP. Für sie ändert ein neues Bestelldatum nichts daran, ob ein
-# Brief kommt — nur daran, was in der Datenbank steht.
+# Was die Mailing-Abfrage des Verlags mit einer Kategorie macht. Sie ist die
+# verbindliche Auskunft — die Häufigkeiten im Export sind es nicht.
 #
-# Abgelesen am Export selbst, denn der IST die Mailing-Abfrage.
-KATEGORIE_KAUFABHAENGIG = {"K", ""}
+#     M, MS, WISS, V, VHS, VIP   immer im Mailing
+#     P                          immer, aber nur mit Presse/ZS = "ZS"
+#     K, F, SH                   nur bei Kauf in den letzten drei Jahren
+#     BUHA, BIB, A               gar nicht — der Buchhandel wird nicht per
+#                                Mailing bedient, sondern über Barsortimente
+#                                und Vertreter
+#
+# Für die Bedienung sind „immer" und „gar nicht" beide folgenlos: das
+# Bestelldatum ändert nichts daran, ob ein Brief kommt. Der Grund ist aber ein
+# völlig anderer, und wer die Liste durchsieht, soll ihn lesen können.
+KATEGORIE_DAUERHAFT = {"M", "MS", "WISS", "V", "VHS", "VIP"}
+KATEGORIE_KEIN_MAILING = {"BUHA", "BIB", "A"}
+
+
+def mailing_lage(acc: dict) -> tuple[bool, str]:
+    """(hängt der Brief am Bestelldatum?, Begründung in Worten)."""
+    kat = str(acc.get("VIP/W/K/X") or "").strip()
+    oben = kat.upper()
+    if oben in KATEGORIE_DAUERHAFT:
+        return False, f"bekommt Post ohnehin ({kat})"
+    if oben == "P":
+        # Presse nur mit Zeitschriften-Kennzeichen; die Abfrage verlangt beides.
+        if str(acc.get("Presse/ZS") or "").strip().upper() == "ZS":
+            return False, f"bekommt Post ohnehin ({kat}/ZS)"
+        return False, f"nicht im Mailing ({kat} ohne ZS)"
+    if oben in KATEGORIE_KEIN_MAILING:
+        return False, f"nicht im Mailing ({kat})"
+    return True, "Brief hängt am Bestelldatum"
 
 
 def dauerhaft_im_mailing(acc: dict) -> str:
     """Kategorie, wenn der Satz unabhängig vom Bestelldatum Post bekommt."""
-    kat = str(acc.get("VIP/W/K/X") or "").strip()
-    return "" if kat.upper() in {k.upper() for k in KATEGORIE_KAUFABHAENGIG} \
-        else kat
+    haengt, _ = mailing_lage(acc)
+    return "" if haengt else str(acc.get("VIP/W/K/X") or "").strip()
 
 
 def pruefe_access_vollstaendigkeit(access: list[dict], laufjahr: int,
