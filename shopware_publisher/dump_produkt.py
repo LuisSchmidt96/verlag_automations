@@ -10,6 +10,7 @@ Aufruf im Terminal (fragt nach dem Master-Passwort — es wird nicht gespeichert
     python -m shopware_publisher.dump_produkt
     python -m shopware_publisher.dump_produkt 9783955055592   # gezielt suchen
     python -m shopware_publisher.dump_produkt --liste         # nur auflisten
+    python -m shopware_publisher.dump_produkt --vergleich beispiele/buch.xml
 
 Ergebnis: shopware_publisher/beispiel_produkt.json
 Dieses Dev-Skript ist NICHT Teil der .exe.
@@ -74,6 +75,77 @@ def _breadcrumb_diagnose(p: dict) -> None:
         print(f"      - {s.get('seoPathInfo')!r} canonical={s.get('isCanonical')}")
 
 
+# Felder, die ein Redakteur setzt. Alles andere (Zeitstempel, berechnete Werte,
+# IDs von Verknüpfungen) erzeugt Shopware selbst und taugt nicht zum Vergleich.
+VERGLEICHSFELDER = [
+    "productNumber", "ean", "name", "description", "active", "stock", "taxId",
+    "releaseDate", "height", "width", "length", "weight", "metaTitle",
+    "metaDescription", "keywords", "customSearchKeywords",
+    "manufacturerId", "cmsPageId",
+    "isCloseout", "minPurchase", "purchaseSteps", "shippingFree", "restockTime",
+]
+
+
+def _kurz(wert) -> str:
+    if wert in (None, "", [], {}):
+        return "-"
+    text = str(wert).replace("\n", " ")
+    return text if len(text) <= 58 else text[:55] + "..."
+
+
+def _vergleiche(client, cfg, xml_pfad: str) -> int:
+    """Payload aus der ONIX gegen das Produkt im Shop halten.
+
+    Beantwortet die Frage "ist es so angekommen, wie gedacht?" — Feld für Feld,
+    statt aus der Erinnerung. Gezeigt wird nur, was ABWEICHT.
+    """
+    eff = core.effektiv(cfg)
+    f = core.lade_buchfelder(xml_pfad, eff)
+    soll = core.baue_produkt(f, eff)
+    nummer = soll["productNumber"]
+
+    treffer = client.suche("product", {
+        "limit": 1,
+        "filter": [{"type": "equals", "field": "productNumber", "value": nummer}],
+        "associations": {"categories": {}, "media": {}},
+    })
+    if not treffer:
+        print(f"\n{nummer} gibt es in diesem Shop nicht — nichts zu vergleichen."
+              f"\n(Erst anlegen, dann erneut aufrufen.)")
+        return 1
+    ist = treffer[0]
+
+    print(f"\n=== {nummer} — {soll['name']} ===")
+    print(f"{'Feld':<18} {'aus der ONIX':<60} {'im Shop'}")
+    print("-" * 100)
+    abweichungen = 0
+    for feld in VERGLEICHSFELDER:
+        a, b = soll.get(feld), ist.get(feld)
+        if isinstance(a, float) and isinstance(b, (int, float)):
+            gleich = abs(a - float(b)) < 0.001
+        else:
+            gleich = _kurz(a) == _kurz(b)
+        if not gleich:
+            abweichungen += 1
+            print(f"{feld:<18} {_kurz(a):<60} {_kurz(b)}")
+
+    # Preis liegt verschachtelt — eigens behandeln
+    p_soll = (soll.get("price") or [{}])[0].get("gross")
+    p_ist = (ist.get("price") or [{}])[0].get("gross")
+    if p_soll != p_ist:
+        abweichungen += 1
+        print(f"{'price.gross':<18} {_kurz(p_soll):<60} {_kurz(p_ist)}")
+
+    kats = [k.get("name") for k in (ist.get("categories") or [])]
+    print(f"\nKategorien im Shop : "
+          f"{', '.join(kats) if kats else '- keine (also kein Breadcrumb!) -'}")
+    print(f"Bilder im Shop     : {len(ist.get('media') or [])}   "
+          f"Cover gesetzt: {'ja' if ist.get('coverId') else 'NEIN'}")
+    print(f"\n{abweichungen} Abweichung(en)." if abweichungen
+          else "\nKeine Abweichung — es kam an wie gebaut.")
+    return 0
+
+
 ZIEL_STANDARD = Path(__file__).parent / "beispiel_produkt.json"
 
 
@@ -105,6 +177,12 @@ def main() -> int:
 
         argumente = [a for a in sys.argv[1:] if not a.startswith("--")]
         nur_liste = "--liste" in sys.argv
+
+        if "--vergleich" in sys.argv:
+            if not argumente:
+                print("Bitte die ONIX-XML angeben: --vergleich beispiele/buch.xml")
+                return 1
+            return _vergleiche(c, cfg, argumente[0])
 
         if nur_liste:
             for p in c.suche("product", {"limit": 25}):

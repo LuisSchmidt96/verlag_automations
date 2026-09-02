@@ -1,0 +1,304 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<ONIXMessage release="3.1"><Header><Sender><SenderName>VLB - Verzeichnis Lieferbarer Bücher</SenderName><ContactName>MVB GmbH, 069.1306.550</ContactName><EmailAddress>serviceline@mvb-online.de</EmailAddress></Sender><SentDateTime>20260831</SentDateTime></Header>
+<Product datestamp="20260611">
+    <RecordReference>b3cdf2ccd1324557a2ca6010e6330881</RecordReference>
+    <NotificationType>03</NotificationType>
+    <ProductIdentifier>
+        <ProductIDType>02</ProductIDType>
+        <IDValue>3955056228</IDValue>
+    </ProductIdentifier>
+    <ProductIdentifier>
+        <ProductIDType>03</ProductIDType>
+        <IDValue>9783955056223</IDValue>
+    </ProductIdentifier>
+    <ProductIdentifier>
+        <ProductIDType>15</ProductIDType>
+        <IDValue>9783955056223</IDValue>
+    </ProductIdentifier>
+    <DescriptiveDetail>
+        <ProductComposition>00</ProductComposition>
+        <ProductForm>BB</ProductForm>
+        <ProductFormDetail>B304</ProductFormDetail>
+        <PrimaryContentType>10</PrimaryContentType>
+        <ProductContentType>19</ProductContentType>
+        <ProductContentType>18</ProductContentType>
+        <ProductContentType>07</ProductContentType>
+        <Measure>
+            <MeasureType>01</MeasureType>
+            <Measurement>29.7</Measurement>
+            <MeasureUnitCode>cm</MeasureUnitCode>
+        </Measure>
+        <Measure>
+            <MeasureType>02</MeasureType>
+            <Measurement>21</Measurement>
+            <MeasureUnitCode>cm</MeasureUnitCode>
+        </Measure>
+        <CountryOfManufacture>DE</CountryOfManufacture>
+        <ProductClassification>
+            <ProductClassificationType>04</ProductClassificationType>
+            <ProductClassificationCode>49019900</ProductClassificationCode>
+        </ProductClassification>
+        <Collection>
+            <CollectionType>10</CollectionType>
+            <CollectionIdentifier>
+                <CollectionIDType>04</CollectionIDType>
+                <IDValue>ABBCV99</IDValue>
+            </CollectionIdentifier>
+            <TitleDetail>
+                <TitleType>01</TitleType>
+                <TitleElement>
+                    <TitleElementLevel>02</TitleElementLevel>
+                    <TitleText>Mannheimer Geschichtsblätter - remmagazin</TitleText>
+                </TitleElement>
+                <TitleElement>
+                    <TitleElementLevel>01</TitleElementLevel>
+                    <PartNumber>49 + 50</PartNumber>
+                </TitleElement>
+            </TitleDetail>
+        </Collection>
+        <TitleDetail>
+            <TitleType>01</TitleType>
+            <TitleElement>
+                <TitleElementLevel>01</TitleElementLevel>
+                <TitleText>Mannheimer Geschichtsblätter 49 + 50/2025</TitleText>
+            </TitleElement>
+        </TitleDetail>
+        <Contributor>
+            <SequenceNumber>1</SequenceNumber>
+            <ContributorRole>B01</ContributorRole>
+            <NameIdentifier sourcename="Publisher">
+                <NameIDType>16</NameIDType>
+                <IDValue>000000010902500X</IDValue>
+            </NameIdentifier>
+            <PersonName>Hermann Wiegand</PersonName>
+            <PersonNameInverted>Wiegand, Hermann</PersonNameInverted>
+            <NamesBeforeKey>Hermann</NamesBeforeKey>
+            <KeyNames>Wiegand</KeyNames>
+        </Contributor>
+        <Contributor>
+            <SequenceNumber>2</SequenceNumber>
+            <ContributorRole>B01</ContributorRole>
+            <NameIdentifier sourcename="Publisher">
+                <NameIDType>16</NameIDType>
+                <IDValue>0000000040401416</IDValue>
+            </NameIdentifier>
+            <PersonName>Wilfried Rosendahl</PersonName>
+            <PersonNameInverted>Rosendahl, Wilfried</PersonNameInverted>
+            <NamesBeforeKey>Wilfried</NamesBeforeKey>
+            <KeyNames>Rosendahl</KeyNames>
+        </Contributor>
+        <Contributor>
+            <SequenceNumber>3</SequenceNumber>
+            <ContributorRole>B01</ContributorRole>
+            <NameIdentifier sourcename="Publisher">
+                <NameIDType>16</NameIDType>
+                <IDValue>000000006151150X</IDValue>
+            </NameIdentifier>
+            <PersonName>Harald Stockert</PersonName>
+            <PersonNameInverted>Stockert, Harald</PersonNameInverted>
+            <NamesBeforeKey>Harald</NamesBeforeKey>
+            <KeyNames>Stockert</KeyNames>
+        </Contributor>
+        <Contributor>
+            <SequenceNumber>4</SequenceNumber>
+            <ContributorRole>B01</ContributorRole>
+            <NameIdentifier sourcename="Publisher">
+                <NameIDType>16</NameIDType>
+                <IDValue>0000000107971561</IDValue>
+            </NameIdentifier>
+            <PersonName>Wilhelm Kreutz</PersonName>
+            <PersonNameInverted>Kreutz, Wilhelm</PersonNameInverted>
+            <NamesBeforeKey>Wilhelm</NamesBeforeKey>
+            <KeyNames>Kreutz</KeyNames>
+        </Contributor>
+        <EditionType>NED</EditionType>
+        <Language>
+            <LanguageRole>01</LanguageRole>
+            <LanguageCode>ger</LanguageCode>
+        </Language>
+        <Extent>
+            <ExtentType>11</ExtentType>
+            <ExtentValue>240</ExtentValue>
+            <ExtentUnit>03</ExtentUnit>
+        </Extent>
+        <NumberOfIllustrations>223</NumberOfIllustrations>
+        <IllustrationsNote>Farb- und Schwarz-Weiß-Abbildungen</IllustrationsNote>
+        <Subject>
+            <MainSubject/>
+            <SubjectSchemeIdentifier>26</SubjectSchemeIdentifier>
+            <SubjectSchemeVersion>2.1</SubjectSchemeVersion>
+            <SubjectCode>1550</SubjectCode>
+            <SubjectHeadingText>Hardcover, Softcover / Geschichte</SubjectHeadingText>
+        </Subject>
+        <Subject sourcename="Publisher">
+            <MainSubject/>
+            <SubjectSchemeIdentifier>93</SubjectSchemeIdentifier>
+            <SubjectSchemeVersion>1.6</SubjectSchemeVersion>
+            <SubjectCode>NH</SubjectCode>
+            <SubjectHeadingText>Geschichte</SubjectHeadingText>
+        </Subject>
+        <Subject sourcename="MVB">
+            <MainSubject/>
+            <SubjectSchemeIdentifier>B8</SubjectSchemeIdentifier>
+            <SubjectCode>10</SubjectCode>
+            <SubjectHeadingText>Verstehen</SubjectHeadingText>
+        </Subject>
+        <Subject sourcename="DNB">
+            <SubjectSchemeIdentifier>18</SubjectSchemeIdentifier>
+            <SubjectCode>900</SubjectCode>
+            <SubjectHeadingText>Geschichte</SubjectHeadingText>
+        </Subject>
+        <Subject>
+            <SubjectSchemeIdentifier>20</SubjectSchemeIdentifier>
+            <SubjectHeadingText>Geschichte</SubjectHeadingText>
+        </Subject>
+        <Subject>
+            <SubjectSchemeIdentifier>20</SubjectSchemeIdentifier>
+            <SubjectHeadingText>Kurpfalz</SubjectHeadingText>
+        </Subject>
+        <Subject>
+            <SubjectSchemeIdentifier>20</SubjectSchemeIdentifier>
+            <SubjectHeadingText>Mannheim</SubjectHeadingText>
+        </Subject>
+    </DescriptiveDetail>
+    <CollateralDetail>
+        <TextContent>
+            <TextType>03</TextType>
+            <ContentAudience>00</ContentAudience>
+            <Text textformat="06" language="ger">Die Beiträge der aktuellen Mannheimer Geschichtsblätter spannen erneut einen großen zeitlichen Bogen. Die Antike und das Hochmittelalter sind dieses Mal nur punktuell vertreten. Einen zeitlichen Schwerpunkt markieren die Beiträge zum ausgehenden 18. und 19. Jahrhundert. Alle weiteren Beiträge thematisieren Personen und Ereignisse des zurückliegenden 20. Jahrhunderts.</Text>
+        </TextContent>
+        <SupportingResource>
+            <ResourceContentType>01</ResourceContentType>
+            <ContentAudience>00</ContentAudience>
+            <ResourceMode>03</ResourceMode>
+            <ResourceVersion>
+                <ResourceForm>02</ResourceForm>
+                <ResourceVersionFeature>
+                    <ResourceVersionFeatureType>01</ResourceVersionFeatureType>
+                    <FeatureValue>D502</FeatureValue>
+                </ResourceVersionFeature>
+                <ResourceVersionFeature>
+                    <ResourceVersionFeatureType>02</ResourceVersionFeatureType>
+                    <FeatureValue>3630</FeatureValue>
+                </ResourceVersionFeature>
+                <ResourceVersionFeature>
+                    <ResourceVersionFeatureType>03</ResourceVersionFeatureType>
+                    <FeatureValue>2584</FeatureValue>
+                </ResourceVersionFeature>
+                <ResourceVersionFeature>
+                    <ResourceVersionFeatureType>04</ResourceVersionFeatureType>
+                    <FeatureValue>9783955056223.jpg</FeatureValue>
+                </ResourceVersionFeature>
+                <ResourceVersionFeature>
+                    <ResourceVersionFeatureType>06</ResourceVersionFeatureType>
+                    <FeatureValue>d4e40d5188c501355d0c3c273b32abfb</FeatureValue>
+                </ResourceVersionFeature>
+                <ResourceVersionFeature>
+                    <ResourceVersionFeatureType>07</ResourceVersionFeatureType>
+                    <FeatureValue>824429</FeatureValue>
+                </ResourceVersionFeature>
+                <ResourceVersionFeature>
+                    <ResourceVersionFeatureType>08</ResourceVersionFeatureType>
+                    <FeatureValue>e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855</FeatureValue>
+                </ResourceVersionFeature>
+                <ResourceLink>https://api.vlb.de/api/v1/cover/9783955056223/m</ResourceLink>
+                <ContentDate>
+                    <ContentDateRole>17</ContentDateRole>
+                    <Date dateformat="00">20260605</Date>
+                </ContentDate>
+            </ResourceVersion>
+        </SupportingResource>
+        <SupportingResource>
+            <ResourceContentType>25</ResourceContentType>
+            <ContentAudience>00</ContentAudience>
+            <ResourceMode>04</ResourceMode>
+            <ResourceVersion>
+                <ResourceForm>02</ResourceForm>
+                <ResourceVersionFeature>
+                    <ResourceVersionFeatureType>01</ResourceVersionFeatureType>
+                    <FeatureValue>E107</FeatureValue>
+                </ResourceVersionFeature>
+                <ResourceVersionFeature>
+                    <ResourceVersionFeatureType>04</ResourceVersionFeatureType>
+                    <FeatureValue>9783955056223_inhaltsverzeichnis.pdf</FeatureValue>
+                </ResourceVersionFeature>
+                <ResourceVersionFeature>
+                    <ResourceVersionFeatureType>06</ResourceVersionFeatureType>
+                    <FeatureValue>3fce0daefeb8c0063706fcb8f15dd65d</FeatureValue>
+                </ResourceVersionFeature>
+                <ResourceVersionFeature>
+                    <ResourceVersionFeatureType>07</ResourceVersionFeatureType>
+                    <FeatureValue>1592708</FeatureValue>
+                </ResourceVersionFeature>
+                <ResourceVersionFeature>
+                    <ResourceVersionFeatureType>08</ResourceVersionFeatureType>
+                    <FeatureValue>e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855</FeatureValue>
+                </ResourceVersionFeature>
+                <ResourceLink>https://api.vlb.de/api/v1/asset/mmo/file/5da1c8a996e7452a9e0bbddfef8c358c</ResourceLink>
+                <ContentDate>
+                    <ContentDateRole>17</ContentDateRole>
+                    <Date dateformat="00">20260605</Date>
+                </ContentDate>
+            </ResourceVersion>
+        </SupportingResource>
+    </CollateralDetail>
+    <PublishingDetail>
+        <Publisher>
+            <PublishingRole>01</PublishingRole>
+            <PublisherIdentifier>
+                <PublisherIDType>05</PublisherIDType>
+                <IDValue>97697</IDValue>
+            </PublisherIdentifier>
+            <PublisherName>verlag regionalkultur</PublisherName>
+        </Publisher>
+        <CityOfPublication>Ubstadt-Weiher</CityOfPublication>
+        <CountryOfPublication>DE</CountryOfPublication>
+        <PublishingStatus>04</PublishingStatus>
+        <PublishingDate>
+            <PublishingDateRole>01</PublishingDateRole>
+            <Date dateformat="00">20260608</Date>
+        </PublishingDate>
+    </PublishingDetail>
+    <ProductSupply>
+        <SupplyDetail>
+            <Supplier>
+                <SupplierRole>01</SupplierRole>
+                <SupplierIdentifier>
+                    <SupplierIDType>05</SupplierIDType>
+                    <IDValue>97697</IDValue>
+                </SupplierIdentifier>
+                <SupplierName>verlag regionalkultur</SupplierName>
+            </Supplier>
+            <ProductAvailability>20</ProductAvailability>
+            <Price>
+                <PriceType>04</PriceType>
+                <PriceStatus>02</PriceStatus>
+                <PriceAmount>28.70</PriceAmount>
+                <Tax>
+                    <TaxType>01</TaxType>
+                    <TaxRateCode>R</TaxRateCode>
+                    <TaxRatePercent>10</TaxRatePercent>
+                </Tax>
+                <CurrencyCode>EUR</CurrencyCode>
+                <Territory>
+                    <CountriesIncluded>AT</CountriesIncluded>
+                </Territory>
+            </Price>
+            <Price>
+                <PriceType>04</PriceType>
+                <PriceStatus>02</PriceStatus>
+                <PriceAmount>27.90</PriceAmount>
+                <Tax>
+                    <TaxType>01</TaxType>
+                    <TaxRateCode>R</TaxRateCode>
+                    <TaxRatePercent>7</TaxRatePercent>
+                </Tax>
+                <CurrencyCode>EUR</CurrencyCode>
+                <Territory>
+                    <CountriesIncluded>DE</CountriesIncluded>
+                </Territory>
+            </Price>
+        </SupplyDetail>
+    </ProductSupply>
+</Product>
+</ONIXMessage>

@@ -49,9 +49,11 @@ CONFIG_PFAD = APP_DIR / "config.json"
 
 
 # Alles, was je Shop unterschiedlich ist, steckt in einer Umgebung ("dev"/"prod").
-# Wichtig: tax_id, currency_id, category_id & Co. sind **UUIDs des jeweiligen
-# Shops** — dieselbe Kategorie hat auf dev und prod verschiedene IDs. Sie dürfen
-# deshalb nicht global stehen, sonst schreibt man dev-IDs in den Produktivshop.
+# Wichtig: tax_id, currency_id, manufacturer_id & Co. sind **UUIDs des
+# jeweiligen Shops** — dieselbe Kategorie hat auf dev und prod verschiedene IDs.
+# Sie dürfen deshalb nicht global stehen, sonst schreibt man dev-IDs in den
+# Produktivshop. Die Kategorien selbst stehen aus demselben Grund in gar keiner
+# Config mehr: sie werden je Buch in der Oberfläche gewählt.
 DEFAULT_UMGEBUNG = {
     # --- Zugang (Admin -> Einstellungen -> System -> Integrationen) ----------
     "shop_url": "",                 # z. B. https://shop.verlag-regionalkultur.de
@@ -69,7 +71,6 @@ DEFAULT_UMGEBUNG = {
     "tax_id": "",                   # Steuersatz-ID (Bücher: 7 %)
     "tax_rate": 7.0,                # zugehöriger Satz, für die Netto-Rechnung
     "currency_id": "",              # EUR
-    "category_id": "",              # Zielkategorie (optional)
     "manufacturer_id": "",          # Hersteller/Verlag (optional)
     # Ohne Sales-Channel-Sichtbarkeit ist das Produkt im Shop UNSICHTBAR —
     # auch aktiv geschaltet. 30 = überall sichtbar (wie im Bestand).
@@ -84,7 +85,7 @@ DEFAULT_CONFIG = {
     # Wird bei jeder Änderung der Verlags-Vorgaben (unten) erhöht, damit
     # bestehende config.json-Dateien die neuen Werte übernehmen (siehe
     # _migriere). Ohne das blieben alte Werte per setdefault eingefroren.
-    "config_version": 2,
+    "config_version": 3,
 
     # --- Umgebungen ---------------------------------------------------------
     "aktive_umgebung": "dev",
@@ -99,7 +100,7 @@ DEFAULT_CONFIG = {
     # Lieferbarkeit — für alle Bücher gleich (Vorgabe des Verlags):
     "default_stock": 9999,          # Lagerbestand
     "is_closeout": True,            # Abverkauf AN
-    "restock_time": None,           # Wiederauffüllzeit leer lassen
+    "restock_time": 1,              # wie im Bestand (dort steht überall 1)
     "min_purchase": 1,              # Mindestabnahme
     "purchase_steps": 1,            # Staffelung
     "shipping_free": False,         # Versandkostenfrei aus
@@ -119,6 +120,10 @@ DEFAULT_CONFIG = {
     "muster_3d": "3D_{dpi}_{sc}.jpg",
     "dpi_web": 72,
     "dpi_print": 300,
+    # Dritte Bildquelle: die Cover, die der Newsletter nutzt, liegen offen auf
+    # dem eigenen Webserver — volle Auflösung, ohne Share erreichbar.
+    "newsletter_basis_url": "https://verlag-regionalkultur.de/newsletter_/",
+    "cover_timeout": 20,
 
     # --- Buchdaten ----------------------------------------------------------
     "verlag_name": "verlag regionalkultur",
@@ -141,7 +146,8 @@ _ALTE_FLACHE_SCHLUESSEL = tuple(DEFAULT_UMGEBUNG) + ("secret_access_key",)
 # setdefault eingefroren bleiben (z. B. default_stock 0 -> 9999).
 _VORGABE_SCHLUESSEL = ("aktiv", "default_stock", "is_closeout", "restock_time",
                        "min_purchase", "purchase_steps", "shipping_free",
-                       "custom_fields", "autoren_basis_url")
+                       "custom_fields", "autoren_basis_url",
+                       "newsletter_basis_url", "cover_timeout")
 
 
 def _migriere(cfg: dict) -> dict:
@@ -159,6 +165,11 @@ def _migriere(cfg: dict) -> dict:
     if cfg.get("config_version", 1) < DEFAULT_CONFIG["config_version"]:
         for k in _VORGABE_SCHLUESSEL:
             cfg[k] = json.loads(json.dumps(DEFAULT_CONFIG[k]))   # frische Kopie
+        # Kategorien werden seit Version 3 je Buch gewählt. Der alte globale
+        # Schlüssel muss weg, sonst bleibt in einer gewachsenen config.json eine
+        # dev-Kategorie stehen, die niemand mehr sieht.
+        for umg in (cfg.get("umgebungen") or {}).values():
+            umg.pop("category_id", None)
         cfg["config_version"] = DEFAULT_CONFIG["config_version"]
     return cfg
 
@@ -316,18 +327,30 @@ def _kontributoren(product, rolle: str) -> list[dict]:
         return []
     beitraege = []
     for c in dd.findall("contributor"):
-        if _txt(c.find("b035")) == rolle:
-            seq = _txt(c.find("b034"))
-            name = _txt(c.find("b036"))
-            vor, nach = _txt(c.find("b039")), _txt(c.find("b040"))
-            if not name and nach:
-                name = f"{vor} {nach}".strip()
-            if not nach and name:               # Rückfall: am letzten Leerzeichen
-                teile = name.rsplit(" ", 1)
-                vor, nach = (teile[0], teile[1]) if len(teile) == 2 else ("", name)
-            if name:
-                beitraege.append((int(seq) if seq.isdigit() else 999,
-                                  {"name": name, "vorname": vor, "nachname": nach}))
+        if _txt(c.find("b035")) != rolle:
+            continue
+        seq = _txt(c.find("b034"))
+        # b047 = Körperschaft ("Stiftung Geißstraße"). Die hat keinen Vor- und
+        # Nachnamen und darf vor allem NICHT am letzten Leerzeichen zerlegt
+        # werden — sonst wird "Geißstraße" zum Nachnamen. Ohne diesen Zweig
+        # fiel so ein Herausgeber bisher ersatzlos weg.
+        koerperschaft = _txt(c.find("b047"))
+        if koerperschaft:
+            beitraege.append((int(seq) if seq.isdigit() else 999,
+                              {"name": koerperschaft, "vorname": "",
+                               "nachname": "", "koerperschaft": True}))
+            continue
+        name = _txt(c.find("b036"))
+        vor, nach = _txt(c.find("b039")), _txt(c.find("b040"))
+        if not name and nach:
+            name = f"{vor} {nach}".strip()
+        if not nach and name:               # Rückfall: am letzten Leerzeichen
+            teile = name.rsplit(" ", 1)
+            vor, nach = (teile[0], teile[1]) if len(teile) == 2 else ("", name)
+        if name:
+            beitraege.append((int(seq) if seq.isdigit() else 999,
+                              {"name": name, "vorname": vor, "nachname": nach,
+                               "koerperschaft": False}))
     return [n for _, n in sorted(beitraege, key=lambda x: x[0])]
 
 
@@ -351,14 +374,22 @@ def autor_link(k: dict, basis: str) -> str:
 
     Konvention aus den bestehenden Produkten: Nachname-Vorname, einsortiert
     unter dem Anfangsbuchstaben des Nachnamens.
+
+    Körperschaften stehen unter ihrem GANZEN Namen — auch die haben im Shop
+    eine Autorenseite (/autoren-herausgeber/s/stiftung-geissstrasse/, geprüft).
     """
+    name = k.get("name", "")
     nach, vor = k.get("nachname", ""), k.get("vorname", "")
-    if not nach:
-        return html.escape(k.get("name", ""))
-    pfad = slug(f"{nach}-{vor}") if vor else slug(nach)
-    initial = slug(nach)[:1]
+    if nach:
+        pfad = slug(f"{nach}-{vor}") if vor else slug(nach)
+        initial = slug(nach)[:1]
+    elif name:
+        pfad = slug(name)
+        initial = pfad[:1]
+    else:
+        return ""
     url = f"{basis.rstrip('/')}/{initial}/{pfad}/"
-    return f"<a href='{url}'>{html.escape(k.get('name', ''))}</a>"
+    return f"<a href='{url}'>{html.escape(name)}</a>"
 
 
 def _zahl_de(x: float) -> str:
@@ -386,6 +417,80 @@ def shortcode_aus_isbn(isbn13: str) -> str:
     return f"{e[7:9]}-{e[9:12]}-{e[12]}"
 
 
+# VLB liefert dieselben Daten in zwei Schreibweisen: mit KURZ-Tags (<b012>) und
+# mit REFERENZ-Tags (<ProductForm>). Welche man bekommt, haengt allein am
+# Exportdialog — die Referenzfassung heisst dann "onix3Ref_….xml". Statt jeden
+# Lesezugriff zu verdoppeln, wird der Baum einmalig auf die Kurzform gebracht;
+# darunter bleibt der gesamte Lesecode unveraendert.
+#
+# Nur die Tags, die dieses Werkzeug wirklich liest — die ONIX-Liste ist ein
+# Vielfaches davon. Wer hier ein Feld ergaenzt, traegt es auch hier ein.
+REFERENZ_ZU_KURZ = {
+    "Product": "product",
+    "ProductIdentifier": "productidentifier",
+    "ProductIDType": "b221",
+    "IDValue": "b244",
+    "DescriptiveDetail": "descriptivedetail",
+    "TitleDetail": "titledetail",
+    "TitleType": "b202",
+    "TitleElement": "titleelement",
+    "TitleElementLevel": "x409",
+    "TitleText": "b203",
+    "Subtitle": "b029",
+    "Collection": "collection",
+    "PartNumber": "x410",
+    "Extent": "extent",
+    "ExtentValue": "b219",
+    "ProductForm": "b012",
+    "NumberOfIllustrations": "b125",
+    "IllustrationsNote": "b062",
+    "PublishingDetail": "publishingdetail",
+    "Publisher": "publisher",
+    "PublisherName": "b081",
+    "ProductSupply": "productsupply",
+    "SupplyDetail": "supplydetail",
+    "Price": "price",
+    "Territory": "territory",
+    "CountriesIncluded": "x449",
+    "PriceAmount": "j151",
+    "CurrencyCode": "j152",
+    "PublishingDate": "publishingdate",
+    "Date": "b306",
+    "Measure": "measure",
+    "MeasureType": "x315",
+    "Measurement": "c094",
+    "MeasureUnitCode": "c095",
+    "CollateralDetail": "collateraldetail",
+    "SupportingResource": "supportingresource",
+    "ResourceContentType": "x436",
+    "ResourceVersion": "resourceversion",
+    "ResourceLink": "x435",
+    "TextContent": "textcontent",
+    "Text": "d104",
+    "Contributor": "contributor",
+    "SequenceNumber": "b034",
+    "ContributorRole": "b035",
+    "PersonName": "b036",
+    "CorporateName": "b047",
+    "NamesBeforeKey": "b039",
+    "KeyNames": "b040",
+}
+
+
+def _normalisiere_tags(root) -> None:
+    """Referenzfassung auf Kurz-Tags umschreiben (siehe REFERENZ_ZU_KURZ).
+
+    Namensraeume werden vorher abgestreift: die VLB-Dateien haben keinen, aber
+    ONIX erlaubt ihn, und ein Namensraum wuerde jedes find() ins Leere laufen
+    lassen — lautlos, was der schlimmste Fall waere.
+    """
+    for el in root.iter():
+        if isinstance(el.tag, str):
+            if "}" in el.tag:
+                el.tag = el.tag.split("}", 1)[1]
+            el.tag = REFERENZ_ZU_KURZ.get(el.tag, el.tag)
+
+
 def lade_buchfelder(xml_pfad, cfg: dict | None = None) -> dict:
     """Liest die für den Shop nötigen Felder aus einer VLB-ONIX-XML.
 
@@ -396,6 +501,7 @@ def lade_buchfelder(xml_pfad, cfg: dict | None = None) -> dict:
     isbn_prefix = cfg.get("isbn_prefix", DEFAULT_CONFIG["isbn_prefix"])
 
     root = ET.parse(str(xml_pfad)).getroot()
+    _normalisiere_tags(root)
     product = root.find("product")
     if product is None:
         raise ValueError("Kein <product>-Element in der XML gefunden — "
@@ -441,6 +547,11 @@ def lade_buchfelder(xml_pfad, cfg: dict | None = None) -> dict:
     autoren = _kontributoren(product, "A01")
 
     seiten = _txt(dd.find("extent/b219")) if dd is not None else ""
+    # "448 Seiten mit 390 Farb- und Schwarz-Weiß-Abbildungen, fester Einband."
+    # — die Zahl (b125) und die Art (b062) stehen so im Shop und kommen beide
+    # aus der ONIX. Ohne sie fehlt der Umfangzeile die Hälfte.
+    abbildungen = _txt(dd.find("b125")) if dd is not None else ""
+    abbildungsart = _txt(dd.find("b062")) if dd is not None else ""
     einband_code = _txt(dd.find("b012")) if dd is not None else ""
     einband = einband_map.get(einband_code, einband_code)
 
@@ -510,6 +621,8 @@ def lade_buchfelder(xml_pfad, cfg: dict | None = None) -> dict:
         "autoren_teile": autoren,          # inkl. Vor-/Nachname (für Autor-Link)
         "herausgeber_teile": herausgeber,
         "seiten": seiten,
+        "abbildungen": abbildungen,
+        "abbildungsart": abbildungsart,
         "einband": einband,
         "verlag": verlag,
         "preis_brutto": preis_brutto,
@@ -548,15 +661,30 @@ def finde_artikel_ordner(sc: str, cfg: dict) -> Path | None:
     return None
 
 
-def finde_bilder(sc: str, cfg: dict, ordner: Path | None = None) -> dict:
-    """Sucht die von cover_previews erzeugten Bilder zum Kurzcode.
+def finde_bilder(sc: str, cfg: dict, ordner: Path | None = None,
+                 xml_pfad=None) -> dict:
+    """Sucht die Bilder zum Kurzcode — an mehreren Orten.
 
-    Rückgabe: {"cover": Path|None, "galerie": [Path], "ordner": Path|None}
-    Cover = 2D-Web-JPEG, Galerie = 3D-Mockup (falls vorhanden).
+    Rückgabe: {"cover": Path|None, "galerie": [Path], "ordner": Path|None,
+               "quelle": str}
+
+    Reihenfolge, und warum sie so ist:
+
+    1. **Artikeldaten-Share** — dort erzeugt ``cover_previews`` die Dateien.
+       Das ist das Original, alles andere sind Kopien davon.
+    2. **Neben der ONIX-Datei** — derselbe Griff, den der pi_bi_generator tut.
+       Hilft, wenn der Share gerade nicht erreichbar ist, die Bilder aber
+       schon lokal liegen.
+
+    Die dritte Quelle (Webserver) ist bewusst NICHT hier: sie lädt herunter
+    und gehört damit nicht in eine Funktion, die nur nachsieht. Dafür gibt es
+    ``hole_cover_web``.
+
+    ``quelle`` wird mitgegeben, damit die Vorschau sagen kann, WOHER das Bild
+    kommt — bei drei möglichen Ablagen ist das keine Nebensache.
     """
-    ordner = ordner or finde_artikel_ordner(sc, cfg)
-    ergebnis = {"cover": None, "galerie": [], "ordner": ordner}
-    if not ordner or not ordner.is_dir():
+    ergebnis = {"cover": None, "galerie": [], "ordner": None, "quelle": ""}
+    if not sc:
         return ergebnis
 
     m2d = cfg.get("muster_2d", DEFAULT_CONFIG["muster_2d"])
@@ -564,18 +692,82 @@ def finde_bilder(sc: str, cfg: dict, ordner: Path | None = None) -> dict:
     dpi_web = int(cfg.get("dpi_web", 72))
     dpi_print = int(cfg.get("dpi_print", 300))
 
-    cover = ordner / m2d.format(dpi=dpi_web, sc=sc)
-    if not cover.exists():                       # Rückfall: Druckauflösung
-        cover = ordner / m2d.format(dpi=dpi_print, sc=sc)
-    if cover.exists():
-        ergebnis["cover"] = cover
+    # -- Quelle 1: Artikeldaten-Share --------------------------------------
+    ordner = ordner or finde_artikel_ordner(sc, cfg)
+    if ordner and ordner.is_dir():
+        ergebnis["ordner"] = ordner
+        for dpi in (dpi_web, dpi_print):        # Web bevorzugt, Druck als Rückfall
+            p = ordner / m2d.format(dpi=dpi, sc=sc)
+            if p.exists():
+                ergebnis["cover"] = p
+                break
+        for dpi in (dpi_web, dpi_print):
+            p3 = ordner / m3d.format(dpi=dpi, sc=sc)
+            if p3.exists():
+                ergebnis["galerie"].append(p3)
+                break
+        if ergebnis["cover"]:
+            ergebnis["quelle"] = "Artikeldaten-Share"
+            return ergebnis
 
-    for dpi in (dpi_web, dpi_print):             # 3D: Web bevorzugt
-        p3 = ordner / m3d.format(dpi=dpi, sc=sc)
-        if p3.exists():
-            ergebnis["galerie"].append(p3)
-            break
+    # -- Quelle 2: neben der ONIX-Datei ------------------------------------
+    if xml_pfad:
+        nachbar = Path(xml_pfad).parent
+        kandidaten = [m2d.format(dpi=dpi_print, sc=sc),
+                      m2d.format(dpi=dpi_web, sc=sc),
+                      f"{sc}.jpg", f"{sc}.png"]
+        for name in kandidaten:
+            p = nachbar / name
+            if p.exists():
+                ergebnis["cover"] = p
+                ergebnis["ordner"] = ergebnis["ordner"] or nachbar
+                ergebnis["quelle"] = "neben der ONIX-Datei"
+                break
+        if ergebnis["cover"] and not ergebnis["galerie"]:
+            for dpi in (dpi_print, dpi_web):
+                p3 = nachbar / m3d.format(dpi=dpi, sc=sc)
+                if p3.exists():
+                    ergebnis["galerie"].append(p3)
+                    break
+
     return ergebnis
+
+
+def cover_web_url(sc: str, cfg: dict) -> str:
+    basis = cfg.get("newsletter_basis_url",
+                    DEFAULT_CONFIG["newsletter_basis_url"])
+    return f"{basis}{sc}.png"
+
+
+def hole_cover_web(sc: str, cfg: dict) -> Path | None:
+    """Dritte Quelle: das Cover vom eigenen Webserver holen.
+
+    Dort liegt die Datei, die auch der Newsletter verwendet — volle Auflösung
+    (rund 1500 x 2400 px), erreichbar ohne den Artikeldaten-Share. Sie wird in
+    einen Zwischenspeicher neben dem Werkzeug gelegt, damit sie nicht bei
+    jedem Blick erneut geladen wird.
+
+    Rückgabe: Pfad zur Datei, oder None wenn es sie dort nicht gibt.
+    """
+    if not sc:
+        return None
+    cache = APP_DIR / "cover_cache"
+    ziel = cache / f"{sc}.png"
+    if ziel.exists() and ziel.stat().st_size > 0:
+        return ziel
+    url = cover_web_url(sc, cfg)
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "verlag-shopware-publisher"})
+        with urllib.request.urlopen(
+                req, timeout=float(cfg.get("cover_timeout", 20))) as r:
+            daten = r.read()
+    except Exception:
+        return None                 # keine Quelle ist kein Fehler, nur ein Mangel
+    if not daten:
+        return None
+    cache.mkdir(parents=True, exist_ok=True)
+    ziel.write_bytes(daten)
+    return ziel
 
 
 # ---------------------------------------------------------------------
@@ -593,45 +785,71 @@ def _media_id(isbn13: str, zweck: str) -> str:
 
 
 def produkt_name(f: dict) -> str:
-    name = f.get("titel", "").strip()
-    if f.get("band"):
-        name = f"{name} – Band {f['band']}"
-    return name
+    """Nur der Titel — ohne Bandangabe.
+
+    Im Shop heißt der Band 14 der Schriftenreihe MARCHIVUM schlicht "Die GBG in
+    Mannheim": weder "Band 14" noch der Reihentitel stehen irgendwo auf der
+    Produktseite. Der Untertitel gehört ins Untertitelfeld und in die
+    Zitatzeile der Beschreibung, die Reihe nirgendwohin.
+    """
+    return f.get("titel", "").strip()
 
 
 def baue_beschreibung(f: dict) -> str:
-    """Beschreibung im Hausstil des Verlags:
+    """Beschreibung im Hausstil des Verlags.
 
-    Werbetext-Absätze (durch <br><br> getrennt), danach ggf. die Mitautoren
-    („Mit Beiträgen von …“) und ein KURSIVER Fakten-Block mit Zeilenumbrüchen
-    (<br>) — kein <p>, kein <hr>, keine '·'-Trennzeichen. So wie die bestehenden
-    Produkte im Shop (siehe beispiel_produkt.json). Herausgeber/Autor stehen im
-    eigenen „Autor“-Feld (customFields), nicht hier.
+    Aufbau, abgelesen an den gepflegten Produkten im Livesystem:
+
+        <Werbetext, Absätze durch <br><br> getrennt>
+
+        <i>Heiko Brohm, Harald Stockert, Die GBG in Mannheim. 100 Jahre in 100 Geschichten.<br>
+        448 Seiten mit 390 Farb- und Schwarz-Weiß-Abbildungen, fester Einband.<br>
+        ISBN 978-3-95505-607-0. EUR 29,80.</i>
+
+    Kein <p>, kein <hr>, keine '·'-Trennzeichen.
+
+    Zwei Eigenheiten, die man sonst wieder "korrigiert":
+
+    * Der EIGENE Verlag wird nicht genannt. Die Zeile "verlag regionalkultur.
+      2026." steht bei keinem der aktuellen Produkte — sie taucht nur bei
+      Fremdimprints auf ("Edition Guderjahn. 1997.").
+    * Der Untertitel steht in der Zitatzeile, nicht im Namen. Die Reihe
+      ("Schriftenreihe MARCHIVUM, Band 14") steht überhaupt nicht im Shop.
     """
     bloecke: list[str] = []
     absaetze = [html.escape(a) for a in f.get("werbetext_absaetze", []) if a.strip()]
     if absaetze:
         bloecke.append("<br>\n<br>\n".join(absaetze))
 
-    # Mitautoren als eigener Absatz (die Herausgeber stehen im Autor-Feld)
+    # Mitautoren als eigener Absatz — die Herausgeber stehen in der Zitatzeile
     if f.get("autoren"):
         bloecke.append(html.escape(
             "Mit Beiträgen von " + _join_und(f["autoren"]) + "."))
 
-    # Kursiver Fakten-Block: Umfang/Einband, Verlag + Jahr, ISBN + Preis
     zeilen: list[str] = []
-    umfang = []
+
+    # Zitatzeile: "Beitragende, Titel. Untertitel."
+    beitragende = f.get("herausgeber") or f.get("autoren") or []
+    zitat = ", ".join(beitragende)
+    if f.get("titel"):
+        zitat = (zitat + ", " if zitat else "") + f["titel"] + "."
+    if f.get("untertitel"):
+        zitat = (zitat + " " if zitat else "") + f["untertitel"] + "."
+    if zitat:
+        zeilen.append(zitat)
+
+    # Umfangzeile: "448 Seiten mit 390 Farb- und Schwarz-Weiß-Abbildungen,
+    # fester Einband." Ohne Abbildungsangabe fällt der mittlere Teil weg.
+    umfang = ""
     if f.get("seiten"):
-        umfang.append(f"{f['seiten']} Seiten")
+        umfang = f"{f['seiten']} Seiten"
+        if f.get("abbildungen") and f.get("abbildungsart"):
+            umfang += f" mit {f['abbildungen']} {f['abbildungsart']}"
     if f.get("einband"):
-        umfang.append(f["einband"])
+        umfang = (umfang + ", " if umfang else "") + f["einband"]
     if umfang:
-        zeilen.append(", ".join(umfang) + ".")
-    jahr = (f.get("datum") or "")[-4:]
-    if f.get("verlag") and jahr:
-        zeilen.append(f"{f['verlag']}. {jahr}.")
-    elif f.get("verlag"):
-        zeilen.append(f["verlag"] + ".")
+        zeilen.append(umfang + ".")
+
     isbn_preis = ""
     if f.get("isbn13_formatiert"):
         isbn_preis = f"ISBN {f['isbn13_formatiert']}."
@@ -641,6 +859,7 @@ def baue_beschreibung(f: dict) -> str:
             + f"{f.get('waehrung', 'EUR')} {betrag}."
     if isbn_preis:
         zeilen.append(isbn_preis.strip())
+
     if zeilen:
         bloecke.append("<i>" + "<br>\n".join(html.escape(z) for z in zeilen)
                        + "</i>")
@@ -658,16 +877,21 @@ def baue_customfields(f: dict, cfg: dict) -> dict:
     schluessel = cfg.get("custom_fields", DEFAULT_CONFIG["custom_fields"])
     cf: dict = {}
 
-    # Untertitel: bei einer Reihe die Bandangabe ("Band 3"), sonst der
-    # ONIX-Untertitel (auf Produktebene).
-    untertitel = f"Band {f['band']}" if f.get("band") else f.get("untertitel", "")
+    # Untertitel: IMMER der echte aus der ONIX. Früher stand hier bei
+    # Reihenbänden "Band 5" — damit ging der Untertitel ersatzlos verloren
+    # ("100 Jahre in 100 Geschichten"), und die Bandangabe steht im Shop
+    # ohnehin nirgends. Das Theme zeigt dieses Feld unter der Überschrift.
+    untertitel = f.get("untertitel", "")
     if untertitel and schluessel.get("untertitel"):
         cf[schluessel["untertitel"]] = untertitel
 
-    # "24 x 17 cm, fester Einband"
+    # "17 x 23,5 cm, fester Einband" — BREITE mal HÖHE, so steht es im Shop
+    # (die ONIX liefert beides getrennt: Höhe 23,5 / Breite 17). Die
+    # Shopware-Felder height/width behalten davon unberührt ihre echte
+    # Bedeutung; hier geht es nur um die Anzeigezeile.
     teile = []
     if f.get("hoehe_cm") and f.get("breite_cm"):
-        teile.append(f"{_zahl_de(f['hoehe_cm'])} x {_zahl_de(f['breite_cm'])} cm")
+        teile.append(f"{_zahl_de(f['breite_cm'])} x {_zahl_de(f['hoehe_cm'])} cm")
     if f.get("einband"):
         teile.append(f["einband"])
     if teile and schluessel.get("format"):
@@ -687,8 +911,77 @@ def baue_customfields(f: dict, cfg: dict) -> dict:
     return cf
 
 
+def _kat_punkte(kat_name: str, person: dict) -> int:
+    """Wie gut passt eine Kategorie zu einer Person? 2 = sicher, 1 = nur
+    Nachname, 0 = gar nicht."""
+    name = (kat_name or "").strip().lower()
+    nach = (person.get("nachname") or "").strip().lower()
+    vor = (person.get("vorname") or "").strip().lower()
+    ganz = (person.get("name") or "").strip().lower()
+    if not name:
+        return 0
+    if not nach:                                  # Körperschaft
+        return 2 if ganz and ganz in name else 0
+    if nach not in name:
+        return 0
+    return 2 if vor and vor in name else 1
+
+
+def kategorie_vorschlaege(f: dict, suche) -> tuple[list[dict], list[str]]:
+    """Je beteiligter Person eine Kategorie vorschlagen.
+
+    Der Shop führt **eine Kategorie pro Person**, benannt „Nachname, Vorname"
+    (gemessen: Suche nach 'Wiegand' liefert „Wiegand, Anna", „Wiegand, Hermann",
+    „Wiegand, Lutz"). Ein Buch mit vier Herausgebern gehört entsprechend in
+    mehrere — es gibt KEINE Sammelkategorie, die alle vier nennt. (Der
+    Breadcrumb im Shop zeigt zwar „Brohm / Stockert (Hrsg.)", das ist aber das
+    Autorenfeld des Produkts, nicht der Kategoriename.)
+
+    ``suche`` ist eine Funktion ``suche(text) -> list[dict]``; sie fragt den
+    Shop. Der Kategoriebaum ist zu groß, um ihn zu laden.
+
+    Rückgabe: (gefundene Kategorien, Namen ohne Treffer). Beides wird angezeigt
+    — auch wer NICHT gefunden wurde, denn dann muss ein Mensch ran. Neue
+    Kategorien legt das Werkzeug nie an.
+
+    Mehrdeutiges wird bewusst nicht geraten: passen mehrere Kategorien nur über
+    den Nachnamen, wird keine vorgeschlagen.
+    """
+    beteiligte = f.get("herausgeber_teile") or f.get("autoren_teile") or []
+    treffer: list[dict] = []
+    fehlend: list[str] = []
+    gesehen: set[str] = set()
+
+    for person in beteiligte:
+        begriff = (person.get("nachname") or person.get("name") or "").strip()
+        if not begriff:
+            continue
+        kandidaten = suche(begriff)
+        # Körperschaften stehen mitunter unter einem Teil ihres Namens
+        if not kandidaten and " " in begriff:
+            kandidaten = suche(begriff.split()[-1])
+
+        bewertet = [(_kat_punkte(k.get("name", ""), person), k) for k in kandidaten]
+        bewertet = [(pkt, k) for pkt, k in bewertet if pkt > 0]
+        if not bewertet:
+            fehlend.append(person.get("name") or begriff)
+            continue
+        beste = max(pkt for pkt, _ in bewertet)
+        gleichauf = [k for pkt, k in bewertet if pkt == beste]
+        if beste == 1 and len(gleichauf) > 1:      # mehrdeutig -> nicht raten
+            fehlend.append(person.get("name") or begriff)
+            continue
+        kat = gleichauf[0]
+        if kat["id"] not in gesehen:
+            gesehen.add(kat["id"])
+            treffer.append(kat)
+
+    return treffer, fehlend
+
+
 def baue_produkt(f: dict, cfg: dict, medien: list[dict] | None = None,
-                 bestehende_id: str | None = None) -> dict:
+                 bestehende_id: str | None = None,
+                 kategorien: list[str] | None = None) -> dict:
     """Baut den Shopware-Produkt-Payload (upsert).
 
     ``medien``        = [{"media_id": .., "cover": bool}, ...] (schon hochgeladen)
@@ -754,10 +1047,30 @@ def baue_produkt(f: dict, cfg: dict, medien: list[dict] | None = None,
     if stichworte:
         payload["keywords"] = ", ".join(dict.fromkeys(stichworte))[:255]
 
+    # Such-Schlagwörter — das Feld, das im Admin unter „Kategorie" steht.
+    # NICHT zu verwechseln mit `keywords` oben: das sind die SEO-Meta-Wörter
+    # auf einem anderen Reiter. Genau diese Verwechslung führte dazu, dass die
+    # Maske leer blieb, obwohl „keywords" gefüllt war.
+    #
+    # Im Bestand steht darin (Beispiel „Grünes Gras"): Titel, Untertitel, der
+    # Beteiligte mit vollem Namen, die ISBN — dazu von Hand Sachbegriffe
+    # („Kinder", „Jugendliche"), die aus der ONIX nicht abzuleiten sind und
+    # deshalb hier auch nicht erfunden werden. Der Reihentitel kommt dazu:
+    # wer „Schriftenreihe MARCHIVUM" sucht, soll Band 14 finden.
+    suchworte = [f.get("titel"), f.get("untertitel"), f.get("serientitel")]
+    suchworte += [k.get("name") for k in (f.get("herausgeber_teile") or [])]
+    suchworte += [k.get("name") for k in (f.get("autoren_teile") or [])]
+    suchworte.append(f.get("isbn13_formatiert"))
+    suchworte = [t.strip() for t in suchworte if t and str(t).strip()]
+    if suchworte:
+        payload["customSearchKeywords"] = list(dict.fromkeys(suchworte))
+
     if cfg.get("manufacturer_id"):
         payload["manufacturerId"] = cfg["manufacturer_id"]
-    if cfg.get("category_id"):
-        payload["categories"] = [{"id": cfg["category_id"]}]
+    # Kategorien kommen je Buch aus der Oberfläche — nicht mehr eine globale
+    # aus der Config. Ohne Kategorie hat das Produkt im Shop keinen Breadcrumb.
+    if kategorien:
+        payload["categories"] = [{"id": k} for k in dict.fromkeys(kategorien)]
     if cfg.get("cms_page_id"):
         payload["cmsPageId"] = cfg["cms_page_id"]
 
@@ -942,7 +1255,28 @@ class ShopClient:
         return self._liste("/api/currency")
 
     def kategorien(self) -> list[dict]:
+        """Die ersten 500 Kategorien — NUR als grobe Übersicht.
+
+        Zum Suchen taugt das nicht: der Shop führt je Autorenkonstellation eine
+        eigene Kategorie, das sind weit mehr als 500. Wer hier filtert, filtert
+        auf einem willkürlichen Ausschnitt. Dafür ``kategorien_suchen``.
+        """
         return self._liste("/api/category", limit=500)
+
+    def kategorien_suchen(self, text: str, limit: int = 50) -> list[dict]:
+        """Kategorien im Shop suchen — server-seitig.
+
+        Gemessen am Livesystem: ``/api/category`` gibt mit limit=500 genau 500
+        zurück, also abgeschnitten. Alles zu laden und örtlich zu filtern
+        verfehlt damit zuverlässig genau die Kategorie, die man sucht. Deshalb
+        sucht der Shop selbst.
+        """
+        koerper: dict = {"limit": limit,
+                         "sort": [{"field": "name", "order": "ASC"}]}
+        if text:
+            koerper["filter"] = [{"type": "contains", "field": "name",
+                                  "value": text}]
+        return self.suche("category", koerper)
 
     def hersteller(self) -> list[dict]:
         return self._liste("/api/product-manufacturer")
@@ -1064,7 +1398,8 @@ class ShopClient:
 
 def veroeffentliche(f: dict, cfg: dict, bilder: dict | None = None,
                     secret: str = "", dry_run: bool = False,
-                    ueberschreiben: bool = False, log=print) -> dict:
+                    ueberschreiben: bool = False, log=print,
+                    kategorien: list[str] | None = None) -> dict:
     """Lädt die Bilder hoch und legt/aktualisiert das Produkt als Entwurf.
 
     ``secret`` ist das entschlüsselte Shopware-Secret — es kommt bewusst als
@@ -1079,16 +1414,23 @@ def veroeffentliche(f: dict, cfg: dict, bilder: dict | None = None,
     bilder = bilder or {"cover": None, "galerie": []}
     eff = effektiv(cfg)          # globale Einstellungen + aktive Umgebung
 
-    dateien: list[tuple[Path, bool]] = []
+    # (Datei, Rolle). Die ROLLE bestimmt die Medien-ID, nicht der Dateiname:
+    # dasselbe Cover heisst je nach Quelle anders ("2D_72_05-607-0" vom Share,
+    # "05-607-0" vom Webserver). Haengt die ID am Namen, entsteht bei jedem
+    # Quellenwechsel ein zweiter Mediendatensatz, und der alte bleibt als
+    # Waise in der Mediathek liegen. An der Rolle festgemacht ist derselbe
+    # Platz desselben Buchs immer derselbe Datensatz — er bekommt nur neue
+    # Bytes. Erst dadurch REPARIERT ein erneuter Lauf ein korrigiertes Cover.
+    dateien: list[tuple[Path, str]] = []
     if bilder.get("cover"):
-        dateien.append((Path(bilder["cover"]), True))
-    for g in bilder.get("galerie", []):
-        dateien.append((Path(g), False))
+        dateien.append((Path(bilder["cover"]), "cover"))
+    for i, g in enumerate(bilder.get("galerie", [])):
+        dateien.append((Path(g), f"galerie{i}"))
 
     if dry_run:
-        medien = [{"media_id": _media_id(isbn, p.stem), "cover": ist_cover,
-                   "datei": str(p)} for p, ist_cover in dateien]
-        payload = baue_produkt(f, eff, medien)
+        medien = [{"media_id": _media_id(isbn, rolle), "cover": rolle == "cover",
+                   "datei": str(p)} for p, rolle in dateien]
+        payload = baue_produkt(f, eff, medien, kategorien=kategorien)
         log(f"Dry-Run: Payload für {payload['productNumber']} gebaut "
             f"({len(medien)} Bild(er)) — nichts gesendet.")
         return {"payload": payload, "medien": medien, "admin_url": ""}
@@ -1114,13 +1456,14 @@ def veroeffentliche(f: dict, cfg: dict, bilder: dict | None = None,
 
     ordner_id = client.produkt_medien_ordner() if dateien else None
     medien = []
-    for p, ist_cover in dateien:
-        mid = _media_id(isbn, p.stem)
+    for p, rolle in dateien:
+        mid = _media_id(isbn, rolle)
         log(f"Lade Bild hoch: {p.name} …")
         client.medium_hochladen(p, mid, p.stem, ordner_id)
-        medien.append({"media_id": mid, "cover": ist_cover, "datei": str(p)})
+        medien.append({"media_id": mid, "cover": rolle == "cover",
+                       "datei": str(p)})
 
-    payload = baue_produkt(f, eff, medien, bestehende_id)
+    payload = baue_produkt(f, eff, medien, bestehende_id, kategorien)
     log(f"{'Aktualisiere' if bestehende_id else 'Lege an'}: {nummer} "
         f"({aktive_umgebung(cfg)}) …")
     client.sync("product", [payload])

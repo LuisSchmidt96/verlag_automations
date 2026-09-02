@@ -30,7 +30,8 @@ import traceback
 import webbrowser
 from pathlib import Path
 from tkinter import (Tk, filedialog, messagebox, simpledialog, StringVar,
-                     BooleanVar, Text, END, DISABLED, NORMAL)
+                     BooleanVar, Text, Listbox, END, DISABLED, NORMAL,
+                     EXTENDED)
 from tkinter import ttk
 
 from shopware_publisher import core
@@ -65,8 +66,17 @@ class App(Tk):
         self.secret_status = StringVar(value="gesperrt")
         self.tax_var = StringVar()
         self.cur_var = StringVar()
-        self.cat_var = StringVar()
         self.sc_var = StringVar()
+        # Kategorien werden je Buch gewählt, nicht global. Die Auswahl steht
+        # in _kat_gewaehlt (IDs) und überlebt das Filtern der Liste.
+        self.kat_such = StringVar()
+        self.bild_var = StringVar(value="—")
+        self.gewicht_var = StringVar()
+        self._kat_sicht: list[dict] = []      # aktuelle Suchtreffer
+        self._kat_gewaehlt: dict[str, str] = {}   # id -> Name (überlebt die Suche)
+        self._kat_job = None                  # laufender Suchauftrag (Entprellung)
+        self._kat_fehlend: list[str] = []     # Beteiligte ohne eigene Kategorie
+        self._bild_hand = None      # von Hand gewähltes Bild (schlägt alles)
         self.xml_pfad = StringVar()
         self.dry_run = BooleanVar(value=False)
         self.status = StringVar(value="Nicht verbunden.")
@@ -136,7 +146,6 @@ class App(Tk):
         r3 = ttk.Frame(frm_v); r3.pack(fill="x", padx=8, pady=(2, 2))
         self.tax_box = self._combo(r3, "Steuer:", self.tax_var, 16)
         self.cur_box = self._combo(r3, "Währung:", self.cur_var, 10)
-        self.cat_box = self._combo(r3, "Kategorie:", self.cat_var, 26)
 
         # Verkaufskanal, Seiten-Layout und Hersteller sind im Verlagsshop für
         # jedes Buch gleich -> beim Verbinden automatisch aus dem Bestand.
@@ -153,6 +162,48 @@ class App(Tk):
             side="left", fill="x", expand=True)
         ttk.Button(b1, text="Auswählen…", command=self._waehle_xml).pack(
             side="left", padx=(6, 0))
+
+        # --- Titelbild ------------------------------------------------
+        # Drei Quellen (Share -> neben der XML -> Webserver). Welche gegriffen
+        # hat, steht daneben — bei drei Ablagen desselben Covers ist das keine
+        # Nebensache. "Bild wählen…" gab es bisher gar nicht: fand das Werkzeug
+        # nichts, war das Buch ohne Titelbild und man konnte nichts dagegen tun.
+        b2 = ttk.Frame(frm_b); b2.pack(fill="x", padx=8, pady=(0, 8))
+        ttk.Label(b2, text="Titelbild:", width=10).pack(side="left")
+        ttk.Label(b2, textvariable=self.bild_var,
+                  foreground="gray").pack(side="left", fill="x", expand=True)
+        ttk.Button(b2, text="Bild wählen…", command=self._waehle_bild).pack(
+            side="left", padx=(6, 0))
+        ttk.Button(b2, text="Vom Webserver", command=self._bild_vom_web).pack(
+            side="left", padx=(6, 0))
+
+        # Gewicht: VLB liefert es meist NICHT mit (kein <Measure> vom Typ 08).
+        # Geraten wird es nicht — wer es braucht, trägt es hier ein.
+        b2b = ttk.Frame(frm_b); b2b.pack(fill="x", padx=8, pady=(0, 8))
+        ttk.Label(b2b, text="Gewicht:", width=10).pack(side="left")
+        ttk.Entry(b2b, textvariable=self.gewicht_var, width=10).pack(side="left")
+        ttk.Label(b2b, text="kg — leer lassen, wenn unbekannt (die ONIX hat es "
+                            "meist nicht)", foreground="gray").pack(side="left",
+                                                                    padx=6)
+
+        # --- Kategorien -----------------------------------------------
+        # Je Buch, mehrfach wählbar. Ohne Kategorie hat das Produkt im Shop
+        # keinen Breadcrumb. Die Autoren-/Herausgeberkategorie wird nach dem
+        # Laden vorgeschlagen und angehakt — sichtbar und abwählbar.
+        b3 = ttk.Frame(frm_b); b3.pack(fill="x", padx=8, pady=(0, 8))
+        ttk.Label(b3, text="Kategorien:", width=10).pack(side="left", anchor="n")
+        kbox = ttk.Frame(b3); kbox.pack(side="left", fill="x", expand=True)
+        such = ttk.Entry(kbox, textvariable=self.kat_such)
+        such.pack(fill="x")
+        such.bind("<KeyRelease>", self._kat_suche_angestossen)
+        such.bind("<Return>", lambda _e: self._kat_suchen())
+        self.kat_liste = Listbox(kbox, selectmode=EXTENDED, height=5,
+                                 exportselection=False)
+        self.kat_liste.pack(fill="x", pady=(2, 0))
+        self.kat_liste.bind("<<ListboxSelect>>", self._kat_gewaehlt_merken)
+        ttk.Label(kbox, text="(Name eintippen — es wird im Shop gesucht. "
+                             "Mehrfachauswahl mit Strg/Shift)",
+                  foreground="gray").pack(anchor="w")
 
         # --- Vorschau --------------------------------------------------
         frm_p = ttk.LabelFrame(self, text="Vorschau (was im Shop landet)")
@@ -213,10 +264,14 @@ class App(Tk):
         self._vorlage = {}
         self._client = None                  # Verbindung gehört zum alten Shop
         self._existiert_id = None
-        for box, var in ((self.tax_box, self.tax_var), (self.cur_box, self.cur_var),
-                         (self.cat_box, self.cat_var)):
+        for box, var in ((self.tax_box, self.tax_var),
+                         (self.cur_box, self.cur_var)):
             box.configure(values=[])
             var.set("")
+        # Kategorie-IDs sind shopspezifisch — beim Wechsel verwerfen.
+        self._kat_sicht = []
+        self._kat_gewaehlt = {}
+        self._zeige_kategorien()
         self.sc_var.set("")
         self.status.set("Nicht verbunden.")
         self._aktualisiere_umgebung()
@@ -351,10 +406,10 @@ class App(Tk):
                                 tls_pruefen=bool(umg.get("tls_pruefen", True)))
             version = c.verbinde().get("version", "?")
             self._client = c            # verbunden halten (für Existenz-Prüfung)
-            self._lookups = {
-                "tax": c.steuersaetze(), "cur": c.waehrungen(),
-                "cat": c.kategorien(),
-            }
+            # Kategorien werden NICHT vorgeladen: der Shop hat weit mehr als
+            # die 500, die ein Rutsch hergibt (gemessen: genau 500 = Anschlag).
+            # Gesucht wird server-seitig, je Buch.
+            self._lookups = {"tax": c.steuersaetze(), "cur": c.waehrungen()}
             # Verkaufskanal, Seiten-Layout und Hersteller aus dem Bestand
             # übernehmen (für jedes Buch gleich). Ohne Verkaufskanal wäre das
             # neue Produkt im Shop unsichtbar.
@@ -394,8 +449,8 @@ class App(Tk):
         fill(self.cur_box, self.cur_var, self._lookups["cur"],
              lambda e: e["isoCode"], "currency_id",
              vorauswahl=lambda e: e["isoCode"] == "EUR")
-        fill(self.cat_box, self.cat_var, self._lookups["cat"],
-             lambda e: e.get("name") or e["id"], "category_id")
+        if self.felder:
+            self._schlage_kategorie_vor()
         v = getattr(self, "_vorlage", {}) or {}
         kanal = v.get("sales_channel_name") or umg.get("sales_channel_id", "")
         hersteller = v.get("manufacturer_name") or "—"
@@ -422,7 +477,6 @@ class App(Tk):
                     return
         pick(self.tax_var, "tax_id", lambda e: f"{e['name']} ({e['taxRate']} %)")
         pick(self.cur_var, "currency_id", lambda e: e["isoCode"])
-        pick(self.cat_var, "category_id", lambda e: e.get("name") or e["id"])
         # Hersteller/Verkaufskanal/CMS werden aus dem Bestand übernommen
         # (kein Dropdown) — hier nichts zu tun.
         core.speichere_config(self.cfg)
@@ -442,14 +496,185 @@ class App(Tk):
         core.speichere_config(self.cfg)
         self._lade_buch()
 
+    # ------------------------------------------------------------------
+    # Kategorien (je Buch)
+    # ------------------------------------------------------------------
+    def _spaeter(self, fn, *args):
+        """Aus einem Hintergrund-Thread in die Oberfläche zurückkehren.
+
+        Ist das Fenster inzwischen zu (Suche läuft noch, Bediener schließt),
+        wirft Tk „main thread is not in main loop". Das ist kein Fehler, der
+        jemanden interessiert — die Antwort ist nur gegenstandslos geworden.
+        """
+        try:
+            self.after(0, fn, *args)
+        except RuntimeError:
+            pass
+
+    def _kat_suche_angestossen(self, _ev=None):
+        """Tippen entprellen — sonst eine Shop-Abfrage je Tastendruck."""
+        if self._kat_job:
+            self.after_cancel(self._kat_job)
+        self._kat_job = self.after(400, self._kat_suchen)
+
+    def _kat_suchen(self):
+        """Im Shop nach Kategorien suchen (nicht örtlich filtern).
+
+        Der Kategoriebaum ist zu groß, um ihn zu laden — deshalb fragt jede
+        Suche den Shop. Läuft im Hintergrund, damit die Oberfläche nicht steht.
+        """
+        self._kat_job = None
+        if not self._client:
+            self._zeige_kategorien()
+            return
+        text = self.kat_such.get().strip()
+
+        def arbeite():
+            try:
+                treffer = self._client.kategorien_suchen(text)
+            except core.ShopFehler:
+                treffer = []
+            self._spaeter(self._zeige_kategorien, treffer)
+
+        threading.Thread(target=arbeite, daemon=True).start()
+
+    def _zeige_kategorien(self, treffer=None):
+        """Trefferliste anzeigen; schon Gewähltes steht immer obenan.
+
+        Gewählte Kategorien werden mitgeführt, auch wenn die aktuelle Suche sie
+        nicht enthält — sonst verlöre man sie beim Weitersuchen.
+        """
+        if treffer is not None:
+            self._kat_sicht = treffer
+        gewaehlt = [{"id": i, "name": n} for i, n in self._kat_gewaehlt.items()]
+        ids = {k["id"] for k in gewaehlt}
+        liste = gewaehlt + [k for k in self._kat_sicht if k["id"] not in ids]
+
+        self.kat_liste.delete(0, END)
+        for i, k in enumerate(liste):
+            marke = "✓ " if k["id"] in self._kat_gewaehlt else "   "
+            self.kat_liste.insert(END, marke + (k.get("name") or k["id"]))
+            if k["id"] in self._kat_gewaehlt:
+                self.kat_liste.selection_set(i)
+        self._kat_liste_daten = liste
+
+    def _kat_gewaehlt_merken(self, _ev=None):
+        """Sichtbare Auswahl übernehmen — Unsichtbares bleibt unangetastet."""
+        liste = getattr(self, "_kat_liste_daten", [])
+        sichtbar = {k["id"] for k in liste}
+        gewaehlt = {liste[i]["id"]: liste[i].get("name") or liste[i]["id"]
+                    for i in self.kat_liste.curselection() if i < len(liste)}
+        behalten = {i: n for i, n in self._kat_gewaehlt.items()
+                    if i not in sichtbar}
+        self._kat_gewaehlt = {**behalten, **gewaehlt}
+        self._zeige_vorschau()
+
+    def _schlage_kategorie_vor(self):
+        """Je beteiligter Person die Kategorie im Shop suchen und anhaken.
+
+        Der Shop führt eine Kategorie pro Person („Wiegand, Hermann"), nicht
+        eine gemeinsame je Buch — vier Herausgeber heißen also vier Kategorien.
+        """
+        if not (self.felder and self._client):
+            return
+
+        def arbeite():
+            def suche(text):
+                try:
+                    return self._client.kategorien_suchen(text)
+                except core.ShopFehler:
+                    return []
+            treffer, fehlend = core.kategorie_vorschlaege(self.felder, suche)
+            self._spaeter(self._vorschlag_uebernehmen, treffer, fehlend)
+
+        threading.Thread(target=arbeite, daemon=True).start()
+
+    def _vorschlag_uebernehmen(self, treffer, fehlend):
+        for k in treffer:
+            self._kat_gewaehlt[k["id"]] = k.get("name") or k["id"]
+        # Wer nicht gefunden wurde, gehört gesagt — sonst fehlt die Kategorie
+        # still, und niemand merkt es bis der Breadcrumb im Shop leer bleibt.
+        self._kat_fehlend = fehlend
+        self._zeige_kategorien(treffer)
+        self._zeige_vorschau()
+
+    # ------------------------------------------------------------------
+    # Titelbild
+    # ------------------------------------------------------------------
+    def _bild_uebernehmen(self, pfad, quelle: str):
+        self.bilder = dict(self.bilder or {})
+        self.bilder["cover"] = Path(pfad)
+        self.bilder["quelle"] = quelle
+        self.bilder.setdefault("galerie", [])
+        self._bild_hand = Path(pfad)
+        self._zeige_bildstand()
+        self._zeige_vorschau()
+
+    def _waehle_bild(self):
+        start = None
+        if self.bilder and self.bilder.get("ordner"):
+            start = str(self.bilder["ordner"])
+        elif self.xml_pfad.get():
+            start = str(Path(self.xml_pfad.get()).parent)
+        pfad = filedialog.askopenfilename(
+            title="Titelbild auswählen",
+            filetypes=[("Bilder", "*.jpg *.jpeg *.png"), ("Alle Dateien", "*.*")],
+            initialdir=start)
+        if pfad:
+            self._bild_uebernehmen(pfad, "von Hand gewählt")
+
+    def _bild_vom_web(self):
+        if not self.felder:
+            messagebox.showwarning("Kein Buch", "Bitte zuerst eine ONIX-XML wählen.")
+            return
+        sc = self.felder["shortcode"]
+        self.info_var.set("Hole Cover vom Webserver …")
+        self.update_idletasks()
+        pfad = core.hole_cover_web(sc, core.effektiv(self.cfg))
+        if pfad:
+            self._bild_uebernehmen(pfad, "Webserver (newsletter_)")
+            self.info_var.set(f"Kurzcode {sc}")
+        else:
+            self.info_var.set(f"Kurzcode {sc}")
+            messagebox.showwarning(
+                "Kein Cover gefunden",
+                f"Unter\n{core.cover_web_url(sc, core.effektiv(self.cfg))}\n"
+                "liegt kein Bild.\n\nMit „Bild wählen…“ lässt sich eines von "
+                "der Platte nehmen.")
+
+    def _zeige_bildstand(self):
+        b = self.bilder or {}
+        if b.get("cover"):
+            self.bild_var.set(f"{Path(b['cover']).name}   "
+                              f"({b.get('quelle') or 'unbekannte Quelle'})")
+        else:
+            self.bild_var.set("— keines gefunden (Share, ONIX-Ordner, Webserver) —")
+
     def _lade_buch(self):
         try:
             eff = core.effektiv(self.cfg)
             self.felder = core.lade_buchfelder(self.xml_pfad.get(), eff)
-            self.bilder = core.finde_bilder(self.felder["shortcode"], eff)
+            self._bild_hand = None
+            self._kat_gewaehlt = {}     # Kategorien gehören zum Buch
+            self._kat_fehlend = []
+            g = self.felder.get("gewicht_kg")
+            self.gewicht_var.set(("%g" % g) if g else "")
+            sc = self.felder["shortcode"]
+            # Quelle 1 + 2 (beide örtlich, deshalb sofort)
+            self.bilder = core.finde_bilder(sc, eff, xml_pfad=self.xml_pfad.get())
+            # Quelle 3 nur, wenn örtlich nichts da war — sie lädt herunter
+            if not self.bilder.get("cover"):
+                self.info_var.set("Kein Bild vor Ort — hole vom Webserver …")
+                self.update_idletasks()
+                pfad = core.hole_cover_web(sc, eff)
+                if pfad:
+                    self.bilder["cover"] = pfad
+                    self.bilder["quelle"] = "Webserver (newsletter_)"
+            self._zeige_bildstand()
+            self._schlage_kategorie_vor()
             self._pruefe_existenz()
             self._zeige_vorschau()
-            self.info_var.set(f"Kurzcode {self.felder['shortcode']}")
+            self.info_var.set(f"Kurzcode {sc}")
         except Exception as e:
             messagebox.showerror("Fehler beim Einlesen",
                                  f"{e}\n\n{traceback.format_exc()}")
@@ -487,14 +712,29 @@ class App(Tk):
                           "überschrieben (nur nach Bestätigung)")
         else:
             zeilen.append("Im Shop        neu — wird angelegt")
+        if self._kat_gewaehlt:
+            zeilen.append("Kategorien     "
+                          + " · ".join(sorted(self._kat_gewaehlt.values())))
+        elif self._client:
+            zeilen.append("Kategorien     ⚠ keine gewählt — das Buch bekäme "
+                          "im Shop keinen Breadcrumb")
+        else:
+            zeilen.append("Kategorien     ? (noch nicht verbunden)")
+        # Unabhängig davon, ob etwas gefunden wurde: wer KEINE eigene Kategorie
+        # hat, gehört genannt. Sonst fehlt sie still, und es fällt erst auf,
+        # wenn im Shop der Breadcrumb leer bleibt.
+        if self._kat_fehlend:
+            zeilen.append("               ⚠ ohne eigene Kategorie: "
+                          + ", ".join(self._kat_fehlend))
         zeilen.append("")
-        ordner = b.get("ordner")
-        zeilen.append(f"Bilder-Ordner  {ordner if ordner else '— nicht gefunden —'}")
-        zeilen.append(f"  Cover        {Path(b['cover']).name if b.get('cover') else '— fehlt —'}")
+        if b.get("cover"):
+            zeilen.append(f"Titelbild      {Path(b['cover']).name}")
+            zeilen.append(f"  Quelle       {b.get('quelle') or 'unbekannt'}")
+        else:
+            zeilen.append("Titelbild      ⚠ KEINES — weder auf dem Share, noch "
+                          "neben der XML, noch auf dem Webserver")
         for g in b.get("galerie", []):
             zeilen.append(f"  Galerie      {Path(g).name}")
-        if not b.get("cover"):
-            zeilen.append("  (ohne Bild wird das Produkt trotzdem angelegt)")
         zeilen += ["", "Beschreibung (HTML):", core.baue_beschreibung(f)]
 
         self.txt.configure(state=NORMAL)
@@ -515,6 +755,9 @@ class App(Tk):
         # Dev- und Produktivshop liegen auf demselben Server — vor dem Schreiben
         # zeigen, in WELCHEN Shop es geht. Ein Vertipper oder eine vergessene
         # Umgebung soll nicht still im Livesystem landen.
+        if not self._uebernimm_gewicht():
+            return
+
         self._ueberschreiben = False
         if not self.dry_run.get():
             name = core.aktive_umgebung(self.cfg)
@@ -529,6 +772,21 @@ class App(Tk):
                     f"Status: {'AKTIV' if eff.get('aktiv') else 'Entwurf (inaktiv)'}"
                     f"{warnung}"):
                 return
+
+            # Ein Buch ohne Titelbild ist im Shop kaum zu gebrauchen. Früher
+            # stand darüber nur eine Zeile in der Vorschau — leicht zu übersehen.
+            if not (self.bilder or {}).get("cover"):
+                if not messagebox.askyesno(
+                        "Ohne Titelbild anlegen?",
+                        "Zu diesem Buch wurde KEIN Titelbild gefunden — weder "
+                        "auf dem Artikeldaten-Share, noch neben der ONIX-Datei, "
+                        "noch auf dem Webserver.\n\n"
+                        "Im Shop stünde das Buch dann ohne Cover.\n\n"
+                        "Mit „Nein“ abbrechen und über „Bild wählen…“ eines "
+                        "von der Platte nehmen.\n\n"
+                        "Trotzdem anlegen?", icon="warning", default="no"):
+                    self.info_var.set("Abgebrochen — kein Titelbild.")
+                    return
 
             # Bestehendes Buch? Ausdrücklich warnen — die gepflegten Shop-Daten
             # (Name, Beschreibung, Preis, Cover …) würden mit den ONIX-Werten
@@ -550,13 +808,32 @@ class App(Tk):
         self.info_var.set("Sende …")
         threading.Thread(target=self._run_worker, daemon=True).start()
 
+    def _uebernimm_gewicht(self) -> bool:
+        """Eingetragenes Gewicht in die Buchdaten übernehmen.
+
+        Rückgabe False, wenn die Eingabe keine Zahl ist — dann wird nicht
+        gesendet, statt stillschweigend ohne Gewicht anzulegen.
+        """
+        text = self.gewicht_var.get().strip().replace(",", ".")
+        if not text:
+            self.felder.pop("gewicht_kg", None)
+            return True
+        try:
+            self.felder["gewicht_kg"] = float(text)
+        except ValueError:
+            messagebox.showerror("Gewicht", f"„{self.gewicht_var.get()}“ ist "
+                                            "keine Zahl. Beispiel: 0,554")
+            return False
+        return True
+
     def _run_worker(self):
         try:
             ergebnis = core.veroeffentliche(
                 self.felder, self.cfg, self.bilder, secret=self._secret or "",
                 dry_run=self.dry_run.get(),
                 ueberschreiben=getattr(self, "_ueberschreiben", False),
-                log=lambda m: None)
+                log=lambda m: None,
+                kategorien=sorted(self._kat_gewaehlt))   # dict -> IDs
             self.after(0, self._fertig, ergebnis, None)
         except Exception as e:
             traceback.print_exc()

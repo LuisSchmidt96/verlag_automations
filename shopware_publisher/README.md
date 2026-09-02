@@ -13,12 +13,36 @@ Getestet gegen die Admin-API von **Shopware 6.7**.
 
 | Shopware-Feld  | Quelle (ONIX)                                        |
 |----------------|------------------------------------------------------|
-| Artikelnummer  | ISBN-13 (auch als **EAN**)                            |
-| Name           | Titel (+ „– Band n“, falls Reihe)                     |
-| Beschreibung   | Werbetext (`d104`) als Absätze + Fakten-Block         |
+| Artikelnummer  | ISBN-13 mit Bindestrichen (auch als **EAN**)          |
+| Name           | **nur der Titel** — ohne Band, ohne Reihe             |
+| Untertitel (attr1) | ONIX-Untertitel                                   |
+| Format (attr12)| **Breite × Höhe** + Einband („17 x 23,5 cm, fester Einband“) |
+| Beschreibung   | Werbetext + kursiver Fakten-Block (siehe unten)       |
 | Preis          | DE-Preis brutto; **netto** = brutto / (1 + Steuersatz)|
-| Bilder         | vom `cover_previews`-Tool (siehe unten)               |
-| Steuer/Währung/Kategorie/Hersteller | einmalig im GUI zugeordnet       |
+| Maße / Erscheinungsdatum | `Measure` bzw. `PublishingDate`             |
+| SEO            | metaTitle, metaDescription, keywords                   |
+| Bilder         | drei Quellen (siehe unten)                            |
+| Kategorien     | **je Buch** in der Oberfläche gewählt                  |
+| Steuer/Währung/Hersteller | einmalig im GUI zugeordnet                 |
+
+### Beschreibung — der Hausstil
+
+Abgelesen an den gepflegten Produkten im Livesystem, nicht erfunden:
+
+```
+<Werbetext, Absätze durch <br><br> getrennt>
+
+<i>Heiko Brohm, Harald Stockert, Die GBG in Mannheim. 100 Jahre in 100 Geschichten.<br>
+448 Seiten mit 390 Farb- und Schwarz-Weiß-Abbildungen, fester Einband.<br>
+ISBN 978-3-95505-607-0. EUR 29,80.</i>
+```
+
+Zwei Eigenheiten, die man sonst wieder „korrigiert“:
+
+* Der **eigene Verlag wird nicht genannt**. „verlag regionalkultur. 2026.“
+  steht bei keinem Bestandsprodukt — die Zeile taucht nur bei Fremdimprints auf.
+* **Reihe und Band stehen nirgends** im Shop, auch nicht im Namen. Der
+  Untertitel steht in der Zitatzeile und im Untertitelfeld.
 
 **Idempotent:** Die Produkt-ID wird fest aus der ISBN abgeleitet. Ein zweiter
 Lauf zum selben Buch **aktualisiert** das Produkt — es entsteht kein Duplikat.
@@ -124,29 +148,72 @@ dem Anlegen an und fragt nach. Vorher am besten einmal mit **Dry-Run** laufen.
 
 setzen — **nur für den Dev-Store**. Im Produktivshop bleibt es `true`.
 
-## Bilder
+## Bilder — drei Quellen
 
-Die Bilder erzeugt das **`cover_previews`-Tool** und legt sie auf dem
-Artikeldaten-Share im Ordner des Buchs ab. Der Publisher sucht sie dort anhand
-des **Kurzcodes**:
+Gesucht wird in dieser Reihenfolge; die Vorschau nennt, **welche** gegriffen hat:
 
-```
-<Artikeldaten>\<Kurzcode>_<Titel>\
-    2D_72_<sc>.jpg     -> Cover (Hauptbild)
-    3D_72_<sc>.jpg     -> zusätzliches Galeriebild
-```
+1. **Artikeldaten-Share** — dort erzeugt `cover_previews` die Dateien. Das ist
+   das Original, alles andere sind Kopien davon.
 
-Fehlt ein Bild, wird das Produkt trotzdem angelegt (nur ohne Bild). Der Pfad
-zum Share steht in `config.json → artikeldaten_dir`.
+   ```
+   <Artikeldaten>\<Kurzcode>_<Titel>\
+       2D_72_<sc>.jpg     -> Cover (Hauptbild)
+       3D_72_<sc>.jpg     -> zusätzliches Galeriebild
+   ```
+
+2. **Neben der ONIX-Datei** — hilft, wenn der Share nicht erreichbar ist.
+3. **Webserver** — `https://verlag-regionalkultur.de/newsletter_/<sc>.png`,
+   dieselbe Datei, die auch der Newsletter nutzt. Volle Auflösung.
+
+Findet keine davon etwas, **fragt das Werkzeug nach**, bevor es anlegt — ein
+Buch ohne Titelbild ist im Shop kaum zu gebrauchen. Mit **„Bild wählen…“** lässt
+sich jederzeit eines von der Platte nehmen.
+
+Die Medien-ID hängt an der **Rolle** (`cover`, `galerie0`), nicht am Dateinamen.
+Nur so ersetzt ein zweiter Lauf ein korrigiertes Cover, statt einen zweiten
+Mediendatensatz anzulegen und den alten als Waise zurückzulassen.
+
+> **Achtung, Schiefstand:** dasselbe Cover liegt am Ende im Share, unter
+> `newsletter_/`, bei VLB und in Shopware. Diese Ablagen wissen nichts
+> voneinander. Wird ein Cover korrigiert, muss es **überall** neu hoch — der
+> Publisher aktualisiert nur den Shop.
 
 ## Bedienung
 
 1. **Verbinden** (einmalig, s. o.).
-2. **ONIX-XML wählen** → die Vorschau zeigt, was im Shop landet
-   (Name, Artikelnummer, Preis brutto/netto, gefundene Bilder, Beschreibung).
-3. **Dry-Run** ankreuzen, um den Payload nur anzuschauen (nichts wird gesendet).
-4. **Als Entwurf anlegen** → Bilder hochladen + Produkt anlegen/aktualisieren.
+2. **ONIX-XML wählen** → die Vorschau zeigt, was im Shop landet (Name,
+   Artikelnummer, Preis brutto/netto, Titelbild **mit Quelle**, Kategorien,
+   Beschreibung). Beide ONIX-Fassungen werden gelesen: Kurz-Tags (`<b012>`) und
+   Referenz-Tags (`<ProductForm>`, Dateiname `onix3Ref_…`).
+3. **Kategorien wählen** — je beteiligter Person wird die passende Kategorie
+   im Shop **gesucht** und angehakt; Sachkategorien wählt ein Mensch dazu.
+   Ohne Kategorie hat das Buch im Shop keinen Breadcrumb.
+
+   Der Shop führt **eine Kategorie pro Person**, benannt `Nachname, Vorname`
+   (`Wiegand, Hermann`). Ein Buch mit vier Herausgebern gehört also in vier
+   Kategorien — eine Sammelkategorie „Brohm / Stockert (Hrsg.)" gibt es nicht;
+   was so im Breadcrumb steht, ist das Autorenfeld des Produkts.
+
+   Gesucht wird **server-seitig**: `/api/category` gibt mit `limit=500` genau
+   500 Einträge zurück, also abgeschnitten. Alles zu laden und örtlich zu
+   filtern verfehlt daher zuverlässig die gesuchte Kategorie.
+
+   Wer **keine** eigene Kategorie hat, wird ausdrücklich genannt — dann muss
+   ein Mensch ran. Angelegt wird nie eine.
+4. **Gewicht** eintragen, falls gebraucht — VLB liefert es meist nicht mit.
+5. **Dry-Run** ankreuzen, um den Payload nur anzuschauen (nichts wird gesendet).
+6. **Als Entwurf anlegen** → Bilder hochladen + Produkt anlegen/aktualisieren.
    Danach lässt sich das Produkt direkt im Admin öffnen.
+
+### Hinterher prüfen
+
+```
+python -m shopware_publisher.dump_produkt --vergleich beispiele/buch.xml
+```
+
+Hält den aus der ONIX gebauten Payload Feld für Feld gegen das Produkt im Shop
+und zeigt nur, was abweicht — dazu Kategorien und Bilderzahl. Damit beantwortet
+sich „ist es so angekommen, wie gedacht?“ aus Daten statt aus Erinnerung.
 
 ## Technische Notizen (Shopware 6.7)
 
