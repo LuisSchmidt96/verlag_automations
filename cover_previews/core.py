@@ -495,7 +495,11 @@ def speichere_2d(front: Image.Image, out_dir: Path, sc: str, cfg: dict) -> list[
     nur der eingebettete DPI-Wert unterscheidet sich."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    muster = cfg.get("muster_2d", "2D_{dpi}_{sc}.jpeg")
+    # Rückfallwert MUSS zu DEFAULT_CONFIG["muster_2d"] passen: der
+    # shopware_publisher sucht das Cover als "2D_{dpi}_{sc}.jpg". Stand hier
+    # ".jpeg" (wie früher), fand er nichts — und legte das Buch stumm ohne
+    # Titelbild an.
+    muster = cfg.get("muster_2d", DEFAULT_CONFIG["muster_2d"])
     q = int(cfg.get("jpeg_qualitaet", 95))
     rgb = front.convert("RGB")
     pfade = []
@@ -580,17 +584,22 @@ def ziel_ordner(sc: str, titel: str, cfg: dict) -> tuple[Path, bool]:
 
 def ausgabe_namen(sc: str, cfg: dict, mit_2d: bool, mit_3d: bool) -> list[str]:
     """Dateinamen, die ein Lauf schreiben würde (Konvention des Verlags)."""
+    # Die Rückfallwerte müssen mit DEFAULT_CONFIG übereinstimmen — sonst prüft
+    # die Kollisionserkennung andere Namen, als speichere_2d/das JSX schreiben,
+    # und meldet keinen Zusammenstoß, obwohl es einen gibt.
     namen = []
     dpi_p, dpi_w = int(cfg.get("dpi_print", 300)), int(cfg.get("dpi_web", 72))
     if mit_2d:
-        m = cfg.get("muster_2d", "2D_{dpi}_{sc}.jpeg")
+        m = cfg.get("muster_2d", DEFAULT_CONFIG["muster_2d"])
         namen += [m.format(dpi=d, sc=sc) for d in (dpi_p, dpi_w)]
     if mit_3d:
-        m = cfg.get("muster_3d", "3D_{dpi}_{sc}.jpg")
+        m = cfg.get("muster_3d", DEFAULT_CONFIG["muster_3d"])
         namen += [m.format(dpi=d, sc=sc) for d in (dpi_p, dpi_w)]
-        namen.append(cfg.get("muster_3d_png", "{sc}.png").format(sc=sc))
+        namen.append(cfg.get("muster_3d_png",
+                             DEFAULT_CONFIG["muster_3d_png"]).format(sc=sc))
         if cfg.get("tif_erzeugen", True):
-            namen.append(cfg.get("muster_3d_tif", "3D_{dpi}_{sc}.tif").format(
+            namen.append(cfg.get("muster_3d_tif",
+                                 DEFAULT_CONFIG["muster_3d_tif"]).format(
                 dpi=dpi_p, sc=sc))
     return namen
 
@@ -1061,3 +1070,125 @@ def raeume_auf(out_dir: Path, sc: str) -> list[Path]:
         except OSError:
             pass
     return weg
+
+
+# ---------------------------------------------------------------------
+# Kompletter Lauf ohne Oberfläche
+# ---------------------------------------------------------------------
+
+def lauf(pdf_pfad, titel: str, cfg: dict, *,
+         doc: "fitz.Document | None" = None,
+         reg: "Regionen | None" = None,
+         mit_2d: bool = True, mit_3d: bool = True,
+         vorlage: str | None = None,
+         dry_run: bool | None = None,
+         share_pflicht: bool = False,
+         frage_ordner=None, frage_kollisionen=None,
+         log=print) -> dict:
+    """Ein vollständiger Lauf: PDF rein, Dateien im Artikelordner raus.
+
+    Bis hierher lebte diese Reihenfolge in ``app._run_worker`` und war damit
+    von außen nicht anstoßbar. Jetzt steht sie hier, und die Oberfläche ruft
+    dieselbe Funktion — damit es nicht zwei Wege gibt, die auseinanderlaufen.
+
+    ``doc`` und ``reg`` dürfen mitgegeben werden, wenn die Oberfläche das PDF
+    schon offen hat und der Bediener die blauen Linien von Hand justiert hat;
+    sonst werden sie hier bestimmt.
+
+    ``dry_run=None`` heißt: unter Windows echt, sonst Trockenlauf — der
+    3D-Zweig steuert Photoshop und läuft nirgends sonst.
+
+    ``share_pflicht=True`` bricht ab, wenn der Ablageort nicht erreichbar ist,
+    statt still nach ``cover_output/`` neben der .exe auszuweichen. Für einen
+    verketteten Durchgang ist genau das nötig: ein Buchordner, der woanders
+    liegt als gedacht, macht die Folgeschritte wertlos.
+
+    ``frage_ordner(out_dir)`` und ``frage_kollisionen(liste)`` sind optionale
+    Rückfragen; geben sie False zurück, bricht der Lauf ab. Ohne sie läuft er
+    durch.
+
+    Rückgabe: {"erzeugt": [Path], "hinweise": [str], "out_dir": Path,
+               "sc": str, "reg": Regionen, "ausgewichen": bool}
+    """
+    from datetime import datetime
+
+    if dry_run is None:
+        dry_run = sys.platform != "win32"
+
+    eigenes_doc = doc is None
+    if eigenes_doc:
+        doc = oeffne_pdf(pdf_pfad)
+    try:
+        isbn = extrahiere_isbn(doc)
+        if not isbn:
+            raise ValueError(
+                f"Keine ISBN im PDF gefunden ({Path(pdf_pfad).name}) — "
+                "ohne sie steht der Kurzcode nicht fest.")
+        sc = shortcode_aus_isbn(isbn)
+
+        if reg is None:
+            reg = finde_schnittlinien(doc, cfg)
+        if reg.front is None:
+            raise ValueError(
+                "Vorder-/Rückseite/Rücken nicht bestimmt — die Schnittmarken "
+                "im PDF geben zu wenig her (mind. 4 senkrechte Schnitte).")
+
+        basis = artikeldaten_dir(cfg)
+        if basis is None and share_pflicht:
+            raise RuntimeError(
+                f"Ablageort nicht erreichbar: "
+                f"{cfg.get('artikeldaten_dir') or '(nicht eingetragen)'}")
+        out_dir, existiert = ziel_ordner(sc, titel, cfg)
+        ausgewichen = basis is None
+
+        if not existiert and frage_ordner and not frage_ordner(out_dir):
+            return {"erzeugt": [], "hinweise": ["Abgebrochen."],
+                    "out_dir": out_dir, "sc": sc, "reg": reg,
+                    "ausgewichen": ausgewichen}
+
+        namen = ausgabe_namen(sc, cfg, mit_2d, mit_3d)
+        alt = kollisionen(out_dir, namen)
+        if alt and frage_kollisionen and not frage_kollisionen(alt):
+            return {"erzeugt": [], "hinweise": ["Abgebrochen."],
+                    "out_dir": out_dir, "sc": sc, "reg": reg,
+                    "ausgewichen": ausgewichen}
+
+        erzeugt: list[Path] = []
+        hinweise: list[str] = []
+        if ausgewichen:
+            hinweise.append(f"Ablageort nicht erreichbar — geschrieben nach "
+                            f"{out_dir}")
+
+        out_dir.mkdir(parents=True, exist_ok=True)
+        if alt:
+            ziel = sichere_weg(alt, datetime.now().strftime("%Y-%m-%d_%H%M%S"))
+            hinweise.append(f"{len(alt)} alte Datei(en) nach "
+                            f"_alt/{ziel.name}/ verschoben.")
+
+        img_hi = rendere_seite(doc, int(cfg.get("dpi_print", 300)))
+
+        if mit_2d:
+            log("Erzeuge 2D-Vorderseite …")
+            front = extrahiere(img_hi,
+                               reg.box_px("front", int(cfg.get("dpi_print", 300))))
+            erzeugt += speichere_2d(front, out_dir, sc, cfg)
+
+        if mit_3d:
+            gewaehlt = vorlage or (waehle_vorlage(reg, cfg) or {}).get("name", "")
+            if not gewaehlt:
+                hinweise.append("3D übersprungen: keine passende Vorlage.")
+            else:
+                log(f"Erzeuge 3D-Mockup ({gewaehlt}) …")
+                erzeugt += erzeuge_3d_photoshop(
+                    reg, img_hi, cfg, out_dir, sc, gewaehlt,
+                    dry_run=dry_run, log=log)
+                if dry_run:
+                    hinweise.append(
+                        "3D: kein Windows/Photoshop — Trockenlauf, geschrieben "
+                        "wurden nur JSX und Slot-PNGs. Das Mockup fehlt.")
+
+        return {"erzeugt": erzeugt, "hinweise": hinweise, "out_dir": out_dir,
+                "sc": sc, "reg": reg, "ausgewichen": ausgewichen}
+    finally:
+        if eigenes_doc:
+            doc.close()

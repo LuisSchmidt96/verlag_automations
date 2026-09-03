@@ -24,6 +24,13 @@ verlag_automations/
 ├── cover_previews/             ← Cover-Previews (Umschlag-PDF → 2D-/3D-Vorschau-PNGs)
 │   ├── core.py, app.py, main.py, CoverPreviews.spec, README.md
 │   └── mockups/                ← Photoshop-Mockup-PSDs (lokal, nicht eingecheckt)
+├── shopware_publisher/         ← Buch als Entwurf in den Shopware-Shop
+│   ├── core.py, app.py, main.py, ShopwarePublisher.spec, README.md
+│   ├── dump_produkt.py         ← Entwicklerskript: Produkt holen / vergleichen
+│   ├── probelauf.py            ← Entwicklerskript: ganzer Weg gegen dev
+│   └── beispiele/              ← ONIX-XML in beiden Fassungen (Kurz + Referenz)
+├── buchdurchgang/              ← die drei obigen in EINEM Zug, je Buch ein Ordner
+│   └── core.py, app.py, main.py, Buchdurchgang.spec, README.md
 ├── tools/
 │   ├── update_and_build.ps1    ← zieht Git-Änderungen & baut alle Tools neu
 │   ├── launch.ps1              ← startet ein Tool und aktualisiert es dabei
@@ -35,6 +42,12 @@ verlag_automations/
 
 Alle Tools folgen demselben Muster (`core.py` / `app.py` / `main.py` /
 `<Name>.spec`); Laufzeitdaten liegen direkt neben der .exe.
+
+`buchdurchgang` ist die **eine Ausnahme** von „kein geteilter Code": es bindet
+`cover_previews`, `pi_bi_generator` und `shopware_publisher` ein, statt sie
+nachzubauen. Die Regel verbietet, eine gemeinsame Bibliothek *herauszulösen* —
+hier wird nichts herausgelöst, die drei bleiben einzeln lauffähig. Begründung
+und Preis stehen im Kopf von [buchdurchgang/core.py](buchdurchgang/core.py).
 
 ## Ein neues Tool hinzufügen
 

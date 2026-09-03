@@ -187,12 +187,88 @@ def _kontributoren(product, rolle: str) -> list[str]:
     return [n for _, n in sorted(beitraege)]
 
 
+# VLB liefert dieselben Daten in zwei Schreibweisen: mit KURZ-Tags (<b012>) und
+# mit REFERENZ-Tags (<ProductForm>). Welche man bekommt, haengt allein am
+# Exportdialog — die Referenzfassung heisst dann "onix3Ref_….xml". Statt jeden
+# Lesezugriff zu verdoppeln, wird der Baum einmalig auf die Kurzform gebracht;
+# darunter bleibt der gesamte Lesecode unveraendert.
+#
+# Dieselbe Tabelle steht im shopware_publisher. Das ist bewusste Dopplung
+# (siehe CLAUDE.md: kein geteilter Code zwischen den Werkzeugen) — jedes
+# Werkzeug bleibt fuer sich lauffaehig. Wer hier ein Feld ergaenzt, sollte
+# dort nachsehen.
+REFERENZ_ZU_KURZ = {
+    "Product": "product",
+    "ProductIdentifier": "productidentifier",
+    "ProductIDType": "b221",
+    "IDValue": "b244",
+    "DescriptiveDetail": "descriptivedetail",
+    "TitleDetail": "titledetail",
+    "TitleType": "b202",
+    "TitleElement": "titleelement",
+    "TitleElementLevel": "x409",
+    "TitleText": "b203",
+    "Subtitle": "b029",
+    "Collection": "collection",
+    "PartNumber": "x410",
+    "Extent": "extent",
+    "ExtentValue": "b219",
+    "ProductForm": "b012",
+    "NumberOfIllustrations": "b125",
+    "IllustrationsNote": "b062",
+    "PublishingDetail": "publishingdetail",
+    "Publisher": "publisher",
+    "PublisherName": "b081",
+    "ProductSupply": "productsupply",
+    "SupplyDetail": "supplydetail",
+    "Price": "price",
+    "Territory": "territory",
+    "CountriesIncluded": "x449",
+    "PriceAmount": "j151",
+    "CurrencyCode": "j152",
+    "PublishingDate": "publishingdate",
+    "Date": "b306",
+    "Measure": "measure",
+    "MeasureType": "x315",
+    "Measurement": "c094",
+    "MeasureUnitCode": "c095",
+    "CollateralDetail": "collateraldetail",
+    "SupportingResource": "supportingresource",
+    "ResourceContentType": "x436",
+    "ResourceVersion": "resourceversion",
+    "ResourceLink": "x435",
+    "TextContent": "textcontent",
+    "Text": "d104",
+    "Contributor": "contributor",
+    "SequenceNumber": "b034",
+    "ContributorRole": "b035",
+    "PersonName": "b036",
+    "CorporateName": "b047",
+    "NamesBeforeKey": "b039",
+    "KeyNames": "b040",
+}
+
+
+def _normalisiere_tags(root) -> None:
+    """Referenzfassung auf Kurz-Tags umschreiben (siehe REFERENZ_ZU_KURZ).
+
+    Namensraeume werden vorher abgestreift: die VLB-Dateien haben keinen, aber
+    ONIX erlaubt ihn, und ein Namensraum wuerde jedes find() ins Leere laufen
+    lassen — lautlos, was der schlimmste Fall waere.
+    """
+    for el in root.iter():
+        if isinstance(el.tag, str):
+            if "}" in el.tag:
+                el.tag = el.tag.split("}", 1)[1]
+            el.tag = REFERENZ_ZU_KURZ.get(el.tag, el.tag)
+
 def lade_buchdaten(xml_pfad, cfg: dict | None = None) -> Buchdaten:
     cfg = cfg or DEFAULT_CONFIG
     einband_map = cfg.get("einband_map", DEFAULT_CONFIG["einband_map"])
     isbn_prefix = cfg.get("isbn_prefix", DEFAULT_CONFIG["isbn_prefix"])
 
     root = ET.parse(str(xml_pfad)).getroot()
+    _normalisiere_tags(root)
     product = root.find("product")
     if product is None:
         raise ValueError("Kein <product>-Element in der XML gefunden — "
@@ -585,3 +661,61 @@ def baue_docx_vorlagen(beispiel_dir=None, ziel_dir=None) -> None:
     baue_docx_vorlage(beispiel_dir / "BI_05-559-2.docx",
                       ziel_dir / "bi_vorlage.docx")
     print(f"Vorlagen geschrieben nach {ziel_dir}")
+
+
+# ---------------------------------------------------------------------
+# Kompletter Lauf ohne Oberfläche
+# ---------------------------------------------------------------------
+
+def erzeuge_alle(buch: "Buchdaten", ziel_ordner, cfg: dict, *,
+                 cover_bytes: bytes | None = None,
+                 cover_suffix: str = ".jpg",
+                 detail_url: str = "",
+                 log=print) -> list[Path]:
+    """PI und BI erzeugen — als .docx UND .html, dazu das Cover.
+
+    Bis hierher stand diese Reihenfolge samt Dateinamen in ``app._do_run`` und
+    war damit von außen nicht anstoßbar. Jetzt hier, und die Oberfläche ruft
+    dieselbe Funktion — sonst laufen die beiden Wege mit der Zeit auseinander.
+
+    PI = Presseinformation (Anschreiben + Rezensionsexemplar),
+    BI = Buchinformation (Buchhandel, mit Konditionen und Bestellformular).
+
+    Ohne ``cover_bytes`` behalten die .docx das Platzhalter-Cover der Vorlage;
+    erzeugt wird trotzdem.
+
+    Rückgabe: Liste der geschriebenen Dateien.
+    """
+    ziel = Path(ziel_ordner)
+    ziel.mkdir(parents=True, exist_ok=True)
+    sc = buch.shortcode
+    detail_url = detail_url or cfg.get("detail_fallback_url", "")
+
+    v = VORLAGEN_DIR
+    geschrieben: list[Path] = []
+
+    # Namen mit Unterstrich — früher hießen die HTML-Dateien "PI 05-559-2.html"
+    # (mit Leerzeichen), die docx aber "PI_05-559-2.docx". Ein Buchordner, in
+    # dem dieselbe Sache zweimal anders heißt, ist eine Stolperfalle.
+    for vorlage, name in (("pi_vorlage.docx", f"PI_{sc}.docx"),
+                          ("bi_vorlage.docx", f"BI_{sc}.docx")):
+        ziel_datei = ziel / name
+        log(f"Erzeuge {name} …")
+        generiere_docx(v / vorlage, buch, cover_bytes, ziel_datei)
+        geschrieben.append(ziel_datei)
+
+    for vorlage, name in (("pi_vorlage.html", f"PI_{sc}.html"),
+                          ("bi_vorlage.html", f"BI_{sc}.html")):
+        ziel_datei = ziel / name
+        log(f"Erzeuge {name} …")
+        generiere_html(v / vorlage, buch, detail_url, cfg, ziel_datei)
+        geschrieben.append(ziel_datei)
+
+    if cover_bytes:
+        ziel_datei = ziel / f"cover_{buch.isbn13}{cover_suffix or '.jpg'}"
+        ziel_datei.write_bytes(cover_bytes)
+        geschrieben.append(ziel_datei)
+    else:
+        log("⚠ Kein Cover — die .docx behalten das Platzhalter-Cover.")
+
+    return geschrieben

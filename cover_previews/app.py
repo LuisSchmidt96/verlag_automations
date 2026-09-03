@@ -26,7 +26,6 @@ import os
 import sys
 import threading
 import traceback
-from datetime import datetime
 from pathlib import Path
 from tkinter import (Tk, Canvas, filedialog, messagebox,
                      StringVar, BooleanVar)
@@ -434,61 +433,47 @@ class App(Tk):
         self.cfg["artikeldaten_dir"] = self.artikeldaten_var.get().strip()
         core.speichere_config(self.cfg)
 
-        out_dir, existiert = core.ziel_ordner(self.sc, self.titel_var.get(), self.cfg)
-
+        # Die beiden Rückfragen bleiben HIER, im Hauptthread: Tkinter-Dialoge
+        # aus einem Hintergrund-Thread heraus gehen nicht. core.lauf() rechnet
+        # Zielordner und Kollisionen gleich noch einmal aus (billig) und
+        # erledigt das Verschieben dann ohne weitere Nachfrage.
+        out_dir, existiert = core.ziel_ordner(self.sc, self.titel_var.get(),
+                                              self.cfg)
         if not existiert and not messagebox.askokcancel(
                 "Ordner anlegen", f"Der Ordner wird neu angelegt:\n\n{out_dir}"):
             return
 
-        # Vorhandene Dateien nicht stillschweigend überschreiben.
         namen = core.ausgabe_namen(self.sc, self.cfg, self.out_2d.get(),
                                    self.out_3d.get())
-        self._alt = core.kollisionen(out_dir, namen)
-        if self._alt:
-            liste = "\n".join(f"• {p.name}" for p in self._alt)
+        alt = core.kollisionen(out_dir, namen)
+        if alt:
+            liste = "\n".join(f"• {p.name}" for p in alt)
             if not messagebox.askokcancel(
                     "Dateien vorhanden",
-                    f"Im Zielordner liegen schon {len(self._alt)} dieser "
+                    f"Im Zielordner liegen schon {len(alt)} dieser "
                     f"Datei(en):\n\n{liste}\n\n"
                     "Sie werden nach _alt/<Zeitstempel>/ verschoben, die neuen "
                     "bekommen die regulären Namen.\n\nFortfahren?"):
                 return
 
-        self._out_dir = out_dir
         self.btn_run.configure(state="disabled")
         self.info_var.set("Erzeuge …")
         threading.Thread(target=self._run_worker, daemon=True).start()
 
     def _run_worker(self):
-        erzeugt = []
-        fehler = []
+        """Der Lauf selbst steckt in core.lauf() — dieselbe Funktion, die auch
+        der Buchdurchgang aufruft. So gibt es nicht zwei Wege, die mit der Zeit
+        auseinanderlaufen."""
+        erzeugt, fehler = [], []
         try:
-            out_dir = self._out_dir
-            out_dir.mkdir(parents=True, exist_ok=True)
-            if self._alt:
-                stempel = datetime.now().strftime("%Y-%m-%d_%H%M%S")
-                ziel = core.sichere_weg(self._alt, stempel)
-                fehler.append(f"{len(self._alt)} alte Datei(en) nach "
-                              f"_alt/{ziel.name}/ verschoben.")
-            img_hi = core.rendere_seite(self.doc, int(self.cfg["dpi_print"]))
-
-            if self.out_2d.get():
-                front = core.extrahiere(
-                    img_hi, self.reg.box_px("front", int(self.cfg["dpi_print"])))
-                erzeugt += core.speichere_2d(front, out_dir, self.sc, self.cfg)
-
-            if self.out_3d.get():
-                vorlage = self.vorlage_var.get().strip()
-                if not vorlage:
-                    fehler.append("3D übersprungen: keine Vorlage gewählt.")
-                else:
-                    dry = sys.platform != "win32"
-                    erzeugt += core.erzeuge_3d_photoshop(
-                        self.reg, img_hi, self.cfg, out_dir, self.sc, vorlage,
-                        dry_run=dry, log=lambda m: None)
-                    if dry:
-                        fehler.append("3D: kein Windows/Photoshop — Dry-Run "
-                                      "(JSX + Slot-PNGs) geschrieben.")
+            ergebnis = core.lauf(
+                self.pdf_pfad.get(), self.titel_var.get(), self.cfg,
+                doc=self.doc, reg=self.reg,      # Linien ggf. von Hand justiert
+                mit_2d=self.out_2d.get(), mit_3d=self.out_3d.get(),
+                vorlage=self.vorlage_var.get().strip() or None,
+                log=lambda m: None)
+            erzeugt = ergebnis["erzeugt"]
+            fehler = list(ergebnis["hinweise"])
         except Exception as e:
             fehler.append(f"{e}")
             traceback.print_exc()

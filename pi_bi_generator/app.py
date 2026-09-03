@@ -298,29 +298,15 @@ class App(Tk):
                     f"Coverdatei nicht gefunden:\n{cp}\n\n"
                     f"Es wird ohne aktuelles Cover erzeugt.")
 
-        sc = self.buch.shortcode
-        detail_url = self.detail_var.get().strip() or \
-            self.cfg.get("detail_fallback_url", "")
-        ziel.mkdir(parents=True, exist_ok=True)
+        # Der Lauf steckt in core.erzeuge_alle() — dieselbe Funktion, die auch
+        # der Buchdurchgang aufruft.
+        geschrieben = core.erzeuge_alle(
+            self.buch, ziel, self.cfg,
+            cover_bytes=cover_bytes, cover_suffix=cover_suffix,
+            detail_url=self.detail_var.get().strip(),
+            log=self._log)
 
-        v = core.VORLAGEN_DIR
-        core.generiere_docx(v / "pi_vorlage.docx", self.buch, cover_bytes,
-                            ziel / f"PI_{sc}.docx")
-        core.generiere_docx(v / "bi_vorlage.docx", self.buch, cover_bytes,
-                            ziel / f"BI_{sc}.docx")
-        core.generiere_html(v / "pi_vorlage.html", self.buch, detail_url,
-                            self.cfg, ziel / f"PI {sc}.html")
-        core.generiere_html(v / "bi_vorlage.html", self.buch, detail_url,
-                            self.cfg, ziel / f"BI {sc}.html")
-
-        erzeugt = 4
-        if cover_bytes:
-            (ziel / f"cover_{self.buch.isbn13}{cover_suffix}").write_bytes(cover_bytes)
-            erzeugt += 1
-        else:
-            self._log("⚠ Kein Cover gewählt — docx behalten das Platzhalter-Cover.")
-
-        self._log(f"✓ {erzeugt} Dateien in {ziel}")
+        self._log(f"✓ {len(geschrieben)} Dateien in {ziel}")
         cover_hinweis = ("" if cover_bytes else
                          "\n\n⚠ Ohne aktuelles Cover erzeugt "
                          "(kein Coverbild gewählt).")
