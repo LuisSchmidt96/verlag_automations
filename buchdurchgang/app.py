@@ -270,8 +270,8 @@ class App(Tk):
                     self._verbunden(*rest)
                 elif art == "vorschlag":
                     self._vorschlag(*rest)
-                elif art == "kat_angelegt":
-                    self._kat_angelegt(*rest)
+                elif art == "shop_bereit":
+                    self._shop_bereit(*rest)
         except queue.Empty:
             pass
         except Exception:
@@ -657,15 +657,6 @@ class App(Tk):
         # Kategorien werden beim Verbinden gesucht und ohne Rückfrage gesetzt.
         # Nachsehen und ergänzen tut man ohnehin im Shopware-Backend — das
         # steht so in der Checkliste, und dafür geht es nachher von selbst auf.
-        # Fehlt einem Beteiligten die Kategorie, kann sie hier angelegt
-        # werden — aber nur nach Rückfrage: das schreibt in die Navigation
-        # des Shops, nicht in einen Produktentwurf.
-        r_kat = ttk.Frame(f); r_kat.pack(fill="x", padx=8, pady=(0, 4))
-        self.btn_kat_anlegen = ttk.Button(
-            r_kat, text="Fehlende Autorenkategorien anlegen…",
-            command=self._kategorien_anlegen, state="disabled")
-        self.btn_kat_anlegen.pack(side="left")
-
         r3 = ttk.Frame(f); r3.pack(fill="x", padx=8, pady=4)
         self.shop_dry = BooleanVar(value=False)
         ttk.Checkbutton(r3, text="Dry-Run (nichts senden)",
@@ -847,97 +838,6 @@ class App(Tk):
         offen = set(self._kat_fehlend or [])
         return [pers for pers in alle if (pers.get("name") or "") in offen]
 
-    def _kategorien_anlegen(self):
-        """Fehlende Autorenkategorien anlegen — nach Rückfrage."""
-        if not self._client:
-            messagebox.showwarning("Nicht verbunden", "Bitte zuerst verbinden.")
-            return
-        scfg = core.cfg_shop(self.cfg)
-        name_umg = sw.aktive_umgebung(scfg)
-        gemerkt = sw.lade_kategorien_cache(name_umg)
-        if not gemerkt:
-            messagebox.showwarning(
-                "Kein Kategoriebaum",
-                "Der Baum ist noch nicht gemerkt — bitte einmal verbinden.")
-            return
-
-        plaene = [sw.plane_autorenkategorie(pers, gemerkt, scfg)
-                  for pers in self._fehlende_personen()]
-
-        # Was es schon gibt, wird BENUTZT statt angelegt — auch wenn es unter
-        # einem anderen Buchstaben hängt. Sonst stünde derselbe Herausgeber
-        # zweimal im Baum und seine Bücher verteilten sich auf beide.
-        uebernommen = []
-        for pl in plaene:
-            if pl["vorhanden"]:
-                self._kat_gewaehlt[pl["vorhanden"]["id"]] = pl["vorhanden"]["name"]
-                uebernommen.append(pl)
-                self._schreibe(self.shop_log,
-                               f"✓ vorhanden, wird verwendet: {pl['pfad']}")
-            elif not pl["moeglich"]:
-                self._schreibe(self.shop_log, f"✗ {pl['name']}: {pl['grund']}")
-        if uebernommen:
-            erledigt = {pl["name"] for pl in uebernommen}
-            self._kat_fehlend = [n for n in self._kat_fehlend
-                                 if sw.kategorie_name_fuer(
-                                     {"name": n, "nachname": "", "vorname": ""})
-                                 not in erledigt and n not in erledigt]
-
-        machbar = [pl for pl in plaene if pl["moeglich"]]
-        if not machbar:
-            self.btn_kat_anlegen.configure(
-                state="normal" if self._kat_fehlend else "disabled")
-            messagebox.showinfo(
-                "Nichts anzulegen",
-                f"{len(uebernommen)} Kategorie(n) gab es schon und wurden "
-                f"übernommen.\n\nAnzulegen bleibt nichts — Einzelheiten "
-                f"stehen im Protokoll." if uebernommen else
-                "Es gibt nichts, was sich anlegen ließe — Einzelheiten stehen "
-                "im Protokoll.")
-            return
-
-        liste = "\n".join(f"• {pl['pfad']}" for pl in machbar)
-        warnung = ("\n\n⚠  PRODUKTIVSHOP — das steht danach in der Navigation!"
-                   if sw.ist_produktiv(name_umg) else "")
-        if not messagebox.askokcancel(
-                "Kategorien anlegen?",
-                f"In {name_umg} werden {len(machbar)} Kategorie(n) "
-                f"angelegt:\n\n{liste}{warnung}"):
-            return
-
-        self.btn_kat_anlegen.configure(state="disabled")
-        self.status.set("Lege Kategorien an …")
-        url = sw.umgebung(scfg).get("shop_url", "")
-
-        def arbeite():
-            angelegt = []
-            try:
-                for pl in machbar:
-                    vorlage = (self._client.kategorie_holen(pl["vorlage_id"])
-                               if pl["vorlage_id"] else None)
-                    neu_id = self._client.kategorie_anlegen(
-                        pl["name"], pl["eltern_id"], vorlage)
-                    angelegt.append({"id": neu_id, "name": pl["name"]})
-                    self._nachrichten.put(
-                        ("log", "shop", f"✓ angelegt: {pl['pfad']}"))
-                # Baum neu merken — sonst fehlen die neuen beim nächsten Buch
-                sw.schreibe_kategorien_cache(
-                    name_umg, url, self._client.alle_kategorien())
-            except Exception as e:
-                self._nachrichten.put(("log", "shop", f"✗ {e}"))
-            self._nachrichten.put(("kat_angelegt", angelegt))
-
-        threading.Thread(target=arbeite, daemon=True).start()
-
-    def _kat_angelegt(self, angelegt):
-        for k in angelegt:
-            self._kat_gewaehlt[k["id"]] = k["name"]
-        erledigt = {k["name"] for k in angelegt}
-        self._kat_fehlend = [n for n in self._kat_fehlend if n not in erledigt]
-        self.btn_kat_anlegen.configure(
-            state="normal" if self._kat_fehlend else "disabled")
-        self.status.set(f"{len(angelegt)} Kategorie(n) angelegt.")
-
     def _vorschlag(self, treffer, fehlend):
         """Was gefunden wurde, wird gesetzt — ohne Rückfrage.
 
@@ -954,38 +854,164 @@ class App(Tk):
         self._kat_fehlend = list(fehlend)
         for name in fehlend:
             self._schreibe(self.shop_log, f"⚠ ohne eigene Kategorie: {name}")
-        if fehlend and hasattr(self, "btn_kat_anlegen"):
-            self.btn_kat_anlegen.configure(state="normal")
+        if fehlend:
             self._schreibe(self.shop_log,
-                           "   → der Knopf oben legt sie nach Rückfrage an.")
+                           "   → beim Anlegen wird gefragt, ob sie entstehen "
+                           "sollen.")
 
     # -- Anlegen -------------------------------------------------------
     def _lauf_shop(self):
-        if not self.shop_dry.get():
-            if not self._client and not self._entsperren():
-                return
-            scfg = core.cfg_shop(self.cfg)
-            name = sw.aktive_umgebung(scfg)
-            warnung = ("\n\n⚠  PRODUKTIVSHOP — die Änderung ist echt!"
-                       if sw.ist_produktiv(name) else "")
-            if not messagebox.askokcancel(
-                    "Wirklich anlegen?",
-                    f"Umgebung: {name}\n{sw.umgebung(scfg).get('shop_url')}\n\n"
-                    f"Artikelnummer: {self.paar['felder']['isbn13_formatiert']}"
-                    f"{warnung}"):
-                return
+        """Der Weg zum Entwurf — erst alle Rückfragen, dann ein Arbeitsgang.
+
+        1. **Kategoriebaum auffrischen** und neu raten. Er kann seit dem
+           Verbinden gewachsen sein, etwa weil beim letzten Buch eine
+           Autorenkategorie entstand.
+        2. Umgebung bestätigen.
+        3. Überschreiben bestätigen, falls es das Buch schon gibt.
+        4. Fehlende Autorenkategorien: anlegen?
+
+        Alle Fenster im Hauptthread, alles Netz danach in EINEM Arbeitsgang.
+        Sonst wechseln sich Rückfragen und Wartezeiten ab, und man weiß nie,
+        ob noch etwas kommt.
+        """
+        if self.shop_dry.get():
+            self._shop_senden(ueberschreiben=False, anlegen=[])
+            return
+        if not self._client and not self._entsperren():
+            return
+        if not self._client:
+            messagebox.showwarning("Nicht verbunden",
+                                   "Bitte zuerst „Verbinden“ drücken.")
+            return
 
         self.btn_shop.configure(state="disabled")
-        self.status.set("Sende …")
-        dry = self.shop_dry.get()          # Tk-Variable, nur im Hauptthread
+        self.status.set("Frische Kategorien auf …")
+        scfg = core.cfg_shop(self.cfg)
+        name_umg = sw.aktive_umgebung(scfg)
+        url = sw.umgebung(scfg).get("shop_url", "")
+        nummer = self.paar["felder"]["isbn13_formatiert"]
 
         def arbeite():
             try:
+                kats = self._client.alle_kategorien()
+                sw.schreibe_kategorien_cache(name_umg, url, kats)
+                treffer, fehlend = sw.kategorie_vorschlaege(
+                    self.paar["felder"], sw.cache_sucher(kats), scfg,
+                    log=self._melde("shop"))
+                vorhanden = self._client.produkt_id_zu_nummer(nummer)
+                self._nachrichten.put(
+                    ("shop_bereit", kats, treffer, fehlend, vorhanden, None))
+            except Exception as e:
+                traceback.print_exc()
+                self._nachrichten.put(
+                    ("shop_bereit", None, None, None, None, e))
+
+        threading.Thread(target=arbeite, daemon=True).start()
+
+    def _shop_bereit(self, kats, treffer, fehlend, vorhanden, fehler):
+        """Alle Rückfragen, hintereinander weg — im Hauptthread."""
+        self.btn_shop.configure(state="normal")
+        if fehler:
+            self._schreibe(self.shop_log, f"✗ {fehler}")
+            self.status.set("Fehlgeschlagen.")
+            messagebox.showerror("Shop", str(fehler))
+            return
+
+        self._vorschlag(treffer, fehlend)      # setzt _kat_gewaehlt/_kat_fehlend
+
+        scfg = core.cfg_shop(self.cfg)
+        name_umg = sw.aktive_umgebung(scfg)
+        nummer = self.paar["felder"]["isbn13_formatiert"]
+        warnung = ("\n\n⚠  PRODUKTIVSHOP — die Änderung ist echt!"
+                   if sw.ist_produktiv(name_umg) else "")
+        if not messagebox.askokcancel(
+                "Wirklich anlegen?",
+                f"Umgebung: {name_umg}\n{sw.umgebung(scfg).get('shop_url')}\n\n"
+                f"Artikelnummer: {nummer}{warnung}"):
+            return
+
+        ueberschreiben = False
+        if vorhanden:
+            if not messagebox.askyesno(
+                    "Buch existiert bereits",
+                    f"{nummer} gibt es im Shop schon.\n\nBeim Überschreiben "
+                    f"gehen dort gepflegte Angaben verloren (Name, "
+                    f"Beschreibung, Preis, Bilder …).\n\nWirklich "
+                    f"überschreiben?", icon="warning", default="no"):
+                self._schreibe(self.shop_log, "Abgebrochen — nichts geändert.")
+                return
+            ueberschreiben = True
+
+        anlegen = self._frage_kategorien(kats)
+        self._shop_senden(ueberschreiben=ueberschreiben, anlegen=anlegen)
+
+    def _frage_kategorien(self, kats) -> list[dict]:
+        """Fehlende Autorenkategorien vorlegen. Rückgabe: was anzulegen ist.
+
+        Was es schon gibt — auch unter einem ANDEREN Buchstaben — wird
+        übernommen statt neu angelegt. Im Bestand hängt „Beiträge … Speyer"
+        unter S statt unter B; ohne diese Prüfung entstünde der Eintrag ein
+        zweites Mal, und die Bücher verteilten sich auf zwei Kategorien.
+        """
+        if not self._kat_fehlend:
+            return []
+        scfg = core.cfg_shop(self.cfg)
+        plaene = [sw.plane_autorenkategorie(pers, kats, scfg)
+                  for pers in self._fehlende_personen()]
+
+        for pl in plaene:
+            if pl["vorhanden"]:
+                self._kat_gewaehlt[pl["vorhanden"]["id"]] = pl["vorhanden"]["name"]
+                self._schreibe(self.shop_log,
+                               f"✓ vorhanden, wird verwendet: {pl['pfad']}")
+            elif not pl["moeglich"]:
+                self._schreibe(self.shop_log, f"✗ {pl['name']}: {pl['grund']}")
+
+        machbar = [pl for pl in plaene if pl["moeglich"]]
+        if not machbar:
+            return []
+        liste = "\n".join(f"• {pl['pfad']}" for pl in machbar)
+        warnung = ("\n\n⚠  Das steht danach in der Navigation des "
+                   "PRODUKTIVSHOPS!"
+                   if sw.ist_produktiv(sw.aktive_umgebung(scfg)) else "")
+        if messagebox.askyesno(
+                "Autorenkategorie fehlt",
+                f"Für diese Beteiligten gibt es noch keine Kategorie:\n\n"
+                f"{liste}\n\nAnlegen?{warnung}"):
+            return machbar
+        self._schreibe(self.shop_log,
+                       "Kategorien nicht angelegt — das Buch bekommt sie nicht.")
+        return []
+
+    def _shop_senden(self, *, ueberschreiben: bool, anlegen: list[dict]):
+        """Ein Arbeitsgang: erst die Kategorien anlegen, dann veröffentlichen."""
+        self.btn_shop.configure(state="disabled")
+        self.status.set("Sende …")
+        dry = self.shop_dry.get()          # Tk-Variable, nur im Hauptthread
+        kategorien = dict(self._kat_gewaehlt)
+
+        def arbeite():
+            try:
+                for pl in anlegen:
+                    vorlage = (self._client.kategorie_holen(pl["vorlage_id"])
+                               if pl["vorlage_id"] else None)
+                    neu_id = self._client.kategorie_anlegen(
+                        pl["name"], pl["eltern_id"], vorlage)
+                    kategorien[neu_id] = pl["name"]
+                    self._nachrichten.put(
+                        ("log", "shop", f"✓ angelegt: {pl['pfad']}"))
+                if anlegen:
+                    scfg = core.cfg_shop(self.cfg)
+                    sw.schreibe_kategorien_cache(
+                        sw.aktive_umgebung(scfg),
+                        sw.umgebung(scfg).get("shop_url", ""),
+                        self._client.alle_kategorien())
+
                 erg = core.schritt_shop(
                     self.paar, self.ordner, self.cfg,
                     secret=self._secret or "",
-                    kategorien=sorted(self._kat_gewaehlt),
-                    dry_run=dry,
+                    kategorien=sorted(kategorien),
+                    dry_run=dry, ueberschreiben=ueberschreiben,
                     log=self._melde("shop"))
                 self._nachrichten.put(("fertig", "shop", erg, None))
             except Exception as e:
@@ -997,16 +1023,13 @@ class App(Tk):
     def _shop_fertig(self, erg, fehler):
         self.btn_shop.configure(state="normal")
         if fehler:
+            # Überschrieben wird nach vorheriger Frage; kommt der Fehler
+            # trotzdem, hat sich zwischen Prüfen und Senden etwas geändert.
             if isinstance(fehler, sw.ProduktExistiert):
-                if messagebox.askyesno(
-                        "Buch existiert bereits",
-                        f"{fehler.nummer} gibt es im Shop schon und wurde NICHT "
-                        f"verändert.\n\nBeim Überschreiben gehen dort gepflegte "
-                        f"Angaben verloren.\n\nWirklich überschreiben?",
-                        icon="warning", default="no"):
-                    self._ueberschreibe()
-                    return
-                self._schreibe(self.shop_log, "Abgebrochen — nichts geändert.")
+                self._schreibe(self.shop_log,
+                               f"✗ {fehler.nummer} wurde zwischenzeitlich "
+                               f"angelegt — nichts geändert.")
+                messagebox.showwarning("Inzwischen vorhanden", str(fehler))
                 return
             self._schreibe(self.shop_log, f"✗ {fehler}")
             messagebox.showerror("Shop", str(fehler))
@@ -1030,25 +1053,6 @@ class App(Tk):
         self._male_schrittliste()
         self._pruefe_tor()
 
-    def _ueberschreibe(self):
-        self.btn_shop.configure(state="disabled")
-        dry = self.shop_dry.get()          # Tk-Variable, nur im Hauptthread
-
-        def arbeite():
-            try:
-                erg = core.schritt_shop(
-                    self.paar, self.ordner, self.cfg, secret=self._secret or "",
-                    kategorien=sorted(self._kat_gewaehlt),
-                    dry_run=dry, ueberschreiben=True,
-                    log=self._melde("shop"))
-                self._nachrichten.put(("fertig", "shop", erg, None))
-            except Exception as e:
-                self._nachrichten.put(("fertig", "shop", None, e))
-
-        threading.Thread(target=arbeite, daemon=True).start()
-
-def main():
-    App().mainloop()
 
 
 if __name__ == "__main__":
