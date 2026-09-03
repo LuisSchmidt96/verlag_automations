@@ -1036,7 +1036,8 @@ def warengruppe_sachteil(text: str) -> str:
     return text.split(" / ", 1)[1].strip() if " / " in text else text
 
 
-def kategorie_vorschlaege(f: dict, suche, cfg: dict | None = None) -> tuple[list[dict], list[str]]:
+def kategorie_vorschlaege(f: dict, suche, cfg: dict | None = None,
+                          log=None) -> tuple[list[dict], list[str]]:
     """Je beteiligter Person eine Kategorie vorschlagen.
 
     Der Shop führt **eine Kategorie pro Person**, benannt „Nachname, Vorname"
@@ -1118,10 +1119,24 @@ def kategorie_vorschlaege(f: dict, suche, cfg: dict | None = None) -> tuple[list
         for stueck in dict.fromkeys(t for t in stuecke if t):
             namen += klein_wg.get(stueck.lower(), [])
 
-    for name in dict.fromkeys(n for n in namen if len(n) >= 3):
+    gesucht = list(dict.fromkeys(n for n in namen if len(n) >= 3))
+    ohne_treffer = []
+    for name in gesucht:
+        gefunden = False
         for kat in suche(name):
             if (kat.get("name") or "").strip().lower() == name.lower():
                 merke(kat)
+                gefunden = True
+        if not gefunden:
+            ohne_treffer.append(name)
+
+    # Nachvollziehbar machen, WONACH gesucht wurde. Ohne das steht am Ende nur
+    # "keine Kategorie" da, und niemand weiß, ob die Namen falsch waren oder
+    # der Shop sie nicht führt.
+    if log and gesucht:
+        log(f"   Sachkategorien gesucht nach: {', '.join(gesucht)}")
+        if ohne_treffer:
+            log(f"   davon im Shop nicht vorhanden: {', '.join(ohne_treffer)}")
 
     return treffer, fehlend
 

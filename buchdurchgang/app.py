@@ -665,6 +665,12 @@ class App(Tk):
         self.shop_log = self._log_feld(f, "shop")
         self._baue_checkliste(f, "shop")
 
+        # Wer schon verbunden ist und erst jetzt hier ankommt, bekam bisher
+        # keinen Vorschlag — der lief nur beim Verbinden. Das war der Grund,
+        # warum das Kategoriefeld im Backend leer blieb.
+        if self._client and not self._kat_gewaehlt:
+            self._schlage_kategorien_vor()
+
     def _wechsle_umgebung(self, _ev=None):
         scfg = core.cfg_shop(self.cfg)
         self._merke_zugang()
@@ -799,7 +805,8 @@ class App(Tk):
                 except sw.ShopFehler:
                     return []
             treffer, fehlend = sw.kategorie_vorschlaege(
-                self.paar["felder"], suche, core.cfg_shop(self.cfg))
+                self.paar["felder"], suche, core.cfg_shop(self.cfg),
+                log=self._melde("shop"))
             self._nachrichten.put(("vorschlag", treffer, fehlend))
 
         threading.Thread(target=arbeite, daemon=True).start()

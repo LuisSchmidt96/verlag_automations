@@ -610,18 +610,23 @@ class App(Tk):
                     return self._client.kategorien_suchen(text)
                 except core.ShopFehler:
                     return []
+            berichte: list[str] = []
             treffer, fehlend = core.kategorie_vorschlaege(
-                self.felder, suche, core.effektiv(self.cfg))
-            self._spaeter(self._vorschlag_uebernehmen, treffer, fehlend)
+                self.felder, suche, core.effektiv(self.cfg),
+                log=berichte.append)
+            self._spaeter(self._vorschlag_uebernehmen, treffer, fehlend,
+                          berichte)
 
         threading.Thread(target=arbeite, daemon=True).start()
 
-    def _vorschlag_uebernehmen(self, treffer, fehlend):
+    def _vorschlag_uebernehmen(self, treffer, fehlend, berichte=None):
         for k in treffer:
             self._kat_gewaehlt[k["id"]] = k.get("name") or k["id"]
         # Wer nicht gefunden wurde, gehört gesagt — sonst fehlt die Kategorie
         # still, und niemand merkt es bis der Breadcrumb im Shop leer bleibt.
         self._kat_fehlend = fehlend
+        for zeile in (berichte or []):
+            print(zeile.strip())          # steht in der Vorschau ohnehin knapp
         self._zeige_kategorien(treffer)
         self._zeige_vorschau()
 
