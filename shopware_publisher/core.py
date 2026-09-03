@@ -114,6 +114,9 @@ DEFAULT_CONFIG = {
         "format":     "migration_Shopware5_product_attr12",
     },
     "autoren_basis_url": "/autoren-herausgeber",
+    # Unter diesem Knoten hängen die Autoren-/Herausgeberkategorien, darunter
+    # eine Buchstabenebene: "Autoren-Herausgeber > S > Stiftung Geißstraße".
+    "autoren_wurzel": "Autoren-Herausgeber",
     # Zuordnungstabellen für das Kategorie-Raten. Beide nennen nur NAMEN —
     # ob es die Kategorie im Shop wirklich gibt, wird nachgesehen; eine
     # Kategorie erfindet das Werkzeug nie.
@@ -1085,6 +1088,99 @@ def kategorie_pfad(kat: dict, nach_id: dict) -> str:
         teile.append(lauf.get("name") or "?")
         lauf = nach_id.get(lauf.get("parentId"))
     return " > ".join(reversed(teile))
+
+
+def kategorie_name_fuer(person: dict) -> str:
+    """Wie die Kategorie dieses Beteiligten heißt.
+
+    Personen stehen als „Nachname, Vorname" im Baum (gemessen: „Dussel,
+    Konrad", „Wiegand, Hermann"). Körperschaften stehen unter ihrem ganzen
+    Namen — „Stiftung Geißstraße", einsortiert unter S.
+    """
+    nach = (person.get("nachname") or "").strip()
+    vor = (person.get("vorname") or "").strip()
+    if not nach:
+        return (person.get("name") or "").strip()
+    return f"{nach}, {vor}" if vor else nach
+
+
+_BUCHSTABE_ERSATZ = {"Ä": "A", "Ö": "O", "Ü": "U", "ß": "S"}
+
+
+def anfangsbuchstabe(name: str) -> str:
+    """Unter welchem Buchstaben das einsortiert gehört."""
+    name = (name or "").strip()
+    if not name:
+        return ""
+    z = name[0].upper()
+    return _BUCHSTABE_ERSATZ.get(z, z)
+
+
+def plane_autorenkategorie(person: dict, kategorien: list[dict],
+                           cfg: dict | None = None) -> dict:
+    """Wo eine fehlende Autorenkategorie hingehörte — ohne etwas anzulegen.
+
+    Der Baum ist ``Autoren-Herausgeber > <Buchstabe> > <Name>``; die
+    Buchstabenebene existiert bereits. Gefunden wird alles im
+    Zwischenspeicher, nicht im Shop.
+
+    **Vor dem Anlegen wird gesucht, ob es den Namen schon gibt** — im GANZEN
+    Baum, nicht nur unter dem erwarteten Buchstaben. Im Bestand steht
+    "Beiträge … Speyer" unter S statt unter B; wer nur unter dem richtigen
+    Buchstaben nachsieht, legt so einen Eintrag ein zweites Mal an und
+    zersplittert die Bücher auf zwei Kategorien. Ein vorhandener Eintrag hat
+    deshalb immer Vorrang, egal wo er hängt.
+
+    Rückgabe: {"name", "buchstabe", "eltern_id", "eltern_name", "pfad",
+               "vorlage_id", "vorhanden", "moeglich", "grund"}
+    ``vorhanden`` ist die schon existierende Kategorie (dann ist nichts
+    anzulegen); ``moeglich`` sagt sonst, ob genug bekannt ist.
+    """
+    cfg = cfg or DEFAULT_CONFIG
+    wurzel_name = cfg.get("autoren_wurzel", DEFAULT_CONFIG["autoren_wurzel"])
+    name = kategorie_name_fuer(person)
+    b = anfangsbuchstabe(name)
+    leer = {"name": name, "buchstabe": b, "eltern_id": None,
+            "eltern_name": "", "pfad": "", "vorlage_id": None,
+            "vorhanden": None, "moeglich": False, "grund": ""}
+    if not name:
+        return {**leer, "grund": "Der Beteiligte hat keinen Namen."}
+
+    nach_id = {k["id"]: k for k in kategorien}
+
+    # Gibt es den Namen schon — IRGENDWO? Vorhandenes hat Vorrang.
+    def vergleichbar(t: str) -> str:
+        return " ".join((t or "").split()).strip().lower()
+
+    schon = [k for k in kategorien
+             if vergleichbar(k.get("name")) == vergleichbar(name)]
+    if schon:
+        k = schon[0]
+        return {**leer, "vorhanden": k,
+                "pfad": kategorie_pfad(k, nach_id),
+                "grund": f"Gibt es bereits: {kategorie_pfad(k, nach_id)}"}
+    wurzel = next((k for k in kategorien
+                   if (k.get("name") or "").strip().lower()
+                   == wurzel_name.strip().lower()), None)
+    if wurzel is None:
+        return {**leer, "grund": f"Kategorie {wurzel_name!r} nicht gefunden. "
+                                 f"Steht sie unter einem anderen Namen?"}
+
+    kinder = [k for k in kategorien if k.get("parentId") == wurzel["id"]]
+    buchstabe = next((k for k in kinder
+                      if (k.get("name") or "").strip().upper() == b), None)
+    if buchstabe is None:
+        return {**leer, "grund": f"Unter {wurzel_name!r} gibt es keinen "
+                                 f"Buchstaben {b!r}."}
+
+    # Ein Geschwister als Vorlage: von ihm werden Typ und Anzeigeart
+    # abgeschaut, statt sie zu raten.
+    geschwister = [k for k in kategorien if k.get("parentId") == buchstabe["id"]]
+    return {"name": name, "buchstabe": b, "eltern_id": buchstabe["id"],
+            "eltern_name": buchstabe.get("name") or b,
+            "pfad": f"{kategorie_pfad(buchstabe, nach_id)} > {name}",
+            "vorlage_id": geschwister[0]["id"] if geschwister else None,
+            "vorhanden": None, "moeglich": True, "grund": ""}
 
 
 def cache_sucher(kategorien: list[dict]):
