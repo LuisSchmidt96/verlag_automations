@@ -9,7 +9,34 @@ eine Checkliste; erst wenn sie abgehakt ist, geht es weiter.
 1. Cover         cover_previews      2D / 3D / TIF
 2. pi & bi       pi_bi_generator     Presse- und Buchinformation
 3. Shop          shopware_publisher  Produkt als Entwurf
+4. Ablegen       Buchordner auf den Netzordner, mit Nachprüfung
 ```
+
+## Örtlich arbeiten, am Ende ablegen
+
+Die Schritte 1–3 schreiben in einen **örtlichen Arbeitsordner**, erst Schritt 4
+legt den fertigen Buchordner auf den Netzordner. Das ist kein Geschmack,
+sondern gemessen: derselbe Cover-Schritt braucht örtlich **1,7 s**, über eine
+Netzeinbindung lief er wiederholt in Zeitüberschreitungen — er bewegt rund
+11 MB. Ein kompletter Durchgang dauert so **rund 4 Sekunden**.
+
+| Einstellung | Bedeutung |
+|---|---|
+| `arbeitsordner` | die schnelle Werkbank (leer = `~/Buch_Arbeit`) |
+| `ablageort` | wohin der fertige Ordner in Schritt 4 wandert |
+
+Beim Ablegen wird **kopiert und nachgeprüft** (Dateigröße am Ziel), nicht bloß
+kopiert: über das Netz bricht ein Kopiervorgang gern in der Mitte ab, und eine
+halbe Datei sieht aus wie eine ganze. Liegen am Ziel schon gleichnamige
+Dateien, wandern sie nach `_alt/<Zeitstempel>/` statt überschrieben zu werden.
+
+Die Photoshop-Zwischendateien (`_slot_*.png`, `_mockup_*.jsx`) bleiben zurück —
+sie haben im Artikelordner nichts zu suchen.
+
+**Die örtliche Kopie bleibt stehen.** Sie ist das Sicherheitsnetz, falls beim
+Übertragen etwas hakt; wann sie weg kann, sagt die Checkliste. Der Preis:
+dieselben Dateien liegen zweimal, und wer später örtlich etwas ändert, ändert
+nicht den Netzordner.
 
 ## Warum dieses Werkzeug die anderen einbindet
 
@@ -58,6 +85,10 @@ Alles zu einem Buch liegt beieinander, benannt wie in `cover_previews`
     cover_9783955056094.jpg
     durchgang.json        <- Stand und Häkchen
 ```
+
+Nach Schritt 4 liegt derselbe Ordner auf dem Netz — ohne die
+Photoshop-Zwischendateien, aber **mit** `durchgang.json`: dort steht, welcher
+Schritt wann gelaufen ist und was abgehakt wurde.
 
 `durchgang.json` liegt **beim Buch**, nicht beim Werkzeug: so sieht auch Wochen
 später und an einem anderen Rechner jeder, welcher Schritt wann gelaufen ist,

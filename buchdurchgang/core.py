@@ -47,8 +47,13 @@ CONFIG_PFAD = APP_DIR / "config.json"
 
 
 DEFAULT_CONFIG: dict = {
-    # Basis, unter der je Buch ein Ordner "<Kurzcode>_<Titel>" entsteht.
-    # Zum Testen der Netzordner, im Echtbetrieb die Artikeldaten.
+    # Gearbeitet wird ÖRTLICH, abgelegt wird am Ende auf dem Netzordner.
+    # Der Grund ist gemessen: derselbe Cover-Schritt braucht örtlich 1,7 s und
+    # über die Netzeinbindung ein Vielfaches — er bewegt rund 11 MB.
+    #
+    # "arbeitsordner" = die schnelle Werkbank (leer = ~/Buch_Arbeit)
+    # "ablageort"     = wohin der fertige Buchordner in Schritt 4 wandert
+    "arbeitsordner": "",
     "ablageort": r"\\C019\d\Online\Webseite\Artikeldaten",
     # Abweichungen von den Vorgaben der drei Werkzeuge. Leer = deren Vorgabe.
     "cover_previews": {},
@@ -102,11 +107,28 @@ def _misch(vorgabe: dict, eigenes: dict) -> dict:
     return zusammen
 
 
+def arbeitsordner(cfg: dict) -> Path:
+    """Der örtliche Arbeitsordner — hier entstehen die Dateien.
+
+    Wird angelegt, wenn es ihn nicht gibt: er liegt auf der eigenen Platte, da
+    darf das Werkzeug das. Der Netzordner dagegen wird nie angelegt — den gibt
+    es, oder der Pfad ist falsch.
+    """
+    raw = (cfg or {}).get("arbeitsordner") or ""
+    p = (Path(os.path.expandvars(str(raw))).expanduser() if raw
+         else Path.home() / "Buch_Arbeit")
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
 def cfg_cover(cfg: dict) -> dict:
-    """Konfiguration für cover_previews — der Ablageort ist dort
-    `artikeldaten_dir`."""
+    """Konfiguration für cover_previews.
+
+    `artikeldaten_dir` zeigt hier auf den ÖRTLICHEN Arbeitsordner, nicht auf
+    den Netzordner: gearbeitet wird schnell, abgelegt wird in Schritt 4.
+    """
     c = _misch(cp.DEFAULT_CONFIG, cfg.get("cover_previews", {}))
-    c["artikeldaten_dir"] = cfg.get("ablageort", "")
+    c["artikeldaten_dir"] = str(arbeitsordner(cfg))
     return c
 
 
@@ -159,6 +181,14 @@ SCHRITTE: list[dict] = [
             "Beschreibung im Admin angesehen",
             "Cover sitzt",
             "(optional) Buch auf aktiv gestell",
+        ],
+    },
+    {
+        "id": "ablegen",
+        "titel": "4 — Ablegen",
+        "checkliste": [
+            "Alle Dateien sind auf dem Netzordner angekommen",
+            "Der örtliche Arbeitsordner kann weg",
         ],
     },
 ]
@@ -251,8 +281,22 @@ STAND_DATEI = "durchgang.json"
 
 
 def buchordner(sc: str, titel: str, cfg: dict) -> tuple[Path, bool]:
-    """Der Ordner dieses Buchs — Namensregel wie in cover_previews."""
+    """Der ÖRTLICHE Ordner dieses Buchs — Namensregel wie in cover_previews."""
     return cp.ziel_ordner(sc, titel, cfg_cover(cfg))
+
+
+def share_ordner(sc: str, titel: str, cfg: dict) -> Path | None:
+    """Wohin der Buchordner am Ende soll — None, wenn nicht erreichbar."""
+    raw = (cfg or {}).get("ablageort") or ""
+    if not raw:
+        return None
+    basis = Path(os.path.expandvars(str(raw))).expanduser()
+    try:
+        if not basis.is_dir():
+            return None
+    except OSError:                      # Netzpfad nicht erreichbar
+        return None
+    return basis / cp.ordner_name(sc, titel)
 
 
 def lade_stand(ordner) -> dict:
@@ -357,3 +401,102 @@ def schritt_shop(paar: dict, ordner, cfg: dict, *, secret: str,
     return sw.veroeffentliche(paar["felder"], scfg, bilder, secret=secret,
                               dry_run=dry_run, ueberschreiben=ueberschreiben,
                               kategorien=kategorien, log=log)
+
+
+def schritt_ablegen(sc: str, titel: str, cfg: dict, *, log=print) -> dict:
+    """Schritt 4 — den örtlichen Buchordner auf den Netzordner legen.
+
+    Kopiert, **prüft nach** und meldet, was ankam. Die örtliche Kopie bleibt
+    stehen: geht beim Übertragen etwas schief, ist die Arbeit noch da. Wann sie
+    weg kann, sagt die Checkliste.
+
+    Zwischendateien (``_slot_*.png``, ``_mockup_*.jsx``) bleiben zurück — sie
+    sind Futter für Photoshop und haben im Artikelordner nichts zu suchen. Auf
+    einem Windows-Lauf räumt ``cover_previews`` sie ohnehin selbst weg; nach
+    einem Trockenlauf liegen sie noch da.
+
+    Liegen am Ziel schon gleichnamige Dateien, werden sie **nicht**
+    überschrieben, sondern nach ``_alt/<Zeitstempel>/`` weggesichert — dasselbe
+    Muster, das cover_previews im Artikelordner benutzt.
+
+    Rückgabe: {"ziel", "kopiert", "uebersprungen", "gesichert", "fehler"}
+    """
+    import shutil
+
+    quelle, _ = buchordner(sc, titel, cfg)
+    if not quelle.is_dir():
+        raise RuntimeError(f"Es gibt keinen örtlichen Buchordner:\n{quelle}")
+
+    ziel = share_ordner(sc, titel, cfg)
+    if ziel is None:
+        raise RuntimeError(
+            "Der Ablageort ist nicht erreichbar:\n"
+            f"{cfg.get('ablageort') or '(nicht eingetragen)'}")
+
+    mitnehmen = sorted(p for p in quelle.iterdir()
+                       if p.is_file() and not p.name.startswith("_"))
+    uebersprungen = sorted(p.name for p in quelle.iterdir()
+                           if p.is_file() and p.name.startswith("_"))
+    if not mitnehmen:
+        raise RuntimeError(f"Im Buchordner liegt nichts zum Ablegen:\n{quelle}")
+
+    ziel.mkdir(parents=True, exist_ok=True)
+    vorhanden = [ziel / p.name for p in mitnehmen if (ziel / p.name).exists()]
+    gesichert = None
+    if vorhanden:
+        gesichert = cp.sichere_weg(
+            vorhanden, datetime.now().strftime("%Y-%m-%d_%H%M%S"))
+        log(f"{len(vorhanden)} vorhandene Datei(en) nach "
+            f"_alt/{gesichert.name}/ gesichert.")
+
+    kopiert, fehler = [], []
+    for p in mitnehmen:
+        z = ziel / p.name
+        try:
+            log(f"Kopiere {p.name} …")
+            # copyfile überträgt NUR die Daten. copy2 würde zusätzlich
+            # Zeitstempel und Rechte setzen — das quittiert eine SMB-Freigabe
+            # mit "Errno 95: Operation not supported", OBWOHL die Datei längst
+            # vollständig angekommen ist. Das sah dann nach sieben Fehlern aus,
+            # während in Wahrheit alles dalag.
+            shutil.copyfile(p, z)
+        except OSError as e:
+            fehler.append(f"{p.name}: {e}")
+            continue
+        try:
+            shutil.copystat(p, z)        # nett, aber nicht überall möglich
+        except OSError:
+            pass
+        # Nachprüfen statt vertrauen — über das Netz bricht ein Kopiervorgang
+        # gern in der Mitte ab, und eine halbe Datei sieht aus wie eine ganze.
+        try:
+            if z.stat().st_size != p.stat().st_size:
+                fehler.append(f"{p.name}: Größe weicht ab "
+                              f"({z.stat().st_size} statt {p.stat().st_size} Bytes)")
+                continue
+        except OSError as e:
+            fehler.append(f"{p.name}: nach dem Kopieren nicht lesbar ({e})")
+            continue
+        kopiert.append(z)
+
+    return {"ziel": ziel, "quelle": quelle, "kopiert": kopiert,
+            "uebersprungen": uebersprungen, "gesichert": gesichert,
+            "fehler": fehler}
+
+
+def spiegle_stand(ordner, ziel) -> bool:
+    """`durchgang.json` noch einmal ans Ziel kopieren.
+
+    Nötig, weil der Ablege-Schritt erst NACH dem Kopieren vermerkt wird — die
+    Fassung auf dem Netzordner wäre sonst immer einen Schritt alt und wüsste
+    nichts davon, dass sie selbst abgelegt wurde.
+    """
+    import shutil
+    q = Path(ordner) / STAND_DATEI
+    if not q.exists():
+        return False
+    try:
+        shutil.copyfile(q, Path(ziel) / STAND_DATEI)
+        return True
+    except OSError:
+        return False

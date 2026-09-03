@@ -63,6 +63,7 @@ class App(Tk):
         self._nachrichten: queue.Queue = queue.Queue()
         self._logs: dict[str, Text] = {}
 
+        self.arbeit_var = StringVar(value=str(core.arbeitsordner(self.cfg)))
         self.ablage_var = StringVar(value=self.cfg.get("ablageort", ""))
         self.pdf_var = StringVar()
         self.xml_var = StringVar()
@@ -77,15 +78,20 @@ class App(Tk):
 
     # ------------------------------------------------------------------
     def _build(self):
-        # --- Ablageort --------------------------------------------------
-        oben = ttk.LabelFrame(self, text="Ablageort (je Buch entsteht darunter "
-                                         "ein Ordner)")
+        # --- Ordner ------------------------------------------------------
+        # Gearbeitet wird örtlich (schnell), abgelegt am Ende auf dem Netz.
+        oben = ttk.LabelFrame(self, text="Ordner")
         oben.pack(fill="x", **PAD)
-        r = ttk.Frame(oben); r.pack(fill="x", padx=8, pady=6)
-        ttk.Entry(r, textvariable=self.ablage_var).pack(
-            side="left", fill="x", expand=True)
-        ttk.Button(r, text="…", width=3, command=self._waehle_ablage).pack(
-            side="left", padx=(6, 0))
+        for text, var, cmd, hinweis in (
+                ("Arbeitsordner:", self.arbeit_var, self._waehle_arbeit,
+                 "hier wird gearbeitet (örtlich, schnell)"),
+                ("Ablageort:", self.ablage_var, self._waehle_ablage,
+                 "dorthin wandert der fertige Ordner in Schritt 4")):
+            r = ttk.Frame(oben); r.pack(fill="x", padx=8, pady=3)
+            ttk.Label(r, text=text, width=14).pack(side="left")
+            ttk.Entry(r, textvariable=var).pack(side="left", fill="x", expand=True)
+            ttk.Button(r, text="…", width=3, command=cmd).pack(side="left", padx=(6, 0))
+            ttk.Label(r, text=hinweis, foreground="gray").pack(side="left", padx=(8, 0))
 
         # --- Schrittliste links, Inhalt rechts --------------------------
         mitte = ttk.Frame(self); mitte.pack(fill="both", expand=True, **PAD)
@@ -128,7 +134,8 @@ class App(Tk):
         self.rechts.configure(text={"buch": "0 — Buch wählen"}.get(
             sid, core.schritt(sid)["titel"] if sid != "buch" else ""))
         {"buch": self._baue_buch, "cover": self._baue_cover,
-         "pibi": self._baue_pibi, "shop": self._baue_shop}[sid]()
+         "pibi": self._baue_pibi, "shop": self._baue_shop,
+         "ablegen": self._baue_ablegen}[sid]()
         self._male_schrittliste()
         self._pruefe_tor()
 
@@ -160,6 +167,90 @@ class App(Tk):
         Warteschlange, nie ins Fenster."""
         return lambda m: self._nachrichten.put(("log", sid, str(m)))
 
+    # ------------------------------------------------------------------
+    # Schritt 4 — Ablegen
+    # ------------------------------------------------------------------
+    def _baue_ablegen(self):
+        f = ttk.Frame(self.rechts); f.pack(fill="both", expand=True)
+        ttk.Label(f, wraplength=620, justify="left", padding=(8, 6),
+                  text="Der fertige Buchordner wandert vom Arbeitsordner auf "
+                       "den Ablageort. Kopiert wird, danach wird nachgeprüft "
+                       "(Dateigröße am Ziel). Die örtliche Kopie bleibt stehen "
+                       "— sie ist das Sicherheitsnetz, falls beim Übertragen "
+                       "etwas hakt.").pack(anchor="w")
+
+        r = ttk.Frame(f); r.pack(fill="x", padx=8, pady=4)
+        ziel = (core.share_ordner(self.paar["sc"], self.titel_var.get(), self.cfg)
+                if self.paar else None)
+        ttk.Label(r, foreground="gray" if ziel else "#a00",
+                  text=(f"Ziel: {ziel}" if ziel else
+                        "⚠ Ablageort nicht erreichbar — bitte oben prüfen.")
+                  ).pack(side="left")
+        self.btn_ablegen = ttk.Button(r, text="Auf den Ablageort legen",
+                                      command=self._lauf_ablegen,
+                                      state="normal" if ziel else "disabled")
+        self.btn_ablegen.pack(side="right")
+
+        self.ablegen_log = self._log_feld(f, "ablegen")
+        self._baue_checkliste(f, "ablegen")
+
+    def _lauf_ablegen(self):
+        self.btn_ablegen.configure(state="disabled")
+        self.status.set("Lege ab …")
+        sc, titel = self.paar["sc"], self.titel_var.get()
+
+        def arbeite():
+            try:
+                erg = core.schritt_ablegen(sc, titel, self.cfg,
+                                           log=self._melde("ablegen"))
+                self._nachrichten.put(("fertig", "ablegen", erg, None))
+            except Exception as e:
+                traceback.print_exc()
+                self._nachrichten.put(("fertig", "ablegen", None, e))
+
+        threading.Thread(target=arbeite, daemon=True).start()
+
+    def _ablegen_fertig(self, erg, fehler):
+        self.btn_ablegen.configure(state="normal")
+        if fehler:
+            self._schreibe(self.ablegen_log, f"✗ {fehler}")
+            self.status.set("Ablegen fehlgeschlagen.")
+            messagebox.showerror("Ablegen", str(fehler))
+            return
+        if erg["gesichert"] is not None:
+            self._schreibe(self.ablegen_log,
+                           f"   Vorhandenes nach _alt/{erg['gesichert'].name}/ "
+                           f"gesichert.")
+        for p in erg["kopiert"]:
+            self._schreibe(self.ablegen_log, f"   {Path(p).name}")
+        if erg["uebersprungen"]:
+            self._schreibe(self.ablegen_log,
+                           "   übersprungen (Photoshop-Zwischendateien): "
+                           + ", ".join(erg["uebersprungen"]))
+        if erg["fehler"]:
+            for f in erg["fehler"]:
+                self._schreibe(self.ablegen_log, f"✗ {f}")
+            self.status.set("Nicht alles angekommen — siehe Protokoll.")
+            messagebox.showerror(
+                "Unvollständig",
+                f"{len(erg['fehler'])} Datei(en) kamen nicht an. Der "
+                f"Arbeitsordner bleibt unangetastet.\n\n"
+                + "\n".join(erg["fehler"][:5]))
+            return
+        self._schreibe(self.ablegen_log,
+                       f"✓ {len(erg['kopiert'])} Datei(en) angekommen und "
+                       f"nachgeprüft.")
+        self._schreibe(self.ablegen_log,
+                       f"   Der Arbeitsordner bleibt stehen: {erg['quelle']}")
+        core.vermerke_lauf(self.stand, "ablegen", quelle=str(erg["quelle"]),
+                           dateien=erg["kopiert"])
+        core.speichere_stand(self.ordner, self.stand)
+        core.spiegle_stand(self.ordner, erg["ziel"])
+        self._gib_checkliste_frei("ablegen")
+        self.status.set("Abgelegt — bitte auf dem Ablageort nachsehen und abhaken.")
+        self._male_schrittliste()
+        self._pruefe_tor()
+
     def _pumpe(self):
         """Läuft im Hauptthread und leert die Warteschlange.
 
@@ -167,7 +258,7 @@ class App(Tk):
         durch — Protokollzeilen wie Ergebnisse.
         """
         fertig = {"cover": self._cover_fertig, "pibi": self._pibi_fertig,
-                  "shop": self._shop_fertig}
+                  "shop": self._shop_fertig, "ablegen": self._ablegen_fertig}
         try:
             while True:
                 art, *rest = self._nachrichten.get_nowait()
@@ -235,6 +326,13 @@ class App(Tk):
         core.setze_haken(self.stand, sid, gesetzt)
         if self.ordner:
             core.speichere_stand(self.ordner, self.stand)
+            # Ist schon abgelegt worden, den Stand am Ziel nachziehen — sonst
+            # stünde dort für immer "abgelegt, aber nichts geprüft".
+            if core.ist_gelaufen(self.stand, "ablegen") and self.paar:
+                ziel = core.share_ordner(self.paar["sc"],
+                                         self.titel_var.get(), self.cfg)
+                if ziel and ziel.is_dir():
+                    core.spiegle_stand(self.ordner, ziel)
         self._male_schrittliste()
         self._pruefe_tor()
 
@@ -300,6 +398,15 @@ class App(Tk):
 
         self.buch_log = self._log_feld(f, "buch")
 
+    def _waehle_arbeit(self):
+        p = filedialog.askdirectory(title="Arbeitsordner wählen",
+                                    initialdir=self.arbeit_var.get() or None)
+        if p:
+            self.arbeit_var.set(p)
+            self.cfg["arbeitsordner"] = p
+            core.speichere_config(self.cfg)
+            self._zeige_ordner()
+
     def _waehle_ablage(self):
         p = filedialog.askdirectory(title="Ablageort wählen",
                                     initialdir=self.ablage_var.get() or None)
@@ -330,6 +437,7 @@ class App(Tk):
             messagebox.showwarning("Unvollständig",
                                    "Bitte Umschlag-PDF und ONIX-XML wählen.")
             return
+        self.cfg["arbeitsordner"] = self.arbeit_var.get().strip()
         self.cfg["ablageort"] = self.ablage_var.get().strip()
         core.speichere_config(self.cfg)
         if self.paar and self.paar.get("doc"):
@@ -382,11 +490,12 @@ class App(Tk):
     def _zeige_ordner(self):
         if not self.paar:
             return
+        self.cfg["arbeitsordner"] = self.arbeit_var.get().strip()
         self.cfg["ablageort"] = self.ablage_var.get().strip()
         ordner, existiert = core.buchordner(self.paar["sc"],
                                             self.titel_var.get(), self.cfg)
         self.ordner = ordner
-        self.ordner_var.set(f"Buchordner: {ordner}  "
+        self.ordner_var.set(f"Arbeitsordner: {ordner}  "
                             f"({'vorhanden' if existiert else 'wird angelegt'})")
 
     def _ordner_oeffnen(self):
