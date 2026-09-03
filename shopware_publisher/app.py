@@ -413,10 +413,17 @@ class App(Tk):
                                 tls_pruefen=bool(umg.get("tls_pruefen", True)))
             version = c.verbinde().get("version", "?")
             self._client = c            # verbunden halten (für Existenz-Prüfung)
-            # Kategorien werden NICHT vorgeladen: der Shop hat weit mehr als
-            # die 500, die ein Rutsch hergibt (gemessen: genau 500 = Anschlag).
-            # Gesucht wird server-seitig, je Buch.
             self._lookups = {"tax": c.steuersaetze(), "cur": c.waehrungen()}
+            # Kategoriebaum einmal ganz holen und neben die Config legen.
+            # Damit lässt sich hinterher ohne Shop-Zugang nachsehen, ob eine
+            # Kategorie fehlt oder nur nicht gefunden wurde.
+            try:
+                kats = c.alle_kategorien()
+                core.schreibe_kategorien_cache(
+                    core.aktive_umgebung(self.cfg),
+                    umg.get("shop_url", ""), kats)
+            except core.ShopFehler:
+                pass                    # kein Grund, das Verbinden scheitern zu lassen
             # Verkaufskanal, Seiten-Layout und Hersteller aus dem Bestand
             # übernehmen (für jedes Buch gleich). Ohne Verkaufskanal wäre das
             # neue Produkt im Shop unsichtbar.

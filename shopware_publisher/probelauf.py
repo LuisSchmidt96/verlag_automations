@@ -163,6 +163,15 @@ def main() -> int:
         return gewichte_pruefen(client, cfg)
 
     # -- 2) Zuordnungen aus dem Shop ------------------------------------
+    # Kategoriebaum einmal ganz holen und ablegen — so lässt sich hinterher
+    # ohne Shop-Zugang nachsehen, was der Shop wirklich führt.
+    try:
+        kats_alle = client.alle_kategorien()
+        ziel = core.schreibe_kategorien_cache(name, url, kats_alle)
+        print(f"Kategorien         : {len(kats_alle)} gemerkt in {ziel.name}")
+    except core.ShopFehler as e:
+        print(f"Kategorien         : nicht abrufbar ({e})")
+
     vorlage = client.vorlage_vom_bestand()
     for k in ("cms_page_id", "sales_channel_id", "visibility", "manufacturer_id"):
         if vorlage.get(k):
@@ -256,7 +265,8 @@ def main() -> int:
 
         # Kategorien: im Shop SUCHEN, je beteiligter Person eine. Den Baum zu
         # laden hilft nicht — er ist größer als eine Abfrage hergibt.
-        kats, fehlend = core.kategorie_vorschlaege(f, client.kategorien_suchen, eff)
+        kats, fehlend = core.kategorie_vorschlaege(
+            f, client.kategorien_suchen, eff, log=print)
         kat_ids = [k["id"] for k in kats]
 
         print(f"  Name        {core.produkt_name(f)}")
@@ -273,6 +283,7 @@ def main() -> int:
         print(f"  Kategorien  {' · '.join(k.get('name','') for k in kats) or '— keine —'}")
         if fehlend:
             print(f"              ⚠ ohne eigene Kategorie: {', '.join(fehlend)}")
+
         if not f.get("gewicht_kg"):
             kg, grund = core.schaetze_gewicht(f, cfg.get("gewichtsmodell"))
             if kg:
@@ -283,6 +294,20 @@ def main() -> int:
 
         vorhanden = client.produkt_id_zu_nummer(f["isbn13_formatiert"])
         print(f"  Im Shop     {'EXISTIERT BEREITS' if vorhanden else 'neu'}")
+
+        # Was steht JETZT am Produkt? Ohne das rät man, ob die Kategorien nicht
+        # gesetzt wurden oder das Produkt gar nicht neu geschrieben wurde.
+        if vorhanden:
+            da = client.suche("product", {
+                "limit": 1,
+                "filter": [{"type": "equals", "field": "productNumber",
+                            "value": f["isbn13_formatiert"]}],
+                "associations": {"categories": {}},
+            })
+            if da:
+                jetzt = [k.get("name") for k in (da[0].get("categories") or [])]
+                print(f"              Kategorien am Produkt: "
+                      f"{', '.join(jetzt) if jetzt else '— keine —'}")
 
         if not anlegen:
             continue

@@ -29,6 +29,8 @@ mailing_list_updater/*.xlsx
 # Runtime state (app-mutated)
 config.json
 paketnr.txt
+# Gegenprobe der Gewichtsschätzung: Bestandsdaten aus dem Shop
+shopware_publisher/gewichte_pruefung.csv
 
 # PI/BI: heavy sample binaries (keep xml + reference docx/html only)
 pi_bi_generator/beispiele/**/*.pdf
@@ -61,3 +63,5 @@ shopware_publisher/dump_*.json
 probelauf.txt
 vergleich.txt
 buchdurchgang/config.json
+shopware_publisher/kategorien_*.json
+buchdurchgang/kategorien_*.json

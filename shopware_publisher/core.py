@@ -1036,6 +1036,54 @@ def warengruppe_sachteil(text: str) -> str:
     return text.split(" / ", 1)[1].strip() if " / " in text else text
 
 
+def kategorien_cache_pfad(umgebung: str) -> Path:
+    """Je Umgebung eine eigene Datei — die IDs von dev und prod sind
+    verschieden, ein gemeinsamer Zwischenspeicher wäre Gift."""
+    sicher = re.sub(r"[^0-9A-Za-z_-]", "_", umgebung or "unbekannt")
+    return APP_DIR / f"kategorien_{sicher}.json"
+
+
+def schreibe_kategorien_cache(umgebung: str, shop_url: str,
+                              kategorien: list[dict]) -> Path:
+    """Den Kategoriebaum neben der Config ablegen.
+
+    Zweck ist nicht Geschwindigkeit, sondern **Nachvollziehbarkeit**: ohne
+    Zugang zum Shop lässt sich sonst nicht prüfen, ob eine Kategorie fehlt
+    oder nur nicht gefunden wurde.
+    """
+    ziel = kategorien_cache_pfad(umgebung)
+    ziel.write_text(json.dumps({
+        "umgebung": umgebung,
+        "shop_url": shop_url,
+        "geholt_am": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "anzahl": len(kategorien),
+        "kategorien": sorted(kategorien, key=lambda k: k.get("name", "")),
+    }, indent=2, ensure_ascii=False), encoding="utf-8")
+    return ziel
+
+
+def lade_kategorien_cache(umgebung: str) -> list[dict]:
+    p = kategorien_cache_pfad(umgebung)
+    if not p.is_file():
+        return []
+    try:
+        return json.loads(p.read_text(encoding="utf-8")).get("kategorien") or []
+    except (OSError, json.JSONDecodeError):
+        return []
+
+
+def cache_sucher(kategorien: list[dict]):
+    """Eine `suche(text)`-Funktion, die im Zwischenspeicher nachsieht.
+
+    Passt in dieselbe Stelle wie `ShopClient.kategorien_suchen` — das Raten
+    merkt nicht, woher die Kandidaten kommen.
+    """
+    def suche(text: str) -> list[dict]:
+        t = (text or "").strip().lower()
+        return [k for k in kategorien if t and t in (k.get("name") or "").lower()]
+    return suche
+
+
 def kategorie_vorschlaege(f: dict, suche, cfg: dict | None = None,
                           log=None) -> tuple[list[dict], list[str]]:
     """Je beteiligter Person eine Kategorie vorschlagen.
@@ -1851,6 +1899,34 @@ class ShopClient:
         auf einem willkürlichen Ausschnitt. Dafür ``kategorien_suchen``.
         """
         return self._liste("/api/category", limit=500)
+
+    def alle_kategorien(self, log=None) -> list[dict]:
+        """Den GANZEN Kategoriebaum holen, seitenweise.
+
+        `/api/category?limit=500` gibt genau 500 zurück und verschweigt, dass
+        es mehr gibt — deshalb wird geblättert, bis eine Seite nicht mehr voll
+        ist. Zurück kommen nur id und name; mehr braucht das Raten nicht, und
+        die Datei bleibt klein.
+        """
+        alle: dict[str, str] = {}
+        seite, pro_seite = 1, 500
+        while True:
+            antwort = self._json(
+                "POST", "/api/search/category",
+                {"limit": pro_seite, "page": seite,
+                 "sort": [{"field": "name", "order": "ASC"}]})
+            daten = antwort.get("data") or []
+            for k in daten:
+                if k.get("id"):
+                    alle[k["id"]] = (k.get("name") or "").strip()
+            if log:
+                log(f"   Kategorien geholt: {len(alle)}")
+            if len(daten) < pro_seite:
+                break
+            seite += 1
+            if seite > 40:              # Notbremse, 20.000 wären absurd
+                break
+        return [{"id": i, "name": n} for i, n in alle.items() if n]
 
     def kategorien_suchen(self, text: str, limit: int = 50) -> list[dict]:
         """Kategorien im Shop suchen — server-seitig.

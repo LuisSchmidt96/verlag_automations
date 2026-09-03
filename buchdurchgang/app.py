@@ -775,6 +775,16 @@ class App(Tk):
                                 if schluessel == "tax_id":
                                     umg["tax_rate"] = float(e["taxRate"])
                                 break
+                # Kategoriebaum ablegen — siehe shopware_publisher.
+                try:
+                    kats = c.alle_kategorien()
+                    ziel = sw.schreibe_kategorien_cache(
+                        sw.aktive_umgebung(scfg), umg.get("shop_url", ""), kats)
+                    self._nachrichten.put(
+                        ("log", "shop",
+                         f"   {len(kats)} Kategorien gemerkt ({ziel.name})"))
+                except sw.ShopFehler:
+                    pass
                 self._client = c
                 self._nachrichten.put(("verbunden", version, vorlage, None))
             except Exception as e:
@@ -798,15 +808,22 @@ class App(Tk):
         if not (self._client and self.paar):
             return
 
+        scfg = core.cfg_shop(self.cfg)
+        gemerkt = sw.lade_kategorien_cache(sw.aktive_umgebung(scfg))
+
         def arbeite():
-            def suche(t):
-                try:
-                    return self._client.kategorien_suchen(t)
-                except sw.ShopFehler:
-                    return []
+            # Aus dem Zwischenspeicher raten, wenn er da ist: das sind je Buch
+            # ein Dutzend Abfragen weniger, und es funktioniert identisch.
+            if gemerkt:
+                suche = sw.cache_sucher(gemerkt)
+            else:
+                def suche(t):
+                    try:
+                        return self._client.kategorien_suchen(t)
+                    except sw.ShopFehler:
+                        return []
             treffer, fehlend = sw.kategorie_vorschlaege(
-                self.paar["felder"], suche, core.cfg_shop(self.cfg),
-                log=self._melde("shop"))
+                self.paar["felder"], suche, scfg, log=self._melde("shop"))
             self._nachrichten.put(("vorschlag", treffer, fehlend))
 
         threading.Thread(target=arbeite, daemon=True).start()
