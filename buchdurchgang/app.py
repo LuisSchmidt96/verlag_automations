@@ -180,8 +180,7 @@ class App(Tk):
                        "etwas hakt.").pack(anchor="w")
 
         r = ttk.Frame(f); r.pack(fill="x", padx=8, pady=4)
-        ziel = (core.share_ordner(self.paar["sc"], self.titel_var.get(), self.cfg)
-                if self.paar else None)
+        ziel = core.share_ordner(self.ordner, self.cfg) if self.ordner else None
         ttk.Label(r, foreground="gray" if ziel else "#a00",
                   text=(f"Ziel: {ziel}" if ziel else
                         "⚠ Ablageort nicht erreichbar — bitte oben prüfen.")
@@ -197,11 +196,11 @@ class App(Tk):
     def _lauf_ablegen(self):
         self.btn_ablegen.configure(state="disabled")
         self.status.set("Lege ab …")
-        sc, titel = self.paar["sc"], self.titel_var.get()
+        quelle = self.ordner
 
         def arbeite():
             try:
-                erg = core.schritt_ablegen(sc, titel, self.cfg,
+                erg = core.schritt_ablegen(quelle, self.cfg,
                                            log=self._melde("ablegen"))
                 self._nachrichten.put(("fertig", "ablegen", erg, None))
             except Exception as e:
@@ -328,9 +327,8 @@ class App(Tk):
             core.speichere_stand(self.ordner, self.stand)
             # Ist schon abgelegt worden, den Stand am Ziel nachziehen — sonst
             # stünde dort für immer "abgelegt, aber nichts geprüft".
-            if core.ist_gelaufen(self.stand, "ablegen") and self.paar:
-                ziel = core.share_ordner(self.paar["sc"],
-                                         self.titel_var.get(), self.cfg)
+            if core.ist_gelaufen(self.stand, "ablegen"):
+                ziel = core.share_ordner(self.ordner, self.cfg)
                 if ziel and ziel.is_dir():
                     core.spiegle_stand(self.ordner, ziel)
         self._male_schrittliste()

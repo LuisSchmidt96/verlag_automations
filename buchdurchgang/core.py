@@ -180,7 +180,7 @@ SCHRITTE: list[dict] = [
             "Kategorien gewählt",
             "Beschreibung im Admin angesehen",
             "Cover sitzt",
-            "(optional) Buch auf aktiv gestell",
+            "(optional) Buch auf aktiv gestellt",
         ],
     },
     {
@@ -285,18 +285,26 @@ def buchordner(sc: str, titel: str, cfg: dict) -> tuple[Path, bool]:
     return cp.ziel_ordner(sc, titel, cfg_cover(cfg))
 
 
-def share_ordner(sc: str, titel: str, cfg: dict) -> Path | None:
-    """Wohin der Buchordner am Ende soll — None, wenn nicht erreichbar."""
+def share_basis(cfg: dict) -> Path | None:
+    """Der Netzordner selbst — None, wenn nicht erreichbar.
+
+    Angelegt wird hier nichts: einen Netzordner, den es nicht gibt, hält man
+    besser für einen falschen Pfad als für eine fehlende Ablage.
+    """
     raw = (cfg or {}).get("ablageort") or ""
     if not raw:
         return None
     basis = Path(os.path.expandvars(str(raw))).expanduser()
     try:
-        if not basis.is_dir():
-            return None
+        return basis if basis.is_dir() else None
     except OSError:                      # Netzpfad nicht erreichbar
         return None
-    return basis / cp.ordner_name(sc, titel)
+
+
+def share_ordner(quelle, cfg: dict) -> Path | None:
+    """Wohin dieser Buchordner am Ende soll — None, wenn nicht erreichbar."""
+    basis = share_basis(cfg)
+    return None if basis is None else basis / Path(quelle).name
 
 
 def lade_stand(ordner) -> dict:
@@ -403,7 +411,7 @@ def schritt_shop(paar: dict, ordner, cfg: dict, *, secret: str,
                               kategorien=kategorien, log=log)
 
 
-def schritt_ablegen(sc: str, titel: str, cfg: dict, *, log=print) -> dict:
+def schritt_ablegen(quelle, cfg: dict, *, log=print) -> dict:
     """Schritt 4 — den örtlichen Buchordner auf den Netzordner legen.
 
     Kopiert, **prüft nach** und meldet, was ankam. Die örtliche Kopie bleibt
@@ -419,19 +427,25 @@ def schritt_ablegen(sc: str, titel: str, cfg: dict, *, log=print) -> dict:
     überschrieben, sondern nach ``_alt/<Zeitstempel>/`` weggesichert — dasselbe
     Muster, das cover_previews im Artikelordner benutzt.
 
-    Rückgabe: {"ziel", "kopiert", "uebersprungen", "gesichert", "fehler"}
+    ``quelle`` ist der **vorhandene** örtliche Buchordner, nicht Kurzcode und
+    Titel: der Zielname wird davon abgeleitet. Sonst zeigte ein nachträglich
+    geänderter Titel ins Leere — der Ordner hieße noch alt, gesucht würde neu.
+
+    Rückgabe: {"ziel", "quelle", "kopiert", "uebersprungen", "gesichert",
+               "fehler"}
     """
     import shutil
 
-    quelle, _ = buchordner(sc, titel, cfg)
+    quelle = Path(quelle)
     if not quelle.is_dir():
         raise RuntimeError(f"Es gibt keinen örtlichen Buchordner:\n{quelle}")
 
-    ziel = share_ordner(sc, titel, cfg)
-    if ziel is None:
+    basis = share_basis(cfg)
+    if basis is None:
         raise RuntimeError(
             "Der Ablageort ist nicht erreichbar:\n"
             f"{cfg.get('ablageort') or '(nicht eingetragen)'}")
+    ziel = basis / quelle.name
 
     mitnehmen = sorted(p for p in quelle.iterdir()
                        if p.is_file() and not p.name.startswith("_"))
