@@ -113,6 +113,12 @@ class App(Tk):
         self.btn_weiter = ttk.Button(fuss, text="Weiter ▸",
                                      command=self._weiter, state="disabled")
         self.btn_weiter.pack(side="right")
+        # Zurück ist immer erlaubt: nachsehen, was ein früherer Schritt
+        # gemeldet hat, darf nichts kosten. Gearbeitet wird dort nur, wenn man
+        # den jeweiligen Knopf noch einmal drückt.
+        self.btn_zurueck = ttk.Button(fuss, text="◂ Zurück",
+                                      command=self._zurueck, state="disabled")
+        self.btn_zurueck.pack(side="right", padx=(0, 6))
         ttk.Button(fuss, text="Ordner öffnen",
                    command=self._ordner_oeffnen).pack(side="right", padx=6)
         ttk.Label(self, textvariable=self.status,
@@ -340,6 +346,8 @@ class App(Tk):
         letzter = self.aktiv == core.SCHRITTE[-1]["id"]
         self.btn_weiter.configure(state="normal" if frei and not letzter
                                   else "disabled")
+        self.btn_zurueck.configure(
+            state="disabled" if self.aktiv == "buch" else "normal")
 
     def _reihenfolge(self) -> list[str]:
         return ["buch"] + [s["id"] for s in core.SCHRITTE]
@@ -349,6 +357,12 @@ class App(Tk):
         i = folge.index(self.aktiv)
         if i + 1 < len(folge):
             self._zeige_schritt(folge[i + 1])
+
+    def _zurueck(self):
+        folge = self._reihenfolge()
+        i = folge.index(self.aktiv)
+        if i > 0:
+            self._zeige_schritt(folge[i - 1])
 
     def _springe(self, sid: str):
         """Zurückspringen ist immer erlaubt, vorspringen nur ins Erreichte."""
