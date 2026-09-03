@@ -17,13 +17,13 @@ from __future__ import annotations
 
 import os
 import queue
+import webbrowser
 import sys
 import threading
 import traceback
 from pathlib import Path
 from tkinter import (Tk, filedialog, messagebox, simpledialog, StringVar,
-                     BooleanVar, Text, Listbox, END, DISABLED, NORMAL,
-                     EXTENDED)
+                     BooleanVar, Text, END, DISABLED, NORMAL)
 from tkinter import ttk
 
 from buchdurchgang import core
@@ -51,10 +51,7 @@ class App(Tk):
         self.aktiv = "buch"         # "buch" | "cover" | "pibi" | "shop"
         self._secret = None
         self._client = None
-        self._kat_gewaehlt: dict[str, str] = {}
-        self._kat_sicht: list[dict] = []
-        self._kat_liste_daten: list[dict] = []
-        self._kat_job = None
+        self._kat_gewaehlt: dict[str, str] = {}   # nur aus dem Vorschlag
         self._haken: dict[str, list[BooleanVar]] = {}
         # Arbeitsthreads fassen Tk NICHT an — sie legen Nachrichten hier ab,
         # und nur der Hauptthread nimmt sie heraus (_pumpe). Ein `after()` aus
@@ -70,7 +67,6 @@ class App(Tk):
         self.titel_var = StringVar()
         self.ordner_var = StringVar(value="—")
         self.status = StringVar(value="Umschlag-PDF und ONIX-XML wählen.")
-        self.kat_such = StringVar()
 
         self._build()
         self._zeige_schritt("buch")
@@ -273,8 +269,6 @@ class App(Tk):
                     self._verbunden(*rest)
                 elif art == "vorschlag":
                     self._vorschlag(*rest)
-                elif art == "kategorien":
-                    self._zeige_kategorien(*rest)
         except queue.Empty:
             pass
         except Exception:
@@ -657,18 +651,9 @@ class App(Tk):
         ttk.Button(r2b, text="Zugang aus dem ShopwarePublisher übernehmen",
                    command=self._zugang_uebernehmen).pack(side="left")
 
-        # Kategorien
-        k = ttk.LabelFrame(f, text="Kategorien (je Person eine — wird gesucht "
-                                   "und vorgeschlagen)")
-        k.pack(fill="x", padx=8, pady=(6, 4))
-        such = ttk.Entry(k, textvariable=self.kat_such)
-        such.pack(fill="x", padx=6, pady=(6, 2))
-        such.bind("<KeyRelease>", self._kat_angestossen)
-        self.kat_liste = Listbox(k, selectmode=EXTENDED, height=4,
-                                 exportselection=False)
-        self.kat_liste.pack(fill="x", padx=6, pady=(0, 6))
-        self.kat_liste.bind("<<ListboxSelect>>", self._kat_merken)
-
+        # Kategorien werden beim Verbinden gesucht und ohne Rückfrage gesetzt.
+        # Nachsehen und ergänzen tut man ohnehin im Shopware-Backend — das
+        # steht so in der Checkliste, und dafür geht es nachher von selbst auf.
         r3 = ttk.Frame(f); r3.pack(fill="x", padx=8, pady=4)
         self.shop_dry = BooleanVar(value=False)
         ttk.Checkbutton(r3, text="Dry-Run (nichts senden)",
@@ -679,7 +664,6 @@ class App(Tk):
 
         self.shop_log = self._log_feld(f, "shop")
         self._baue_checkliste(f, "shop")
-        self._zeige_kategorien()
 
     def _wechsle_umgebung(self, _ev=None):
         scfg = core.cfg_shop(self.cfg)
@@ -691,8 +675,7 @@ class App(Tk):
         self.key_var.set(umg.get("access_key_id", ""))
         self._client = None
         self._secret = None
-        self._kat_gewaehlt = {}
-        self._zeige_kategorien()
+        self._kat_gewaehlt = {}      # gehören zur alten Umgebung
 
     def _merke_zugang(self):
         umg = sw.umgebung(core.cfg_shop(self.cfg))
@@ -805,26 +788,6 @@ class App(Tk):
         self._schlage_kategorien_vor()
 
     # -- Kategorien ----------------------------------------------------
-    def _kat_angestossen(self, _ev=None):
-        if self._kat_job:
-            self.after_cancel(self._kat_job)
-        self._kat_job = self.after(400, self._kat_suchen)
-
-    def _kat_suchen(self):
-        self._kat_job = None
-        if not self._client:
-            return
-        text = self.kat_such.get().strip()
-
-        def arbeite():
-            try:
-                treffer = self._client.kategorien_suchen(text)
-            except sw.ShopFehler:
-                treffer = []
-            self._nachrichten.put(("kategorien", treffer))
-
-        threading.Thread(target=arbeite, daemon=True).start()
-
     def _schlage_kategorien_vor(self):
         if not (self._client and self.paar):
             return
@@ -841,36 +804,22 @@ class App(Tk):
         threading.Thread(target=arbeite, daemon=True).start()
 
     def _vorschlag(self, treffer, fehlend):
+        """Was gefunden wurde, wird gesetzt — ohne Rückfrage.
+
+        Geraten wird nur über die Beteiligten; Sachkategorien und alles, was
+        der Shop sonst noch braucht, trägt ein Mensch im Backend nach. Was
+        NICHT gefunden wurde, steht trotzdem im Protokoll — sonst fiele es erst
+        auf, wenn der Breadcrumb leer bleibt.
+        """
         for k in treffer:
             self._kat_gewaehlt[k["id"]] = k.get("name") or k["id"]
             self._schreibe(self.shop_log, f"   Kategorie: {k.get('name')}")
+        if not treffer:
+            self._schreibe(self.shop_log, "   Keine Kategorie gefunden.")
         for name in fehlend:
             self._schreibe(self.shop_log,
-                           f"⚠ ohne eigene Kategorie: {name} — bitte von Hand "
-                           f"wählen oder im Admin anlegen.")
-        self._zeige_kategorien(treffer)
-
-    def _zeige_kategorien(self, treffer=None):
-        if treffer is not None:
-            self._kat_sicht = treffer
-        gewaehlt = [{"id": i, "name": n} for i, n in self._kat_gewaehlt.items()]
-        ids = {k["id"] for k in gewaehlt}
-        liste = gewaehlt + [k for k in self._kat_sicht if k["id"] not in ids]
-        self.kat_liste.delete(0, END)
-        for i, k in enumerate(liste):
-            marke = "✓ " if k["id"] in self._kat_gewaehlt else "   "
-            self.kat_liste.insert(END, marke + (k.get("name") or k["id"]))
-            if k["id"] in self._kat_gewaehlt:
-                self.kat_liste.selection_set(i)
-        self._kat_liste_daten = liste
-
-    def _kat_merken(self, _ev=None):
-        liste = self._kat_liste_daten
-        sichtbar = {k["id"] for k in liste}
-        gewaehlt = {liste[i]["id"]: liste[i].get("name") or liste[i]["id"]
-                    for i in self.kat_liste.curselection() if i < len(liste)}
-        behalten = {i: n for i, n in self._kat_gewaehlt.items() if i not in sichtbar}
-        self._kat_gewaehlt = {**behalten, **gewaehlt}
+                           f"⚠ ohne eigene Kategorie: {name} — im Backend "
+                           f"nachtragen.")
 
     # -- Anlegen -------------------------------------------------------
     def _lauf_shop(self):
@@ -886,12 +835,6 @@ class App(Tk):
                     f"Umgebung: {name}\n{sw.umgebung(scfg).get('shop_url')}\n\n"
                     f"Artikelnummer: {self.paar['felder']['isbn13_formatiert']}"
                     f"{warnung}"):
-                return
-            if not self._kat_gewaehlt and not messagebox.askyesno(
-                    "Ohne Kategorie?",
-                    "Es ist keine Kategorie gewählt. Das Buch bekäme im Shop "
-                    "keinen Breadcrumb.\n\nTrotzdem anlegen?",
-                    icon="warning", default="no"):
                 return
 
         self.btn_shop.configure(state="disabled")
@@ -933,8 +876,14 @@ class App(Tk):
         pl = erg["payload"]
         self._schreibe(self.shop_log,
                        f"✓ {pl['productNumber']} — {pl['name']}")
+        # Nachgesehen und ergänzt wird ohnehin im Backend — also gleich hin.
+        # Beim Dry-Run gibt es nichts zu öffnen, da wurde nichts angelegt.
         if erg.get("admin_url"):
             self._schreibe(self.shop_log, f"   {erg['admin_url']}")
+            try:
+                webbrowser.open(erg["admin_url"])
+            except Exception:
+                pass                  # kein Browser ist kein Grund zu scheitern
         core.vermerke_lauf(self.stand, "shop", quelle=self.paar["xml_pfad"],
                            dateien=[m.get("datei", "") for m in erg.get("medien", [])])
         core.speichere_stand(self.ordner, self.stand)

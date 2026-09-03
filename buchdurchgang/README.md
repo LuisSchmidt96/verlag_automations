@@ -12,6 +12,16 @@ eine Checkliste; erst wenn sie abgehakt ist, geht es weiter.
 4. Ablegen       Buchordner auf den Netzordner, mit Nachprüfung
 ```
 
+## Kategorien: geraten, nicht gefragt
+
+In Schritt 3 gibt es **keinen Kategorie-Auswähler**. Das Werkzeug sucht je
+beteiligter Person im Shop (`Nachname, Vorname`) und setzt, was es findet —
+ohne Rückfrage. Wen es *nicht* findet, schreibt es ins Protokoll.
+
+Der Grund: nachsehen und ergänzen tut man ohnehin im Shopware-Backend, wo auch
+die Sachkategorien hingehören. Genau das steht in der Checkliste — und das
+Backend geht nach dem Anlegen **von selbst auf**.
+
 ## Örtlich arbeiten, am Ende ablegen
 
 Die Schritte 1–3 schreiben in einen **örtlichen Arbeitsordner**, erst Schritt 4
