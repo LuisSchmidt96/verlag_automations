@@ -86,7 +86,7 @@ DEFAULT_CONFIG = {
     # Wird bei jeder Änderung der Verlags-Vorgaben (unten) erhöht, damit
     # bestehende config.json-Dateien die neuen Werte übernehmen (siehe
     # _migriere). Ohne das blieben alte Werte per setdefault eingefroren.
-    "config_version": 3,
+    "config_version": 4,
 
     # --- Umgebungen ---------------------------------------------------------
     "aktive_umgebung": "dev",
@@ -116,7 +116,10 @@ DEFAULT_CONFIG = {
     "autoren_basis_url": "/autoren-herausgeber",
     # Unter diesem Knoten hängen die Autoren-/Herausgeberkategorien, darunter
     # eine Buchstabenebene: "Autoren-Herausgeber > S > Stiftung Geißstraße".
-    "autoren_wurzel": "Autoren-Herausgeber",
+    # ACHTUNG: der Kategoriename, nicht der URL-Pfad. Die Seite heißt
+    # /Autoren-Herausgeber, die Kategorie aber "Autoren / Herausgeber" — mit
+    # Leerzeichen um den Schrägstrich. Aus dem Baum abgelesen, nicht geraten.
+    "autoren_wurzel": "Autoren / Herausgeber",
     # Zuordnungstabellen für das Kategorie-Raten. Beide nennen nur NAMEN —
     # ob es die Kategorie im Shop wirklich gibt, wird nachgesehen; eine
     # Kategorie erfindet das Werkzeug nie.
@@ -130,7 +133,7 @@ DEFAULT_CONFIG = {
         "Geschichte": ["Ortsgeschichte"],
         "Kunst/Architektur": ["Kunst und Musik"],
         "Kinder- und Jugendbücher": ["Kinder- u. Jugendliteratur"],
-        "Reise": ["Reise-Kultur-Naturführer"],
+        "Reise": ["Reise- / Kultur- / Naturführer"],
         "Natur": ["Natur und Ökologie"],
         "Wirtschaft": ["Technik und Wirtschaft"],
     },
@@ -147,10 +150,10 @@ DEFAULT_CONFIG = {
         "Ludwigsburg": ["Württemberg"],
         "Heilbronn": ["Württemberg"],
         "Tübingen": ["Württemberg"],
-        "Karlsruhe": ["Karlsruhe-Region"],
-        "Bruchsal": ["Karlsruhe-Region"],
-        "Ettlingen": ["Karlsruhe-Region"],
-        "Bretten": ["Karlsruhe-Region"],
+        "Karlsruhe": ["Karlsruhe (Region)"],
+        "Bruchsal": ["Karlsruhe (Region)"],
+        "Ettlingen": ["Karlsruhe (Region)"],
+        "Bretten": ["Karlsruhe (Region)"],
     },
 
     # --- Bilder (kommen vom cover_previews-Tool auf dem Artikeldaten-Share) --
@@ -192,7 +195,14 @@ _ALTE_FLACHE_SCHLUESSEL = tuple(DEFAULT_UMGEBUNG) + ("secret_access_key",)
 _VORGABE_SCHLUESSEL = ("aktiv", "default_stock", "is_closeout", "restock_time",
                        "min_purchase", "purchase_steps", "shipping_free",
                        "custom_fields", "autoren_basis_url",
-                       "newsletter_basis_url", "cover_timeout")
+                       "newsletter_basis_url", "cover_timeout",
+                       # Die Zuordnungstabellen und der Wurzelname wurden nach
+                       # dem echten Kategoriebaum berichtigt ("Autoren /
+                       # Herausgeber" statt "Autoren-Herausgeber", "Karlsruhe
+                       # (Region)" statt "Karlsruhe-Region"). Gewachsene
+                       # Configs müssen das mitbekommen.
+                       "autoren_wurzel", "warengruppe_kategorien",
+                       "ort_regionen")
 
 
 def _migriere(cfg: dict) -> dict:

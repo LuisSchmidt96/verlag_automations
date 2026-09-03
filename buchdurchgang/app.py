@@ -757,43 +757,53 @@ class App(Tk):
 
         def arbeite():
             try:
-                c = sw.ShopClient(umg.get("shop_url", ""),
-                                  umg.get("access_key_id", ""), self._secret,
-                                  tls_pruefen=bool(umg.get("tls_pruefen", True)))
-                version = c.verbinde().get("version", "?")
-                vorlage = c.vorlage_vom_bestand()
-                for k in ("cms_page_id", "sales_channel_id", "visibility",
-                          "manufacturer_id"):
-                    if vorlage.get(k):
-                        umg[k] = vorlage[k]
-                for schluessel, eintraege, passt in (
-                        ("tax_id", c.steuersaetze(),
-                         lambda e: abs(float(e["taxRate"]) - 7.0) < 0.01),
-                        ("currency_id", c.waehrungen(),
-                         lambda e: e["isoCode"] == "EUR")):
-                    if not umg.get(schluessel):
-                        for e in eintraege:
-                            if passt(e):
-                                umg[schluessel] = e["id"]
-                                if schluessel == "tax_id":
-                                    umg["tax_rate"] = float(e["taxRate"])
-                                break
-                # Kategoriebaum ablegen — siehe shopware_publisher.
-                try:
-                    kats = c.alle_kategorien()
-                    ziel = sw.schreibe_kategorien_cache(
-                        sw.aktive_umgebung(scfg), umg.get("shop_url", ""), kats)
-                    self._nachrichten.put(
-                        ("log", "shop",
-                         f"   {len(kats)} Kategorien gemerkt ({ziel.name})"))
-                except sw.ShopFehler:
-                    pass
-                self._client = c
+                version, vorlage = self._verbinden_jetzt()
                 self._nachrichten.put(("verbunden", version, vorlage, None))
             except Exception as e:
                 self._nachrichten.put(("verbunden", None, None, e))
 
         threading.Thread(target=arbeite, daemon=True).start()
+
+    def _verbinden_jetzt(self) -> tuple[str, dict]:
+        """Verbindung aufbauen und Zuordnungen holen — im Arbeitsthread.
+
+        Steckt in einer eigenen Funktion, weil es zwei Wege hierher gibt: den
+        Knopf „Verbinden“ und das Anlegen, das sich bei Bedarf selbst
+        verbindet. Das Secret muss vorher entsperrt sein.
+        """
+        scfg = core.cfg_shop(self.cfg)
+        umg = sw.umgebung(scfg)
+        c = sw.ShopClient(umg.get("shop_url", ""),
+                          umg.get("access_key_id", ""), self._secret,
+                          tls_pruefen=bool(umg.get("tls_pruefen", True)))
+        version = c.verbinde().get("version", "?")
+        vorlage = c.vorlage_vom_bestand()
+        for k in ("cms_page_id", "sales_channel_id", "visibility",
+                  "manufacturer_id"):
+            if vorlage.get(k):
+                umg[k] = vorlage[k]
+        for schluessel, eintraege, passt in (
+                ("tax_id", c.steuersaetze(),
+                 lambda e: abs(float(e["taxRate"]) - 7.0) < 0.01),
+                ("currency_id", c.waehrungen(),
+                 lambda e: e["isoCode"] == "EUR")):
+            if not umg.get(schluessel):
+                for e in eintraege:
+                    if passt(e):
+                        umg[schluessel] = e["id"]
+                        if schluessel == "tax_id":
+                            umg["tax_rate"] = float(e["taxRate"])
+                        break
+        try:
+            kats = c.alle_kategorien()
+            ziel = sw.schreibe_kategorien_cache(
+                sw.aktive_umgebung(scfg), umg.get("shop_url", ""), kats)
+            self._nachrichten.put(
+                ("log", "shop", f"   {len(kats)} Kategorien gemerkt ({ziel.name})"))
+        except sw.ShopFehler:
+            pass
+        self._client = c
+        return version, vorlage
 
     def _verbunden(self, version, vorlage, fehler):
         if fehler:
@@ -877,15 +887,16 @@ class App(Tk):
         if self.shop_dry.get():
             self._shop_senden(ueberschreiben=False, anlegen=[])
             return
-        if not self._client and not self._entsperren():
+        # Nicht verbunden? Dann eben jetzt — das Passwort braucht es ohnehin,
+        # ein zusätzlicher Knopfdruck davor bringt niemandem etwas.
+        if not self._entsperren():
             return
-        if not self._client:
-            messagebox.showwarning("Nicht verbunden",
-                                   "Bitte zuerst „Verbinden“ drücken.")
-            return
+        self._merke_zugang()
+        core.speichere_config(self.cfg)
 
         self.btn_shop.configure(state="disabled")
-        self.status.set("Frische Kategorien auf …")
+        self.status.set("Verbinde …" if not self._client
+                        else "Frische Kategorien auf …")
         scfg = core.cfg_shop(self.cfg)
         name_umg = sw.aktive_umgebung(scfg)
         url = sw.umgebung(scfg).get("shop_url", "")
@@ -893,6 +904,10 @@ class App(Tk):
 
         def arbeite():
             try:
+                if self._client is None:
+                    version, _ = self._verbinden_jetzt()
+                    self._nachrichten.put(
+                        ("log", "shop", f"✓ Verbunden mit Shopware {version}"))
                 kats = self._client.alle_kategorien()
                 sw.schreibe_kategorien_cache(name_umg, url, kats)
                 treffer, fehlend = sw.kategorie_vorschlaege(
