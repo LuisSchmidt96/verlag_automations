@@ -1953,6 +1953,39 @@ class ShopClient:
                 break
         return [k for k in alle.values() if k["name"]]
 
+    def kategorie_anlegen(self, name: str, parent_id: str,
+                          vorlage: dict | None = None) -> str:
+        """Eine Kategorie anlegen und ihre ID zurückgeben.
+
+        ``vorlage`` ist eine GESCHWISTERKATEGORIE, von der Einstellungen
+        übernommen werden (Typ, Anzeigeart, CMS-Seite). Dasselbe Vorgehen wie
+        bei `vorlage_vom_bestand` für Produkte: nicht raten, was der Shop
+        erwartet, sondern abschauen, was daneben schon funktioniert.
+
+        Angelegt wird nur, was der Aufrufer ausdrücklich verlangt — dieses
+        Werkzeug entscheidet das nie von sich aus.
+        """
+        if not name.strip():
+            raise ShopFehler("Kategorie ohne Namen lässt sich nicht anlegen.")
+        if not parent_id:
+            raise ShopFehler(f"Für {name!r} fehlt die Elternkategorie.")
+        neu_id = hashlib.md5(f"kat:{parent_id}:{name}".encode()).hexdigest()
+        eintrag: dict = {"id": neu_id, "name": name.strip(),
+                         "parentId": parent_id, "active": True}
+        for feld in ("type", "displayNestedProducts", "cmsPageId",
+                     "productAssignmentType", "visible"):
+            if vorlage and vorlage.get(feld) is not None:
+                eintrag[feld] = vorlage[feld]
+        self.sync("category", [eintrag])
+        return neu_id
+
+    def kategorie_holen(self, kat_id: str) -> dict | None:
+        """Eine einzelne Kategorie mit allen Feldern — als Vorlage brauchbar."""
+        treffer = self.suche("category", {
+            "limit": 1,
+            "filter": [{"type": "equals", "field": "id", "value": kat_id}]})
+        return treffer[0] if treffer else None
+
     def kategorien_suchen(self, text: str, limit: int = 50) -> list[dict]:
         """Kategorien im Shop suchen — server-seitig.
 
