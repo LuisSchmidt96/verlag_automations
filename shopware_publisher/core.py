@@ -1072,6 +1072,21 @@ def lade_kategorien_cache(umgebung: str) -> list[dict]:
         return []
 
 
+def kategorie_pfad(kat: dict, nach_id: dict) -> str:
+    """"Autoren-Herausgeber > B > Brohm, Heiko" — der Weg von oben.
+
+    Zum Ansehen und zum Einordnen. Die Elternkette kommt aus dem
+    Zwischenspeicher, nicht aus dem Shop.
+    """
+    teile, gesehen = [], set()
+    lauf = kat
+    while lauf and lauf.get("id") not in gesehen:
+        gesehen.add(lauf.get("id"))
+        teile.append(lauf.get("name") or "?")
+        lauf = nach_id.get(lauf.get("parentId"))
+    return " > ".join(reversed(teile))
+
+
 def cache_sucher(kategorien: list[dict]):
     """Eine `suche(text)`-Funktion, die im Zwischenspeicher nachsieht.
 
@@ -1905,10 +1920,13 @@ class ShopClient:
 
         `/api/category?limit=500` gibt genau 500 zurück und verschweigt, dass
         es mehr gibt — deshalb wird geblättert, bis eine Seite nicht mehr voll
-        ist. Zurück kommen nur id und name; mehr braucht das Raten nicht, und
-        die Datei bleibt klein.
+        ist.
+
+        Mitgenommen werden id, name, parentId und level. Die Elternbeziehung
+        braucht man, sobald eine Kategorie nicht nur gesucht, sondern auch
+        eingeordnet werden soll — ohne sie weiß man nicht, WOHIN etwas gehört.
         """
-        alle: dict[str, str] = {}
+        alle: dict[str, dict] = {}
         seite, pro_seite = 1, 500
         while True:
             antwort = self._json(
@@ -1917,8 +1935,15 @@ class ShopClient:
                  "sort": [{"field": "name", "order": "ASC"}]})
             daten = antwort.get("data") or []
             for k in daten:
-                if k.get("id"):
-                    alle[k["id"]] = (k.get("name") or "").strip()
+                if not k.get("id"):
+                    continue
+                alle[k["id"]] = {
+                    "id": k["id"],
+                    "name": (k.get("name") or "").strip(),
+                    "parentId": k.get("parentId"),
+                    "level": k.get("level"),
+                    "active": k.get("active"),
+                }
             if log:
                 log(f"   Kategorien geholt: {len(alle)}")
             if len(daten) < pro_seite:
@@ -1926,7 +1951,7 @@ class ShopClient:
             seite += 1
             if seite > 40:              # Notbremse, 20.000 wären absurd
                 break
-        return [{"id": i, "name": n} for i, n in alle.items() if n]
+        return [k for k in alle.values() if k["name"]]
 
     def kategorien_suchen(self, text: str, limit: int = 50) -> list[dict]:
         """Kategorien im Shop suchen — server-seitig.
