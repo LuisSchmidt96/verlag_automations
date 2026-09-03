@@ -19,6 +19,7 @@ zweiter Lauf aktualisiert also dasselbe Produkt statt ein zweites anzulegen.
 from __future__ import annotations
 
 import base64
+import datetime
 import hashlib
 import html
 import json
@@ -136,6 +137,12 @@ DEFAULT_CONFIG = {
         "BZ": "Leinen",
     },
     "last_input_dir": "",
+
+    # --- Gewichtsschätzung -------------------------------------------------
+    # Wird beim Verbinden aus dem Bestand gelernt (siehe lerne_gewichtsmodell)
+    # und hier abgelegt, damit die Schätzung auch ohne Shop-Zugriff steht.
+    "gewichtsmodell": {},
+    "gewichtsmodell_max_tage": 30,       # danach beim Verbinden neu lernen
 }
 
 # Schlüssel, die früher flach in der config.json standen (eine Umgebung).
@@ -392,6 +399,39 @@ def autor_link(k: dict, basis: str) -> str:
     return f"<a href='{url}'>{html.escape(name)}</a>"
 
 
+# Satzende: Punkt/Ruf-/Fragezeichen vor einem Leerzeichen — aber NICHT nach
+# einer Ziffer ("zum ausgehenden 18. Jahrhundert") und nicht nach einem
+# einzelnen Buchstaben ("z. B."). Ohne diese zwei Ausnahmen endete die
+# Meta-Beschreibung mitten in einer Jahrhundertangabe, was schlimmer aussieht
+# als ein sauberes Auslassungszeichen.
+_SATZENDE = re.compile(r"(?<![0-9])(?<!\s[A-Za-zÄÖÜäöü])[.!?](?=\s)")
+
+
+def kuerze(text: str, grenze: int = 255) -> str:
+    """Auf `grenze` Zeichen kürzen, ohne mitten im Wort abzubrechen.
+
+    Shopware nimmt für metaTitle/metaDescription/keywords 255 Zeichen. Ein
+    harter Schnitt endet mitten im Wort („… verfolgt auch kritisch die Ve“) —
+    das steht so bei den migrierten Bestandsprodukten und sieht in der
+    Google-Vorschau aus wie ein Fehler. Deshalb: erst am Satzende versuchen
+    (dann steht dort ein ganzer Gedanke, ohne Auslassungszeichen), sonst an
+    der letzten Wortgrenze mit „…“.
+    """
+    text = " ".join((text or "").split())       # Zeilenumbrüche raus
+    if len(text) <= grenze:
+        return text
+
+    schnitt = text[:grenze - 1]                 # Platz für das „…“
+    # Satzende nur nehmen, wenn danach noch genug Text steht — sonst bliebe
+    # von einer langen ersten Passage bloss ein Halbsatz übrig.
+    treffer = list(_SATZENDE.finditer(schnitt))
+    if treffer and treffer[-1].start() >= grenze * 0.6:
+        return schnitt[:treffer[-1].start() + 1]
+    wort = schnitt.rfind(" ")
+    # Auch den Punkt mit abschneiden — sonst steht dort "18.…".
+    return (schnitt[:wort] if wort > 0 else schnitt).rstrip(" .,;:–-") + "…"
+
+
 def _zahl_de(x: float) -> str:
     """24.4 -> '24,4'; 24.0 -> '24'."""
     s = f"{x:g}"
@@ -467,6 +507,10 @@ REFERENZ_ZU_KURZ = {
     "ResourceLink": "x435",
     "TextContent": "textcontent",
     "Text": "d104",
+    "Subject": "subject",
+    "SubjectSchemeIdentifier": "b067",
+    "SubjectCode": "b069",
+    "SubjectHeadingText": "b070",
     "Contributor": "contributor",
     "SequenceNumber": "b034",
     "ContributorRole": "b035",
@@ -481,7 +525,7 @@ def _normalisiere_tags(root) -> None:
     """Referenzfassung auf Kurz-Tags umschreiben (siehe REFERENZ_ZU_KURZ).
 
     Namensraeume werden vorher abgestreift: die VLB-Dateien haben keinen, aber
-    ONIX erlaubt ihn, und ein Namensraum wuerde jedes find() ins Leere laufen
+    ONIX erlaubt ihn, und ein Namensraum würde jedes find() ins Leere laufen
     lassen — lautlos, was der schlimmste Fall waere.
     """
     for el in root.iter():
@@ -552,6 +596,22 @@ def lade_buchfelder(xml_pfad, cfg: dict | None = None) -> dict:
     # aus der ONIX. Ohne sie fehlt der Umfangzeile die Hälfte.
     abbildungen = _txt(dd.find("b125")) if dd is not None else ""
     abbildungsart = _txt(dd.find("b062")) if dd is not None else ""
+
+    # Schlagwörter und Warengruppe. Schema 20 sind die freien Schlagwörter
+    # ("Mannheim", "Kurpfalz", "Stadtgeschichte"), Schema 26 die
+    # Warengruppen-Systematik ("Hardcover, Softcover / Geschichte").
+    schlagworte: list[str] = []
+    warengruppe = ""
+    if dd is not None:
+        for sub in dd.findall("subject"):
+            schema = _txt(sub.find("b067"))
+            text = _txt(sub.find("b070"))
+            if not text:
+                continue
+            if schema == "20":
+                schlagworte.append(text)
+            elif schema == "26" and not warengruppe:
+                warengruppe = text
     einband_code = _txt(dd.find("b012")) if dd is not None else ""
     einband = einband_map.get(einband_code, einband_code)
 
@@ -623,6 +683,8 @@ def lade_buchfelder(xml_pfad, cfg: dict | None = None) -> dict:
         "seiten": seiten,
         "abbildungen": abbildungen,
         "abbildungsart": abbildungsart,
+        "schlagworte": schlagworte,
+        "warengruppe": warengruppe,
         "einband": einband,
         "verlag": verlag,
         "preis_brutto": preis_brutto,
@@ -952,6 +1014,11 @@ def kategorie_vorschlaege(f: dict, suche) -> tuple[list[dict], list[str]]:
     fehlend: list[str] = []
     gesehen: set[str] = set()
 
+    def merke(kat: dict) -> None:
+        if kat["id"] not in gesehen:
+            gesehen.add(kat["id"])
+            treffer.append(kat)
+
     for person in beteiligte:
         begriff = (person.get("nachname") or person.get("name") or "").strip()
         if not begriff:
@@ -971,12 +1038,440 @@ def kategorie_vorschlaege(f: dict, suche) -> tuple[list[dict], list[str]]:
         if beste == 1 and len(gleichauf) > 1:      # mehrdeutig -> nicht raten
             fehlend.append(person.get("name") or begriff)
             continue
-        kat = gleichauf[0]
-        if kat["id"] not in gesehen:
-            gesehen.add(kat["id"])
-            treffer.append(kat)
+        merke(gleichauf[0])
+
+    # Sachkategorien über die ONIX-Schlagwörter (Schema 20). Verglichen wird
+    # der GANZE Name, nicht ein Teil davon: "Geschichte" steckt sonst in
+    # "Ortsgeschichte", "Kirchengeschichte" und "Jüdische Geschichte" zugleich
+    # und schaufelte drei falsche Kategorien herein. Exakt trifft dafür
+    # zuverlässig — "Kurpfalz" ist im Shop wirklich eine Kategorie.
+    for wort in dict.fromkeys(f.get("schlagworte") or []):
+        wort = (wort or "").strip()
+        if len(wort) < 3:
+            continue
+        for kat in suche(wort):
+            if (kat.get("name") or "").strip().lower() == wort.lower():
+                merke(kat)
 
     return treffer, fehlend
+
+
+# ---------------------------------------------------------------------
+# Gewicht schätzen — gelernt an den Produkten, die schon im Shop stehen
+# ---------------------------------------------------------------------
+#
+# Die VLB-ONIX liefert das Gewicht praktisch nie mit (ein <Measure> vom Typ 08
+# fehlt). Im Shop ist es aber gepflegt: die Bestandsprodukte haben Gewicht,
+# Breite und Höhe, und die Seitenzahl steht in der Umfangzeile ihrer
+# Beschreibung ("448 Seiten mit 390 ..."). Damit lässt sich das Gewicht eines
+# neuen Buchs aus dem eigenen Bestand ableiten, statt es zu raten.
+#
+# Geschätzt wird mit dem physikalischen Modell, nicht mit einem Mittelwert:
+#
+#     Gewicht = Fläche * (Papier_g_qm * Blattzahl + Einband_g_qm)
+#
+# Ein Buch ist ein Stapel Blätter (Seitenzahl / 2) eines Papiers mit festem
+# Flächengewicht, dazu ein Einband, der ebenfalls mit der Fläche skaliert.
+# Beide Größen sind ablesbare Zahlen in g/m² — geht eine Schätzung daneben,
+# sieht man am Modell, woran es liegt. Ein bloßer Mittelwert oder ein
+# Gramm-pro-Seite-Faktor könnte das nicht: er würde ein großformatiges
+# dünnes Buch genauso schwer machen wie einen kleinen dicken Band.
+#
+# Gelernt wird je Einbandart getrennt — ein fester Einband wiegt bei gleicher
+# Fläche ein Vielfaches einer Broschur.
+
+# Grenzen, innerhalb derer ein Bestandsprodukt als Buch durchgeht. Im Shop
+# stehen auch Nicht-Bücher (Karten, Poster) und Datensätze mit Tippfehlern;
+# die dürfen das Modell nicht verziehen.
+_GEW_MIN_KG, _GEW_MAX_KG = 0.02, 10.0
+_FLAECHE_MIN_QM, _FLAECHE_MAX_QM = 0.005, 0.25      # ca. A6 bis doppelt A2
+_SEITEN_MIN, _SEITEN_MAX = 8, 2000
+
+# Ab so vielen Proben wird eine Einbandgruppe eigenständig geschätzt.
+MIN_PROBEN = 8
+# Schnitt der Gruppen bzw. Rechenweg; siehe gewichtsmodell_veraltet.
+GEWICHTSMODELL_VERSION = 2
+# Obergrenze für die Paarbildung (Theil-Sen ist quadratisch in der Punktzahl).
+_MAX_PUNKTE = 200
+# Ab dieser Abweichung gilt ein Bestandsgewicht als verdächtig: es wird beim
+# Lernen weggelassen und in der Gegenprobe genannt. 40 % trennt am Bestand
+# sauber zwischen Streuung (Papiersorte, Abbildungsteil) und Datenmüll.
+_VERDACHT_AB = 0.40
+
+_SEITEN_RE = re.compile(r"(\d{1,4})\s*Seiten", re.IGNORECASE)
+
+
+def seiten_aus_beschreibung(text: str) -> int:
+    """Seitenzahl aus der Umfangzeile eines Bestandsprodukts ("448 Seiten").
+
+    Die Seitenzahl hat in Shopware kein eigenes Feld — sie steht nur im Text.
+    Genommen wird der ERSTE Treffer: die Umfangzeile steht im Hausstil hinter
+    dem Werbetext, im Werbetext selbst kommt "Seiten" kaum vor.
+    """
+    m = _SEITEN_RE.search(text or "")
+    return int(m.group(1)) if m else 0
+
+
+def _einband_aus_format(formatzeile: str) -> str:
+    """Einbandart aus dem Format-Feld ("17 x 23,5 cm, fester Einband").
+
+    Das ist dieselbe Zeile, die baue_customfields schreibt — der Einband steht
+    darin hinter dem letzten Komma. Fehlt das Komma, ist keine Einbandart
+    hinterlegt; dann zaehlt die Probe nur in die Gesamtgruppe.
+    """
+    text = (formatzeile or "").strip()
+    if "," not in text:
+        return ""
+    return text.rsplit(",", 1)[1].strip()
+
+
+# Einbandarten, wie sie im Shop stehen und wie die ONIX sie liefert, auf die
+# zwei Klassen bringen, die fürs Gewicht zählen. Gemessen am Bestand: dieselbe
+# Fläche und Blattzahl wiegt fest gebunden rund das Doppelte einer Broschur —
+# das ist der grosse Unterschied, alles darunter geht im Rauschen unter.
+#
+# Nötig ist die Normalisierung, weil beide Seiten andere Wörter benutzen: die
+# ONIX sagt "kartoniert" (b012 = BC), das Format-Feld im Shop sagt "Broschur",
+# und daneben steht dort Freitext ("fester Einband im repräsentativen
+# Großformat", "fester Einabnd", "Klappenbroschur mit Fadenheftung"). Ohne
+# Normalisierung fand ein kartoniertes Buch gar keine Gruppe und wurde mit dem
+# Mischmodell geschätzt — gemessen 16,4 % daneben statt 10,4 %.
+_EINBAND_FEST = re.compile(
+    r"fest|leinen|gebunden|hardcover|schuber|einabnd", re.IGNORECASE)
+_EINBAND_WEICH = re.compile(
+    r"broschur|kartoniert|paperback|flexib|geheftet|klapp", re.IGNORECASE)
+
+
+def einband_klasse(text: str) -> str:
+    """"fester Einband" / "Broschur" / "" (unbekannt)."""
+    t = text or ""
+    # Reihenfolge: "Klappenbroschur mit festem Rücken" gibt es nicht, aber
+    # "fester Einband mit Klappen" schon — fest schlägt deshalb weich.
+    if _EINBAND_FEST.search(t):
+        return "fester Einband"
+    if _EINBAND_WEICH.search(t):
+        return "Broschur"
+    return ""
+
+
+def gewichtsprobe(p: dict, cfg: dict) -> dict | None:
+    """Ein Bestandsprodukt in eine Lernprobe umrechnen — oder None."""
+    def zahl(x) -> float:
+        try:
+            return float(x)
+        except (TypeError, ValueError):
+            return 0.0
+
+    uebersetzt = p.get("translated") or {}
+    gewicht = zahl(p.get("weight"))
+    breite, hoehe = zahl(p.get("width")), zahl(p.get("height"))
+    # Aus der SW5-Migration stehen bei einzelnen Produkten Millimeter in den
+    # cm-Feldern. Ein 100 cm breites Buch gibt es nicht — dann sind es mm.
+    if breite > 100:
+        breite /= 10.0
+    if hoehe > 100:
+        hoehe /= 10.0
+
+    seiten = seiten_aus_beschreibung(
+        p.get("description") or uebersetzt.get("description") or "")
+    flaeche = breite * hoehe / 10000.0          # cm² -> m²
+
+    if not (_GEW_MIN_KG <= gewicht <= _GEW_MAX_KG):
+        return None
+    if not (_FLAECHE_MIN_QM <= flaeche <= _FLAECHE_MAX_QM):
+        return None
+    if not (_SEITEN_MIN <= seiten <= _SEITEN_MAX):
+        return None
+
+    cf = p.get("customFields") or uebersetzt.get("customFields") or {}
+    schluessel = (cfg.get("custom_fields")
+                  or DEFAULT_CONFIG["custom_fields"]).get("format")
+    einband_roh = _einband_aus_format(cf.get(schluessel, "") if schluessel else "")
+
+    # Das echte Gewicht und die Maße bleiben dabei — nur so lässt sich die
+    # Schätzung hinterher gegen den Bestand halten (kreuzvalidierung).
+    return {
+        "blatt": seiten / 2.0,
+        "g_qm": gewicht * 1000.0 / flaeche,     # Gewicht je Quadratmeter
+        "einband": einband_klasse(einband_roh),
+        "einband_roh": einband_roh,
+        "nummer": p.get("productNumber") or "",
+        "seiten": seiten,
+        "breite_cm": round(breite, 1),
+        "hoehe_cm": round(hoehe, 1),
+        "flaeche_qm": flaeche,
+        "gewicht_kg": gewicht,
+    }
+
+
+def _median(werte: list[float]) -> float:
+    w = sorted(werte)
+    n = len(w)
+    if not n:
+        return 0.0
+    return w[n // 2] if n % 2 else (w[n // 2 - 1] + w[n // 2]) / 2.0
+
+
+def _theil_sen(punkte: list[tuple[float, float]]) -> tuple[float, float]:
+    """Robuste Gerade y = a*x + b als Median aller Paar-Steigungen.
+
+    Kleinste Quadrate wären hier falsch: ein einziges Produkt mit falsch
+    gepflegtem Gewicht (Gramm statt Kilogramm) oder ein Poster, das durch die
+    Plausibilitätsgrenzen gerutscht ist, zöge die Gerade sichtbar weg. Der
+    Median verträgt rund ein Viertel solcher Ausreißer, ohne zu kippen.
+    """
+    steigungen = []
+    for i, (x1, y1) in enumerate(punkte):
+        for x2, y2 in punkte[i + 1:]:
+            if x1 != x2:
+                steigungen.append((y2 - y1) / (x2 - x1))
+    if not steigungen:
+        return 0.0, _median([y for _, y in punkte])
+    a = _median(steigungen)
+    return a, _median([y - a * x for x, y in punkte])
+
+
+def _gerade(proben: list[dict]) -> tuple[float, float] | None:
+    """Ein Durchgang Theil-Sen über die Proben einer Gruppe."""
+    punkte = sorted((pr["blatt"], pr["g_qm"]) for pr in proben)
+    if len(punkte) > _MAX_PUNKTE:
+        # Gleichmäßig ausdünnen — sortiert, damit der ganze Bereich von
+        # dünn bis dick erhalten bleibt und nicht nur ein Ausschnitt.
+        schritt = len(punkte) / _MAX_PUNKTE
+        punkte = [punkte[int(i * schritt)] for i in range(_MAX_PUNKTE)]
+
+    papier, einband = _theil_sen(punkte)
+    if papier <= 0:
+        return None             # ohne Papiergewicht ist das Modell wertlos
+    # Eine leicht negative Konstante ist Rauschen bei Broschuren (der Umschlag
+    # steckt dann im Papierwert). Physikalisch kann sie nicht negativ sein.
+    return papier, max(einband, 0.0)
+
+
+def _abweichungen(proben: list[dict], papier: float, einband: float) -> list[float]:
+    return [abs(papier * pr["blatt"] + einband - pr["g_qm"]) / pr["g_qm"]
+            for pr in proben]
+
+
+def _schaetze_gruppe(proben: list[dict]) -> dict | None:
+    """Papier- und Einbandgewicht (g/m²) für eine Gruppe von Proben.
+
+    Zwei Durchgänge: der erste dient nur dazu, die Datensätze zu finden, deren
+    Gewicht im Shop nicht stimmen KANN (gemessen: 51 von 459 liegen über 40 %
+    daneben — "0,200 kg" bei 132 Seiten in 22 x 28 cm gibt es nicht, das ist
+    ein Platzhalter). Der zweite Durchgang lernt ohne sie. Theil-Sen verträgt
+    zwar Ausreißer, aber es gibt keinen Grund, sie mitzuschleppen.
+    """
+    erste = _gerade(proben)
+    if not erste:
+        return None
+
+    behalten = [pr for pr, ab in zip(proben, _abweichungen(proben, *erste))
+                if ab <= _VERDACHT_AB]
+    verworfen = len(proben) - len(behalten)
+    if len(behalten) >= MIN_PROBEN:
+        zweite = _gerade(behalten) or erste
+    else:
+        behalten, zweite, verworfen = proben, erste, 0
+
+    papier, einband = zweite
+    return {
+        "papier_g_qm": round(papier, 1),
+        "einband_g_qm": round(einband, 1),
+        "proben": len(behalten),
+        "verworfen": verworfen,
+        # Streuung an den Proben, aus denen gelernt wurde. lerne_gewichte_vom_shop
+        # ersetzt sie durch den ehrlichen, kreuzvalidierten Wert.
+        "abweichung_prozent": round(
+            100.0 * _median(_abweichungen(behalten, papier, einband)), 1),
+    }
+
+
+def lerne_gewichtsmodell(proben: list[dict],
+                         min_proben: int = MIN_PROBEN) -> dict:
+    """Aus Bestandsproben ein Gewichtsmodell je Einbandart bauen.
+
+    Die Gruppe "*" (alle Einbandarten zusammen) ist der Rückfall für Bücher,
+    deren Einbandart im Bestand zu selten vorkommt.
+    """
+    gruppen: dict[str, list[dict]] = {"*": list(proben)}
+    for pr in proben:
+        if pr.get("einband"):
+            gruppen.setdefault(pr["einband"], []).append(pr)
+
+    ergebnis = {}
+    for name, teil in gruppen.items():
+        if len(teil) < min_proben:
+            continue
+        modell = _schaetze_gruppe(teil)
+        if modell:
+            ergebnis[name] = modell
+
+    return {
+        # Die Version steigt, wenn sich Gruppierung oder Rechnung ändern —
+        # ein gespeichertes Modell aus der Zeit davor wäre sonst still weiter
+        # in Gebrauch, obwohl seine Gruppen anders geschnitten sind.
+        "version": GEWICHTSMODELL_VERSION,
+        "stand": datetime.date.today().isoformat(),
+        "proben": len(proben),
+        "gruppen": ergebnis,
+    }
+
+
+def gewichtsmodell_veraltet(cfg: dict) -> bool:
+    """Fehlt das Modell oder ist es älter als `gewichtsmodell_max_tage`?
+
+    Der Bestand wächst; ein Modell von vor einem Jahr kennt die zuletzt
+    gepflegten Bücher nicht. Neu gelernt wird beim Verbinden, weil dann
+    ohnehin eine Verbindung steht.
+    """
+    modell = cfg.get("gewichtsmodell") or {}
+    if not modell.get("gruppen"):
+        return True
+    if modell.get("version") != GEWICHTSMODELL_VERSION:
+        return True
+    try:
+        stand = datetime.date.fromisoformat(modell.get("stand", ""))
+    except ValueError:
+        return True
+    tage = int(cfg.get("gewichtsmodell_max_tage",
+                       DEFAULT_CONFIG["gewichtsmodell_max_tage"]))
+    return (datetime.date.today() - stand).days > tage
+
+
+def _gruppe_fuer(gruppen: dict, einband: str) -> tuple[dict | None, str]:
+    """Passende Einbandgruppe — sonst die Gruppe über alle Einbandarten."""
+    if gruppen.get(einband):
+        return gruppen[einband], einband
+    return gruppen.get("*"), "alle Einbandarten"
+
+
+def kreuzvalidierung(proben: list[dict], faltungen: int = 5) -> dict:
+    """Die Schätzung gegen die echten Gewichte im Bestand halten.
+
+    Ein Modell an denselben Produkten zu messen, aus denen es gelernt hat,
+    schmeichelt sich selbst. Deshalb k-fache Kreuzvalidierung: das Modell
+    lernt an vier Fünfteln des Bestands und schätzt das letzte Fünftel, das es
+    nie gesehen hat — so wie es später ein neues Buch schätzt.
+
+    Zurück kommen die Abweichungen (Median, 90 %-Wert, Trefferquoten) je
+    Einbandart und die größten Ausreißer. Die Ausreißer sind doppelt nützlich:
+    sie zeigen entweder die Grenzen des Modells oder ein Produkt, dessen
+    Gewicht im Shop falsch gepflegt ist.
+    """
+    # Fest nach Artikelnummer aufteilen — derselbe Bestand ergibt dieselben
+    # Zahlen, sonst wäre nicht zu sehen, ob eine Änderung etwas gebracht hat.
+    sortiert = sorted(proben, key=lambda pr: pr.get("nummer", ""))
+    einzeln: list[dict] = []
+    for i in range(max(2, faltungen)):
+        test = sortiert[i::max(2, faltungen)]
+        lern = [pr for j, pr in enumerate(sortiert)
+                if j % max(2, faltungen) != i]
+        gruppen = (lerne_gewichtsmodell(lern) or {}).get("gruppen") or {}
+        for pr in test:
+            gruppe, quelle = _gruppe_fuer(gruppen, pr.get("einband") or "")
+            if not gruppe:
+                continue
+            kg = pr["flaeche_qm"] * (gruppe["papier_g_qm"] * pr["blatt"]
+                                     + gruppe["einband_g_qm"]) / 1000.0
+            einzeln.append({
+                **pr,
+                "geschaetzt_kg": round(kg, 3),
+                "gruppe": quelle,
+                "abweichung": (kg - pr["gewicht_kg"]) / pr["gewicht_kg"],
+            })
+
+    def kennzahlen(teil: list[dict]) -> dict:
+        if not teil:
+            return {}
+        rel = sorted(abs(e["abweichung"]) for e in teil)
+        return {
+            "n": len(teil),
+            "median_prozent": round(100 * _median(rel), 1),
+            "p90_prozent": round(100 * rel[int(0.9 * (len(rel) - 1))], 1),
+            "im_10er_band": round(100 * sum(r <= 0.10 for r in rel) / len(rel)),
+            "im_20er_band": round(100 * sum(r <= 0.20 for r in rel) / len(rel)),
+            # Vorzeichen: schätzt das Modell im Schnitt zu schwer oder zu leicht?
+            "schlagseite_prozent": round(
+                100 * _median([e["abweichung"] for e in teil]), 1),
+        }
+
+    je_einband: dict[str, dict] = {}
+    for e in einzeln:
+        je_einband.setdefault(e.get("einband") or "— ohne Angabe —", []).append(e)
+
+    return {
+        "gesamt": kennzahlen(einzeln),
+        "je_einband": {k: kennzahlen(v) for k, v in sorted(je_einband.items())},
+        "einzeln": sorted(einzeln, key=lambda e: -abs(e["abweichung"])),
+    }
+
+
+def lerne_und_pruefe(proben: list[dict]) -> tuple[dict, dict]:
+    """Modell lernen UND gleich gegen den Bestand halten.
+
+    Die Streuung, die beim Lernen anfällt, schmeichelt sich selbst — das
+    Modell kennt diese Bücher ja. Im Modell steht deshalb der Wert aus der
+    Kreuzvalidierung: so weit lag es bei Büchern daneben, die es NICHT kannte.
+    Das ist die Zahl, die für ein neues Buch gilt, und die deshalb auch im
+    Werkzeug am Gewichtsfeld steht.
+    """
+    modell = lerne_gewichtsmodell(proben)
+    if not modell.get("gruppen"):
+        return modell, {"gesamt": {}, "je_einband": {}, "einzeln": []}
+
+    pruefung = kreuzvalidierung(proben)
+    for name, gruppe in modell["gruppen"].items():
+        gemessen = (pruefung["gesamt"] if name == "*"
+                    else pruefung["je_einband"].get(name))
+        if gemessen:
+            gruppe["abweichung_prozent"] = gemessen["median_prozent"]
+            gruppe["gemessen"] = True
+    modell["verdaechtig"] = sum(1 for e in pruefung["einzeln"]
+                                if abs(e["abweichung"]) > _VERDACHT_AB)
+    return modell, pruefung
+
+
+def schaetze_gewicht(f: dict, modell: dict | None) -> tuple[float, str]:
+    """Gewicht in kg schätzen. Gibt (0.0, Grund) zurück, wenn es nicht geht.
+
+    Der Grund wird angezeigt: eine stille 0 wäre schlimmer als gar keine
+    Schätzung — dann stünde im Shop ein falsches Versandgewicht.
+    """
+    gruppen = ((modell or {}).get("gruppen") or {})
+    if not gruppen:
+        # Nicht "beim Verbinden" sagen: der Buchdurchgang kennt keinen
+        # Verbinden-Knopf, dort wird beim ersten Anlegen gelernt.
+        return 0.0, "noch kein Modell — wird aus dem Bestand gelernt, sobald " \
+                    "eine Verbindung zum Shop steht"
+
+    try:
+        seiten = int(str(f.get("seiten") or "0").strip() or 0)
+    except ValueError:
+        seiten = 0
+    breite = float(f.get("breite_cm") or 0.0)
+    hoehe = float(f.get("hoehe_cm") or 0.0)
+    if not seiten:
+        return 0.0, "keine Seitenzahl in der ONIX"
+    if not (breite and hoehe):
+        return 0.0, "kein Format (Breite/Höhe) in der ONIX"
+
+    gruppe, quelle = _gruppe_fuer(gruppen, einband_klasse(f.get("einband")))
+    if not gruppe:
+        return 0.0, "keine passende Vergleichsgruppe im Bestand"
+
+    flaeche = breite * hoehe / 10000.0
+    kg = flaeche * (gruppe["papier_g_qm"] * seiten / 2.0
+                    + gruppe["einband_g_qm"]) / 1000.0
+    if not (_GEW_MIN_KG <= kg <= _GEW_MAX_KG):
+        return 0.0, f"unplausibles Ergebnis ({kg:.2f} kg)"
+
+    # "typisch daneben" ist der kreuzvalidierte Median: so weit lag die
+    # Schätzung bei Büchern daneben, die das Modell nicht kannte. Ohne diese
+    # Angabe liest sich eine Schätzung wie eine Messung.
+    return round(kg, 3), (
+        f"geschätzt aus {gruppe['proben']} vergleichbaren Produkten ({quelle})"
+        f" — typisch ±{_zahl_de(gruppe['abweichung_prozent'])} % daneben")
 
 
 def baue_produkt(f: dict, cfg: dict, medien: list[dict] | None = None,
@@ -1032,20 +1527,28 @@ def baue_produkt(f: dict, cfg: dict, medien: list[dict] | None = None,
             payload[sw] = f[onix]
 
     # SEO
-    payload["metaTitle"] = produkt_name(f)[:255]
+    # metaTitle bleibt der blosse Titel — so steht es im Bestand, auch bei
+    # Büchern mit Untertitel. Der Untertitel steht im eigenen Feld (attr1).
+    payload["metaTitle"] = kuerze(produkt_name(f))
     text = " ".join(f.get("werbetext_absaetze") or [])
     if text:
-        payload["metaDescription"] = text[:255]
-    stichworte = [k["nachname"] for k in (f.get("autoren_teile") or [])
-                  if k.get("nachname")]
-    stichworte += [k["nachname"] for k in (f.get("herausgeber_teile") or [])
-                   if k.get("nachname")]
+        payload["metaDescription"] = kuerze(text)
+    # Schlagwort je Beteiligtem ist der NACHNAME (wie im Bestand: "Brandes,
+    # Kinderbuch, Grünes Gras erzähl mir was, Dilsberg"). Eine Körperschaft
+    # („Stiftung Geißstraße“) hat keinen Nachnamen — dann der ganze Name,
+    # sonst fiel sie hier ersatzlos weg und es blieb nur der Titel stehen.
+    def _stichwort(k: dict) -> str:
+        return k.get("nachname") or k.get("name") or ""
+
+    stichworte = [_stichwort(k) for k in (f.get("autoren_teile") or [])]
+    stichworte += [_stichwort(k) for k in (f.get("herausgeber_teile") or [])]
+    stichworte = [x for x in stichworte if x]
     if f.get("titel"):
         stichworte.append(f["titel"])
     if f.get("serientitel"):
         stichworte.append(f["serientitel"])
     if stichworte:
-        payload["keywords"] = ", ".join(dict.fromkeys(stichworte))[:255]
+        payload["keywords"] = kuerze(", ".join(dict.fromkeys(stichworte)))
 
     # Such-Schlagwörter — das Feld, das im Admin unter „Kategorie" steht.
     # NICHT zu verwechseln mit `keywords` oben: das sind die SEO-Meta-Wörter
@@ -1060,6 +1563,7 @@ def baue_produkt(f: dict, cfg: dict, medien: list[dict] | None = None,
     suchworte = [f.get("titel"), f.get("untertitel"), f.get("serientitel")]
     suchworte += [k.get("name") for k in (f.get("herausgeber_teile") or [])]
     suchworte += [k.get("name") for k in (f.get("autoren_teile") or [])]
+    suchworte += list(f.get("schlagworte") or [])   # aus der ONIX, Schema 20
     suchworte.append(f.get("isbn13_formatiert"))
     suchworte = [t.strip() for t in suchworte if t and str(t).strip()]
     if suchworte:
@@ -1328,6 +1832,39 @@ class ShopClient:
             "manufacturer_name": hersteller.get("name") or "",
         }
 
+    def bestand_gewichte(self, max_produkte: int = 2000) -> list[dict]:
+        """Gepflegte Produkte mit Gewicht und Maßen holen (Lernstoff).
+
+        Nur die vier Felder, die die Schätzung braucht — `includes` hält die
+        Antwort klein, sonst kaeme der halbe Produktkatalog mit Preisen und
+        Medien über die Leitung. Gefiltert wird server-seitig auf Werte > 0;
+        das schließt die vielen Produkte ohne gepflegtes Gewicht aus.
+        """
+        raus: list[dict] = []
+        seite = 1
+        limit = 500
+        while len(raus) < max_produkte:
+            treffer = self.suche("product", {
+                "limit": limit,
+                "page": seite,
+                "filter": [
+                    {"type": "range", "field": "weight",
+                     "parameters": {"gt": 0}},
+                    {"type": "range", "field": "width",
+                     "parameters": {"gt": 0}},
+                    {"type": "range", "field": "height",
+                     "parameters": {"gt": 0}},
+                ],
+                "includes": {"product": ["productNumber", "weight", "width",
+                                         "height", "description",
+                                         "customFields"]},
+            })
+            raus += treffer
+            if len(treffer) < limit:
+                break
+            seite += 1
+        return raus[:max_produkte]
+
     # -- Medien ---------------------------------------------------------
     def produkt_medien_ordner(self) -> str | None:
         """ID des Standard-Medienordners für Produktbilder (für Thumbnails).
@@ -1396,6 +1933,52 @@ class ShopClient:
 # Gesamtablauf
 # ---------------------------------------------------------------------
 
+def lerne_gewichte_vom_shop(client: "ShopClient", cfg: dict) -> dict:
+    """Bestand holen, Modell lernen und in der Config ablegen.
+
+    Die Config ist der richtige Ort: so steht die Schätzung auch beim
+    nächsten Start bereit, ohne dass wieder tausend Produkte geladen werden.
+    """
+    proben = [gewichtsprobe(p, cfg) for p in client.bestand_gewichte()]
+    modell, _ = lerne_und_pruefe([p for p in proben if p])
+    cfg["gewichtsmodell"] = modell
+    return modell
+
+
+def _gewicht_ergaenzen(f: dict, cfg: dict, client: "ShopClient | None" = None,
+                       log=print) -> dict:
+    """Fehlendes Gewicht schätzen — notfalls erst das Modell dafür lernen.
+
+    Hier und nicht nur in der Oberfläche, damit JEDER Weg in den Shop ein
+    Versandgewicht bekommt: der Buchdurchgang ruft ``veroeffentliche`` direkt
+    auf und hat eine eigene config.json, in der nie jemand „Verbinden“ gedrückt
+    hat. Ohne das eigene Nachlernen bliebe dort für immer „kein Modell“.
+
+    Der übergebene Datensatz bleibt unverändert — der Aufrufer soll keine Zahl
+    untergeschoben bekommen, die er nie gesehen hat. Das Modell dagegen landet
+    in ``cfg``: der Aufrufer speichert seine Konfiguration ohnehin, und beim
+    nächsten Buch steht es dann schon da.
+    """
+    if f.get("gewicht_kg"):
+        return f
+
+    if client is not None and gewichtsmodell_veraltet(cfg):
+        try:
+            log("Lerne Gewichte aus dem Bestand (einmalig) …")
+            lerne_gewichte_vom_shop(client, cfg)
+        except Exception as fehler:
+            # Ein Buch ohne Gewicht ist ärgerlich, ein abgebrochener Upload
+            # schlimmer. Weiter geht es in jedem Fall.
+            log(f"Gewichtsmodell nicht gelernt: {fehler}")
+
+    kg, grund = schaetze_gewicht(f, cfg.get("gewichtsmodell"))
+    if kg:
+        log(f"Gewicht geschätzt: {_zahl_de(kg)} kg — {grund}")
+        return {**f, "gewicht_kg": kg}
+    log(f"Ohne Gewicht: {grund}")
+    return f
+
+
 def veroeffentliche(f: dict, cfg: dict, bilder: dict | None = None,
                     secret: str = "", dry_run: bool = False,
                     ueberschreiben: bool = False, log=print,
@@ -1414,6 +1997,7 @@ def veroeffentliche(f: dict, cfg: dict, bilder: dict | None = None,
     bilder = bilder or {"cover": None, "galerie": []}
     eff = effektiv(cfg)          # globale Einstellungen + aktive Umgebung
 
+
     # (Datei, Rolle). Die ROLLE bestimmt die Medien-ID, nicht der Dateiname:
     # dasselbe Cover heisst je nach Quelle anders ("2D_72_05-607-0" vom Share,
     # "05-607-0" vom Webserver). Haengt die ID am Namen, entsteht bei jedem
@@ -1428,6 +2012,7 @@ def veroeffentliche(f: dict, cfg: dict, bilder: dict | None = None,
         dateien.append((Path(g), f"galerie{i}"))
 
     if dry_run:
+        f = _gewicht_ergaenzen(f, cfg, log=log)      # ohne Shop: nur rechnen
         medien = [{"media_id": _media_id(isbn, rolle), "cover": rolle == "cover",
                    "datei": str(p)} for p, rolle in dateien]
         payload = baue_produkt(f, eff, medien, kategorien=kategorien)
@@ -1443,6 +2028,8 @@ def veroeffentliche(f: dict, cfg: dict, bilder: dict | None = None,
     if fehlend:
         raise ShopFehler("Zuordnung fehlt: " + ", ".join(fehlend) +
                          " — bitte einmal 'Verbinden' und auswählen.")
+
+    f = _gewicht_ergaenzen(f, cfg, client=client, log=log)
 
     # Gibt es das Buch schon (z. B. aus der SW5-Migration)? Diese Prüfung läuft
     # ZUERST — noch vor dem Bild-Upload —, damit ein bestehendes Produkt ohne

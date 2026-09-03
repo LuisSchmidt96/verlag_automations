@@ -20,6 +20,7 @@ Getestet gegen die Admin-API von **Shopware 6.7**.
 | Beschreibung   | Werbetext + kursiver Fakten-Block (siehe unten)       |
 | Preis          | DE-Preis brutto; **netto** = brutto / (1 + Steuersatz)|
 | Maße / Erscheinungsdatum | `Measure` bzw. `PublishingDate`             |
+| Gewicht        | `Measure` 08 — fehlt fast immer, dann **geschätzt** (s. u.) |
 | SEO            | metaTitle, metaDescription, keywords                   |
 | Bilder         | drei Quellen (siehe unten)                            |
 | Kategorien     | **je Buch** in der Oberfläche gewählt                  |
@@ -148,6 +149,131 @@ dem Anlegen an und fragt nach. Vorher am besten einmal mit **Dry-Run** laufen.
 
 setzen — **nur für den Dev-Store**. Im Produktivshop bleibt es `true`.
 
+## Gewicht — geschätzt am eigenen Bestand
+
+Die VLB-ONIX liefert das Gewicht praktisch nie mit (`<Measure>` vom Typ 08
+fehlt). Ohne Gewicht rechnet Shopware keine Versandkosten. Geraten wird es
+deshalb nicht **frei**, sondern an den Produkten gelernt, die im Shop schon
+gepflegt sind — die haben Gewicht, Breite und Höhe, und ihre Seitenzahl steht
+in der Umfangzeile der Beschreibung („448 Seiten mit …“).
+
+Gelernt wird das physikalische Modell, nicht ein Mittelwert:
+
+```
+Gewicht = Fläche × (Papier_g_qm × Blattzahl + Einband_g_qm)
+```
+
+Ein Buch ist ein Stapel Blätter (Seitenzahl / 2) plus Einband; beide Anteile
+skalieren mit der Fläche. Die zwei gelernten Zahlen sind deshalb ablesbar
+(z. B. „134 g/m² Papier, 976 g/m² Einband“) — geht eine Schätzung daneben,
+sieht man am Modell, woran es liegt. Ein Mittelwert oder ein
+Gramm-pro-Seite-Faktor könnte das nicht: er machte ein großformatiges dünnes
+Buch so schwer wie einen kleinen dicken Band.
+
+* **Je Einbandart getrennt** — gemessen am Bestand ist das der einzige
+  Unterschied, der wirklich zählt: nach Einband gruppiert liegt die Schätzung
+  im Median 6,0 % daneben, ohne Gruppen 8,9 %. Eine zusätzliche Trennung nach
+  Format bringt nichts (6,1 %).
+* **Die Einbandbezeichnung wird normalisiert** (`fester Einband` / `Broschur`).
+  Das ist nicht Kosmetik: die ONIX sagt „kartoniert“, das Format-Feld im Shop
+  sagt „Broschur“, daneben steht dort Freitext („fester Einband im
+  repräsentativen Großformat“, „fester Einabnd“). Ohne Normalisierung fand ein
+  kartoniertes Buch **gar keine** Gruppe und wurde mit dem Mischmodell
+  geschätzt — gemessen 16,4 % daneben statt 10,4 %.
+* **Robust gegen Ausreißer:** die Gerade ist ein Theil-Sen-Median aller
+  Paar-Steigungen, keine kleinsten Quadrate (gemessen besser: 6,0 % statt
+  6,7 %). Dazu ein zweiter Durchgang, der die Bestandsdatensätze weglässt, die
+  im ersten über 40 % danebenlagen — das sind die falsch gepflegten Gewichte,
+  nicht die schwierigen Bücher.
+* **Gelernt wird beim Verbinden**, aber nur, wenn das gespeicherte Modell fehlt,
+  älter als `gewichtsmodell_max_tage` (30) ist oder aus einer älteren
+  Modellversion stammt (`GEWICHTSMODELL_VERSION` — ändert sich der Schnitt der
+  Gruppen, wäre ein gespeichertes Modell sonst still weiter in Gebrauch). Es steht in der
+  `config.json` unter `gewichtsmodell` — mit Stand, Probenzahl und der
+  gemessenen Streuung je Gruppe.
+* **Geschätzt wird im Veröffentlichen-Weg selbst** (`veroeffentliche`), nicht
+  nur in der Oberfläche — und fehlt dort das Modell, wird es **an Ort und
+  Stelle gelernt**, weil eine Verbindung ja gerade steht. Sonst bekäme der
+  Buchdurchgang nie ein Gewicht: er ruft `core.veroeffentliche` direkt auf und
+  hat eine eigene `config.json`, in der nie jemand „Verbinden“ gedrückt hat.
+  Gelernt wird einmal, danach steht das Modell auch in dieser Config.
+  Ein von Hand eingetragenes Gewicht schlägt die Schätzung immer; der
+  übergebene Buchdatensatz wird dabei nicht verändert.
+* **Ohne Seitenzahl oder Format wird nicht geschätzt.** Dann bleibt das Feld
+  leer und daneben steht, warum — eine stille 0 wäre schlimmer als gar keine
+  Angabe, weil im Shop dann ein falsches Versandgewicht stünde.
+
+### Stimmt die Schätzung? — messen statt vermuten
+
+Der Shop kennt zu jedem gepflegten Produkt das **echte** Gewicht. Damit lässt
+sich die Schätzung prüfen:
+
+```
+python -m shopware_publisher.probelauf --gewichte
+```
+
+Das Modell lernt dabei an vier Fünfteln des Bestands und schätzt das letzte
+Fünftel, das es nie gesehen hat (Kreuzvalidierung) — an denselben Produkten zu
+messen, aus denen gelernt wurde, benotete sich selbst. Genau dieser Wert steht
+später am Gewichtsfeld („typisch ±5,8 % daneben“); alle Zeilen landen in
+`gewichte_pruefung.csv`.
+
+**Stand vom 3.9.2026** (459 Produkte im Dev-Shop mit Gewicht, Maßen und
+Seitenzahl):
+
+| Gruppe          | Papier   | Einband    | Proben | typisch daneben |
+|-----------------|----------|------------|--------|-----------------|
+| fester Einband  | 125 g/m² | 6560 g/m²  | 256    | **5,8 %**       |
+| Broschur        | 118 g/m² | 4040 g/m²  | 127    | **10,3 %**      |
+| alle (Rückfall) | 126 g/m² | 5860 g/m²  | 400    | 7,6 %           |
+
+Die Einbandwerte sind Buchdeckel **plus** Vorsatz und Rücken, auf die Buchfläche
+gerechnet: bei 17 × 24 cm sind 6560 g/m² rund 270 g — die Größenordnung eines
+gebundenen Deckels. Broschuren streuen deutlich stärker als gebundene Bücher;
+das steht so auch am Gewichtsfeld und ist keine Schwäche der Rechnung, sondern
+der Bestand (geheftete Hefte und dicke Klappenbroschuren in einer Gruppe).
+
+### Nebengewinn: falsch gepflegte Gewichte im Shop
+
+**51 der 459 Produkte** liegen über 40 % daneben — und in den meisten Fällen
+irrt nicht die Schätzung, sondern der Shop: 0,150 kg bei 280 Seiten in
+16,5 × 23,5 cm, 0,200 kg bei 132 Seiten in 22,2 × 28,2 cm, 9,000 kg bei
+272 Seiten. Runde Platzhalterwerte (0,2 / 0,5 / 1,0 kg), die einmal eingetragen
+wurden und seitdem echtes Porto kosten. `--gewichte` listet sie mit
+Artikelnummer auf; sie gehören im Admin geprüft. Beim Lernen sind sie draußen.
+
+Die **Schlagseite** in der Ausgabe ist der Median mit Vorzeichen: schätzt das
+Modell im Schnitt zu schwer oder zu leicht? Die Ausreißerliste ist doppelt
+nützlich — sie zeigt entweder die Grenzen des Modells oder ein Produkt, dessen
+Gewicht im Shop falsch gepflegt ist.
+
+Was das Modell gerade sagt, ohne Gegenprobe, zeigt der normale Probelauf:
+
+```
+python -m shopware_publisher.probelauf
+```
+
+## SEO-Felder
+
+`metaTitle` ist der **blosse Titel** — so steht es im Bestand, auch bei Büchern
+mit Untertitel; der Untertitel hat sein eigenes Feld (attr1). `keywords` sind
+die **Nachnamen** der Beteiligten plus Titel und Reihe, wie im Bestand
+(„Brandes, Kinderbuch, Grünes Gras erzähl mir was, Dilsberg“ — die Sachbegriffe
+darin trägt ein Mensch nach).
+
+Zwei Eigenheiten, die man sonst wieder einbaut:
+
+* **Eine Körperschaft hat keinen Nachnamen.** Ist „Stiftung Geißstraße“ die
+  Herausgeberin, stand in den Schlüsselwörtern vorher nur der Titel — der
+  Beteiligte fiel ersatzlos weg. Jetzt greift der ganze Name.
+* **Gekürzt wird an der Satz-, sonst an der Wortgrenze.** Shopware nimmt
+  255 Zeichen; ein harter Schnitt endet mitten im Wort („… verfolgt auch
+  kritisch die Ve“). So steht es bei den migrierten Bestandsprodukten, und in
+  der Google-Vorschau sieht es aus wie ein Fehler. Passt ein ganzer Satz, endet
+  die Beschreibung damit; sonst am letzten Wort mit „…“. Ein Punkt nach einer
+  Ziffer zählt dabei **nicht** als Satzende, sonst bricht der Text bei
+  „zum ausgehenden 18.“ ab.
+
 ## Bilder — drei Quellen
 
 Gesucht wird in dieser Reihenfolge; die Vorschau nennt, **welche** gegriffen hat:
@@ -200,7 +326,9 @@ Mediendatensatz anzulegen und den alten als Waise zurückzulassen.
 
    Wer **keine** eigene Kategorie hat, wird ausdrücklich genannt — dann muss
    ein Mensch ran. Angelegt wird nie eine.
-4. **Gewicht** eintragen, falls gebraucht — VLB liefert es meist nicht mit.
+4. **Gewicht** prüfen — steht es nicht in der ONIX (Normalfall), trägt das
+   Werkzeug eine **Schätzung** ein und schreibt daneben, woraus sie stammt.
+   Überschreiben geht jederzeit; die ONIX neu laden holt die Schätzung zurück.
 5. **Dry-Run** ankreuzen, um den Payload nur anzuschauen (nichts wird gesendet).
 6. **Als Entwurf anlegen** → Bilder hochladen + Produkt anlegen/aktualisieren.
    Danach lässt sich das Produkt direkt im Admin öffnen.

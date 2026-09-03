@@ -72,6 +72,12 @@ class App(Tk):
         self.kat_such = StringVar()
         self.bild_var = StringVar(value="—")
         self.gewicht_var = StringVar()
+        # Woher der Wert im Gewichtsfeld stammt (ONIX, geschätzt, von
+        # Hand). Ein geschätztes Gewicht darf nicht wie ein gemessenes
+        # aussehen — im Zweifel schaut jemand nach.
+        self.gewicht_quelle = StringVar(
+            value="kg — leer lassen, wenn unbekannt")
+        self._gewicht_grund = "noch kein Buch geladen"
         self._kat_sicht: list[dict] = []      # aktuelle Suchtreffer
         self._kat_gewaehlt: dict[str, str] = {}   # id -> Name (überlebt die Suche)
         self._kat_job = None                  # laufender Suchauftrag (Entprellung)
@@ -178,13 +184,14 @@ class App(Tk):
             side="left", padx=(6, 0))
 
         # Gewicht: VLB liefert es meist NICHT mit (kein <Measure> vom Typ 08).
-        # Geraten wird es nicht — wer es braucht, trägt es hier ein.
+        # Fehlt es, steht hier die Schätzung aus dem Bestand — ohne Zutun,
+        # daneben steht woher sie kommt. Überschreiben geht; wer die Schätzung
+        # zurückhaben will, lädt die ONIX neu.
         b2b = ttk.Frame(frm_b); b2b.pack(fill="x", padx=8, pady=(0, 8))
         ttk.Label(b2b, text="Gewicht:", width=10).pack(side="left")
         ttk.Entry(b2b, textvariable=self.gewicht_var, width=10).pack(side="left")
-        ttk.Label(b2b, text="kg — leer lassen, wenn unbekannt (die ONIX hat es "
-                            "meist nicht)", foreground="gray").pack(side="left",
-                                                                    padx=6)
+        ttk.Label(b2b, textvariable=self.gewicht_quelle,
+                  foreground="gray").pack(side="left", padx=6)
 
         # --- Kategorien -----------------------------------------------
         # Je Buch, mehrfach wählbar. Ohne Kategorie hat das Produkt im Shop
@@ -419,6 +426,21 @@ class App(Tk):
                 if vorlage.get(k):
                     umg[k] = vorlage[k]
             self._vorlage = vorlage
+            # Gewichtsmodell aus dem Bestand lernen. Das kostet einen Rutsch
+            # Produkte, deshalb nur, wenn das gespeicherte Modell fehlt oder
+            # zu alt ist — sonst bei jedem Start.
+            if core.gewichtsmodell_veraltet(self.cfg):
+                self.after(0, self.status.set,
+                           "Lerne Gewichte aus dem Bestand …")
+                try:
+                    core.lerne_gewichte_vom_shop(c, self.cfg)
+                    core.speichere_config(self.cfg)
+                except Exception as fehler:
+                    # Ohne Modell wird eben nicht geschätzt. Die Verbindung
+                    # selbst darf daran nicht scheitern — sie ist der Zweck
+                    # des Knopfes, das Modell nur eine Zugabe.
+                    self.after(0, self.gewicht_quelle.set,
+                               f"kg — Gewichtsmodell nicht gelernt: {fehler}")
             self.after(0, self._fuelle_zuordnungen, version)
         except Exception as e:
             self.after(0, lambda: (self.status.set("Nicht verbunden."),
@@ -451,6 +473,10 @@ class App(Tk):
              vorauswahl=lambda e: e["isoCode"] == "EUR")
         if self.felder:
             self._schlage_kategorie_vor()
+            # Erst jetzt steht das Gewichtsmodell — ein vor dem Verbinden
+            # geladenes Buch bekäme sonst dauerhaft kein Gewicht.
+            if not self.gewicht_var.get().strip():
+                self._setze_gewicht()
         v = getattr(self, "_vorlage", {}) or {}
         kanal = v.get("sales_channel_name") or umg.get("sales_channel_id", "")
         hersteller = v.get("manufacturer_name") or "—"
@@ -657,8 +683,7 @@ class App(Tk):
             self._bild_hand = None
             self._kat_gewaehlt = {}     # Kategorien gehören zum Buch
             self._kat_fehlend = []
-            g = self.felder.get("gewicht_kg")
-            self.gewicht_var.set(("%g" % g) if g else "")
+            self._setze_gewicht()
             sc = self.felder["shortcode"]
             # Quelle 1 + 2 (beide örtlich, deshalb sofort)
             self.bilder = core.finde_bilder(sc, eff, xml_pfad=self.xml_pfad.get())
@@ -695,6 +720,11 @@ class App(Tk):
         eff = core.effektiv(self.cfg)
         satz = float(eff.get("tax_rate", 7.0))
         brutto = float(f.get("preis_brutto") or 0.0)
+        # Ein geschätztes Gewicht wird als solches ausgewiesen — es steht in
+        # der Vorschau neben Preis und Bestand, nicht nur klein am Feld.
+        gewicht = self.gewicht_var.get().strip()
+        gewicht_zeile = (f"{gewicht} kg   ({self._gewicht_grund})" if gewicht
+                         else f"⚠ keines — {self._gewicht_grund}")
         zeilen = [
             f"Umgebung       {core.aktive_umgebung(self.cfg)}"
             f"   ({eff.get('shop_url') or '— keine Shop-URL —'})",
@@ -703,6 +733,7 @@ class App(Tk):
             f"Preis          {brutto:.2f} {f['waehrung']} brutto"
             f"   /   {core.netto(brutto, satz):.4f} netto ({satz} %)",
             f"Bestand        {eff.get('default_stock', 0)}",
+            f"Gewicht        {gewicht_zeile}",
             f"Status         {'AKTIV' if eff.get('aktiv') else 'ENTWURF (inaktiv)'}",
         ]
         if not self._client:
@@ -807,6 +838,29 @@ class App(Tk):
         self.btn_run.configure(state="disabled")
         self.info_var.set("Sende …")
         threading.Thread(target=self._run_worker, daemon=True).start()
+
+    # ------------------------------------------------------------------
+    # Gewicht
+    # ------------------------------------------------------------------
+    def _setze_gewicht(self):
+        """Gewichtsfeld füllen: aus der ONIX, sonst geschätzt.
+
+        Die ONIX hat das Gewicht fast nie (kein <Measure> vom Typ 08). Weil
+        Shopware ohne Gewicht keine Versandkosten rechnen kann, wird es aus
+        den Produkten geschätzt, die im Shop schon gepflegt sind — das Modell
+        dazu lernt das Werkzeug beim Verbinden.
+        """
+        g = (self.felder or {}).get("gewicht_kg")
+        if g:
+            self.gewicht_var.set("%g" % g)
+            self._gewicht_grund = "aus der ONIX"
+            self.gewicht_quelle.set("kg — aus der ONIX")
+            return
+        kg, grund = core.schaetze_gewicht(self.felder or {},
+                                          self.cfg.get("gewichtsmodell"))
+        self.gewicht_var.set(("%g" % kg) if kg else "")
+        self._gewicht_grund = grund if kg else f"nicht geschätzt: {grund}"
+        self.gewicht_quelle.set(f"kg — {self._gewicht_grund}")
 
     def _uebernimm_gewicht(self) -> bool:
         """Eingetragenes Gewicht in die Buchdaten übernehmen.
