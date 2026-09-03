@@ -610,7 +610,8 @@ class App(Tk):
                     return self._client.kategorien_suchen(text)
                 except core.ShopFehler:
                     return []
-            treffer, fehlend = core.kategorie_vorschlaege(self.felder, suche)
+            treffer, fehlend = core.kategorie_vorschlaege(
+                self.felder, suche, core.effektiv(self.cfg))
             self._spaeter(self._vorschlag_uebernehmen, treffer, fehlend)
 
         threading.Thread(target=arbeite, daemon=True).start()

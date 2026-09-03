@@ -256,7 +256,7 @@ def main() -> int:
 
         # Kategorien: im Shop SUCHEN, je beteiligter Person eine. Den Baum zu
         # laden hilft nicht — er ist größer als eine Abfrage hergibt.
-        kats, fehlend = core.kategorie_vorschlaege(f, client.kategorien_suchen)
+        kats, fehlend = core.kategorie_vorschlaege(f, client.kategorien_suchen, eff)
         kat_ids = [k["id"] for k in kats]
 
         print(f"  Name        {core.produkt_name(f)}")

@@ -114,6 +114,41 @@ DEFAULT_CONFIG = {
         "format":     "migration_Shopware5_product_attr12",
     },
     "autoren_basis_url": "/autoren-herausgeber",
+    # Zuordnungstabellen für das Kategorie-Raten. Beide nennen nur NAMEN —
+    # ob es die Kategorie im Shop wirklich gibt, wird nachgesehen; eine
+    # Kategorie erfindet das Werkzeug nie.
+    #
+    # Warengruppe (ONIX Schema 26) -> Sachkategorie. Verglichen wird der Teil
+    # NACH dem " / ", also "Geschichte/Regionalgeschichte" statt
+    # "Hardcover, Softcover / Geschichte/Regionalgeschichte".
+    # VOM VERLAG ZU PRÜFEN — das ist ein Vorschlag, keine Setzung.
+    "warengruppe_kategorien": {
+        "Geschichte/Regionalgeschichte": ["Ortsgeschichte"],
+        "Geschichte": ["Ortsgeschichte"],
+        "Kunst/Architektur": ["Kunst und Musik"],
+        "Kinder- und Jugendbücher": ["Kinder- u. Jugendliteratur"],
+        "Reise": ["Reise-Kultur-Naturführer"],
+        "Natur": ["Natur und Ökologie"],
+        "Wirtschaft": ["Technik und Wirtschaft"],
+    },
+    # Ort (aus den freien Schlagwörtern, Schema 20) -> Region.
+    # EBENFALLS ZU PRÜFEN.
+    "ort_regionen": {
+        "Mannheim": ["Kurpfalz"],
+        "Heidelberg": ["Kurpfalz"],
+        "Ludwigshafen": ["Kurpfalz"],
+        "Speyer": ["Kurpfalz"],
+        "Weinheim": ["Kurpfalz"],
+        "Schwetzingen": ["Kurpfalz"],
+        "Stuttgart": ["Württemberg"],
+        "Ludwigsburg": ["Württemberg"],
+        "Heilbronn": ["Württemberg"],
+        "Tübingen": ["Württemberg"],
+        "Karlsruhe": ["Karlsruhe-Region"],
+        "Bruchsal": ["Karlsruhe-Region"],
+        "Ettlingen": ["Karlsruhe-Region"],
+        "Bretten": ["Karlsruhe-Region"],
+    },
 
     # --- Bilder (kommen vom cover_previews-Tool auf dem Artikeldaten-Share) --
     "artikeldaten_dir": r"\\C019\d\Online\Webseite\Artikeldaten",
@@ -989,7 +1024,19 @@ def _kat_punkte(kat_name: str, person: dict) -> int:
     return 2 if vor and vor in name else 1
 
 
-def kategorie_vorschlaege(f: dict, suche) -> tuple[list[dict], list[str]]:
+def warengruppe_sachteil(text: str) -> str:
+    """"Hardcover, Softcover / Kunst/Architektur" -> "Kunst/Architektur".
+
+    Die Warengruppe nennt vorn den Einband und dahinter die Sachgruppe; nur
+    letztere sagt etwas über den Inhalt. Getrennt wird am " / " MIT
+    Leerzeichen — der Schrägstrich in "Geschichte/Regionalgeschichte" gehört
+    zum Namen und darf nicht zerschnitten werden.
+    """
+    text = (text or "").strip()
+    return text.split(" / ", 1)[1].strip() if " / " in text else text
+
+
+def kategorie_vorschlaege(f: dict, suche, cfg: dict | None = None) -> tuple[list[dict], list[str]]:
     """Je beteiligter Person eine Kategorie vorschlagen.
 
     Der Shop führt **eine Kategorie pro Person**, benannt „Nachname, Vorname"
@@ -1040,17 +1087,40 @@ def kategorie_vorschlaege(f: dict, suche) -> tuple[list[dict], list[str]]:
             continue
         merke(gleichauf[0])
 
-    # Sachkategorien über die ONIX-Schlagwörter (Schema 20). Verglichen wird
-    # der GANZE Name, nicht ein Teil davon: "Geschichte" steckt sonst in
-    # "Ortsgeschichte", "Kirchengeschichte" und "Jüdische Geschichte" zugleich
-    # und schaufelte drei falsche Kategorien herein. Exakt trifft dafür
-    # zuverlässig — "Kurpfalz" ist im Shop wirklich eine Kategorie.
-    for wort in dict.fromkeys(f.get("schlagworte") or []):
-        wort = (wort or "").strip()
-        if len(wort) < 3:
-            continue
-        for kat in suche(wort):
-            if (kat.get("name") or "").strip().lower() == wort.lower():
+    # Sachkategorien. Gesucht wird nach NAMEN, und übernommen wird nur, was
+    # im Shop wirklich so heißt — verglichen wird der GANZE Name, nicht ein
+    # Teil davon. "Geschichte" steckt sonst gleichzeitig in "Ortsgeschichte",
+    # "Kirchengeschichte" und "Jüdische Geschichte" und schaufelte drei
+    # falsche Kategorien herein.
+    cfg = cfg or DEFAULT_CONFIG
+    namen: list[str] = []
+
+    # 1. die freien Schlagwörter selbst ("Kurpfalz" IST eine Kategorie)
+    schlagworte = [w.strip() for w in (f.get("schlagworte") or []) if w and w.strip()]
+    namen += schlagworte
+
+    # 2. Ort -> Region ("Stuttgart" ist keine Kategorie, "Württemberg" schon)
+    orte = cfg.get("ort_regionen", DEFAULT_CONFIG["ort_regionen"])
+    klein_orte = {k.lower(): v for k, v in orte.items()}
+    for wort in schlagworte:
+        namen += klein_orte.get(wort.lower(), [])
+
+    # 3. Warengruppe -> Sachkategorie (hat jedes Buch, trifft also immer)
+    wg = cfg.get("warengruppe_kategorien", DEFAULT_CONFIG["warengruppe_kategorien"])
+    klein_wg = {k.lower(): v for k, v in wg.items()}
+    # Die Warengruppe kann mehrere Sachgruppen nennen, durch Komma getrennt:
+    # "Geschichte/Regionalgeschichte, Ländergeschichte". Deshalb erst das
+    # Ganze versuchen, dann jeden Teil einzeln — sonst greift die Tabelle nur
+    # bei den kurzen Angaben.
+    sachteil = warengruppe_sachteil(f.get("warengruppe", ""))
+    if sachteil:
+        stuecke = [sachteil] + [t.strip() for t in sachteil.split(",")]
+        for stueck in dict.fromkeys(t for t in stuecke if t):
+            namen += klein_wg.get(stueck.lower(), [])
+
+    for name in dict.fromkeys(n for n in namen if len(n) >= 3):
+        for kat in suche(name):
+            if (kat.get("name") or "").strip().lower() == name.lower():
                 merke(kat)
 
     return treffer, fehlend

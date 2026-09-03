@@ -798,7 +798,8 @@ class App(Tk):
                     return self._client.kategorien_suchen(t)
                 except sw.ShopFehler:
                     return []
-            treffer, fehlend = sw.kategorie_vorschlaege(self.paar["felder"], suche)
+            treffer, fehlend = sw.kategorie_vorschlaege(
+                self.paar["felder"], suche, core.cfg_shop(self.cfg))
             self._nachrichten.put(("vorschlag", treffer, fehlend))
 
         threading.Thread(target=arbeite, daemon=True).start()
