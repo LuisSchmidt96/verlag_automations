@@ -122,9 +122,19 @@ je **neben ihre eigene .exe**. In einer gemeinsamen .exe würden sich alle drei
 auf dieselbe Datei stürzen. Deshalb hält der Durchgang seine eigene und reicht
 die fertigen Einstellungen hinein; `lade_config()` der anderen wird nie gerufen.
 
-**Die Shopware-Zugangsdaten sind eigene.** Schlüssel und verschlüsseltes Secret
-stehen im Abschnitt `shopware_publisher` dieser Datei, nicht in der des
-Publishers — sie müssen einmal separat gesetzt werden.
+**Die Shopware-Zugangsdaten sind eigene** — sie stehen im Abschnitt
+`shopware_publisher` dieser Datei, nicht in der des Publishers. Abtippen muss
+man sie trotzdem nicht: der Knopf **„Zugang aus dem ShopwarePublisher
+übernehmen"** in Schritt 3 holt Shop-URL, Zugriffsschlüssel, das
+**verschlüsselte** Secret samt Salt und die fünf Zuordnungen (Steuer, Währung,
+Hersteller, Verkaufskanal, Seiten-Layout) herüber.
+
+Das Master-Passwort wandert dabei **nicht** mit und wird nirgends gespeichert —
+es entsperrt das übernommene Secret hinterher genauso wie im Publisher, weil
+Chiffretext und Salt selbsttragend sind.
+
+Gesucht wird in `..\ShopwarePublisher\config.json` (so liegen die Werkzeuge
+unter `VR-Tools\` nebeneinander) und im Quellbaum daneben.
 
 **`_NEU_Vorlage` wird nicht mitgeliefert** (rund 480 MB). Der Eintrag
 `cover_previews.vorlagen_dir` zeigt auf den Ordner neben `CoverPreviews.exe`;

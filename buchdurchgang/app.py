@@ -649,6 +649,14 @@ class App(Tk):
         ttk.Button(r2, text="Verbinden", command=self._verbinde).pack(
             side="left", padx=(6, 0))
 
+        # Zweites Abtippen ist unnötig: Schlüssel und verschlüsseltes Secret
+        # lassen sich aus dem ShopwarePublisher übernehmen. Das Master-Passwort
+        # bleibt dabei aussen vor — es entsperrt hinterher genauso.
+        r2b = ttk.Frame(f); r2b.pack(fill="x", padx=8, pady=(0, 4))
+        ttk.Label(r2b, text="", width=11).pack(side="left")
+        ttk.Button(r2b, text="Zugang aus dem ShopwarePublisher übernehmen",
+                   command=self._zugang_uebernehmen).pack(side="left")
+
         # Kategorien
         k = ttk.LabelFrame(f, text="Kategorien (je Person eine — wird gesucht "
                                    "und vorgeschlagen)")
@@ -691,6 +699,26 @@ class App(Tk):
         umg["shop_url"] = sw.normalisiere_url(self.shop_url.get())
         umg["access_key_id"] = self.key_var.get().strip()
         self.shop_url.set(umg["shop_url"])
+
+    def _zugang_uebernehmen(self):
+        try:
+            meldung = core.uebernimm_shop_zugang(self.cfg)
+        except RuntimeError as e:
+            messagebox.showerror("Nicht gefunden", str(e))
+            return
+        core.speichere_config(self.cfg)
+        self._secret = None            # gehört zur alten Umgebung
+        self._client = None
+        scfg = core.cfg_shop(self.cfg)
+        self.umg_var.set(sw.aktive_umgebung(scfg))
+        umg = sw.umgebung(scfg)
+        self.shop_url.set(umg.get("shop_url", ""))
+        self.key_var.set(umg.get("access_key_id", ""))
+        self._schreibe(self.shop_log, f"✓ {meldung}")
+        self._schreibe(self.shop_log,
+                       "   Das Master-Passwort wurde NICHT übernommen — es "
+                       "entsperrt beim Verbinden genauso wie im Publisher.")
+        self.status.set("Zugang übernommen — jetzt „Verbinden“.")
 
     def _secret_setzen(self):
         s = simpledialog.askstring("Geheimer Schlüssel",

@@ -514,3 +514,67 @@ def spiegle_stand(ordner, ziel) -> bool:
         return True
     except OSError:
         return False
+
+
+# ---------------------------------------------------------------------
+# Shop-Zugang vom ShopwarePublisher übernehmen
+# ---------------------------------------------------------------------
+
+def publisher_config_pfade() -> list[Path]:
+    """Wo die config.json des ShopwarePublisher liegen könnte.
+
+    Ausgeliefert liegen die Werkzeuge als Geschwisterordner unter VR-Tools,
+    im Quellbaum nebeneinander im Repo.
+    """
+    return [APP_DIR.parent / "ShopwarePublisher" / "config.json",
+            APP_DIR.parent / "shopware_publisher" / "config.json",
+            Path(sw.CONFIG_PFAD)]
+
+
+def finde_publisher_config() -> Path | None:
+    for p in publisher_config_pfade():
+        try:
+            if p.is_file():
+                return p
+        except OSError:
+            continue
+    return None
+
+
+def uebernimm_shop_zugang(cfg: dict, pfad=None) -> str:
+    """Zugangsdaten aus der config.json des ShopwarePublisher übernehmen.
+
+    Spart das zweite Eintippen. Mitgenommen werden Shop-URL, Zugriffsschlüssel
+    und das **verschlüsselte** Secret samt Salt — beides ist selbsttragend, es
+    lässt sich mit demselben Master-Passwort entsperren wie dort. Das Passwort
+    selbst wandert nicht mit und wird auch nie gespeichert.
+
+    Rückgabe: eine Zeile, was übernommen wurde (für die Anzeige).
+    """
+    pfad = Path(pfad) if pfad else finde_publisher_config()
+    if not pfad or not pfad.is_file():
+        raise RuntimeError(
+            "Keine config.json des ShopwarePublisher gefunden. Gesucht in:\n"
+            + "\n".join(f"  {p}" for p in publisher_config_pfade()))
+    try:
+        fremd = json.loads(pfad.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as e:
+        raise RuntimeError(f"{pfad} lässt sich nicht lesen:\n{e}")
+
+    umgebungen = fremd.get("umgebungen") or {}
+    if not umgebungen:
+        raise RuntimeError(f"In {pfad} stehen keine Umgebungen.")
+
+    eigene = cfg.setdefault("shopware_publisher", {})
+    ziel = eigene.setdefault("umgebungen", {})
+    uebernommen = []
+    for name, umg in umgebungen.items():
+        if not umg.get("shop_url"):
+            continue                     # leere Umgebung bringt nichts
+        ziel[name] = json.loads(json.dumps(umg))     # frische Kopie
+        uebernommen.append(
+            f"{name} ({'mit Secret' if umg.get('secret_enc') else 'ohne Secret'})")
+    if not uebernommen:
+        raise RuntimeError(f"In {pfad} ist keine Umgebung eingerichtet.")
+    eigene["aktive_umgebung"] = fremd.get("aktive_umgebung", "dev")
+    return f"Übernommen aus {pfad}: " + ", ".join(uebernommen)
