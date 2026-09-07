@@ -1082,6 +1082,7 @@ def lauf(pdf_pfad, titel: str, cfg: dict, *,
          mit_2d: bool = True, mit_3d: bool = True,
          vorlage: str | None = None,
          dry_run: bool | None = None,
+         ziel=None,
          share_pflicht: bool = False,
          frage_ordner=None, frage_kollisionen=None,
          log=print) -> dict:
@@ -1097,6 +1098,11 @@ def lauf(pdf_pfad, titel: str, cfg: dict, *,
 
     ``dry_run=None`` heißt: unter Windows echt, sonst Trockenlauf — der
     3D-Zweig steuert Photoshop und läuft nirgends sonst.
+
+    ``ziel`` schreibt in genau diesen Ordner, statt ihn aus Kurzcode und Titel
+    zu bilden. Der Buchdurchgang legt die Dateien damit in einen Unterordner
+    („Covers"); das eigene Fenster lässt es weg und bekommt wie bisher den
+    Artikelordner.
 
     ``share_pflicht=True`` bricht ab, wenn der Ablageort nicht erreichbar ist,
     statt still nach ``cover_output/`` neben der .exe auszuweichen. Für einen
@@ -1138,8 +1144,11 @@ def lauf(pdf_pfad, titel: str, cfg: dict, *,
             raise RuntimeError(
                 f"Ablageort nicht erreichbar: "
                 f"{cfg.get('artikeldaten_dir') or '(nicht eingetragen)'}")
-        out_dir, existiert = ziel_ordner(sc, titel, cfg)
-        ausgewichen = basis is None
+        if ziel is not None:
+            out_dir, existiert = Path(ziel), Path(ziel).is_dir()
+        else:
+            out_dir, existiert = ziel_ordner(sc, titel, cfg)
+        ausgewichen = basis is None and ziel is None
 
         if not existiert and frage_ordner and not frage_ordner(out_dir):
             return {"erzeugt": [], "hinweise": ["Abgebrochen."],

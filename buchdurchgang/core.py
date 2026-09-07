@@ -66,6 +66,10 @@ DEFAULT_CONFIG: dict = {
     # bevor gewarnt wird? Der Beschnitt macht das gemessene Maß größer
     # (3 mm ringsum = 0,6 cm je Kante); 1,0 cm lässt auch 5 mm Beschnitt durch.
     "format_tol_cm": 1.0,
+    # Der Buchordner ist nach Gewerken geteilt. Namen änderbar, damit man sie
+    # an eine gewachsene Ablage anpassen kann, ohne den Code anzufassen.
+    "unterordner": {"cover": "Covers", "pibi": "PI_BI",
+                    "quellen": "Quellen"},
     # Webserver für die Presse-Dateien. Die Knöpfe auf der Produktseite
     # (Presseinfo, 2D, 3D, Blick ins Buch) sind KEIN Produktfeld — das Template
     # zeigt sie, wenn die Datei unter dem erwarteten Pfad liegt. Gemessen an
@@ -384,6 +388,56 @@ def buchordner(sc: str, titel: str, cfg: dict) -> tuple[Path, bool]:
     return cp.ziel_ordner(sc, titel, cfg_cover(cfg))
 
 
+def unterordner(cfg: dict, art: str) -> str:
+    namen = (cfg or {}).get("unterordner") or DEFAULT_CONFIG["unterordner"]
+    return namen.get(art) or DEFAULT_CONFIG["unterordner"][art]
+
+
+def cover_ordner(buch, cfg: dict) -> Path:
+    return Path(buch) / unterordner(cfg, "cover")
+
+
+def pibi_ordner(buch, cfg: dict) -> Path:
+    return Path(buch) / unterordner(cfg, "pibi")
+
+
+def quellen_ordner(buch, cfg: dict) -> Path:
+    return Path(buch) / unterordner(cfg, "quellen")
+
+
+def sichere_quellen(buch, cfg: dict, *, log=print, **dateien) -> list[Path]:
+    """Die Eingangsdateien in den Buchordner kopieren.
+
+    Umschlag-PDF, ONIX-XML und das Blick-ins-Buch-PDF entstehen nicht hier —
+    sie liegen irgendwo, wo sie jemand gerade hatte. Im Buchordner sind sie
+    Teil des Archivs: wer die Arbeit später nachvollziehen oder wiederholen
+    will, braucht sie und findet sie sonst nicht mehr.
+
+    Schon Vorhandenes gleicher Größe wird nicht erneut kopiert.
+    """
+    import shutil
+
+    ziel = quellen_ordner(buch, cfg)
+    geschrieben = []
+    for art, quelle in dateien.items():
+        if not quelle:
+            continue
+        quelle = Path(quelle)
+        if not quelle.is_file():
+            continue
+        ziel.mkdir(parents=True, exist_ok=True)
+        z = ziel / quelle.name
+        try:
+            if z.exists() and z.stat().st_size == quelle.stat().st_size:
+                continue                      # liegt schon da
+            shutil.copyfile(quelle, z)
+            log(f"Quelle gesichert: {quelle.name}")
+            geschrieben.append(z)
+        except OSError as e:
+            log(f"⚠ {quelle.name} nicht gesichert: {e}")
+    return geschrieben
+
+
 def share_basis(cfg: dict) -> Path | None:
     """Der Netzordner selbst — None, wenn nicht erreichbar.
 
@@ -478,20 +532,30 @@ def schritt_cover(paar: dict, titel: str, cfg: dict, *, mit_2d=True,
     still neben die .exe zu schreiben. In einer Kette wäre ein Buchordner an
     unerwarteter Stelle fatal — die beiden Folgeschritte suchten ins Leere.
     """
-    return cp.lauf(paar["pdf_pfad"], titel, cfg_cover(cfg),
-                   doc=paar["doc"], reg=paar["reg"],
-                   mit_2d=mit_2d, mit_3d=mit_3d, vorlage=vorlage,
-                   share_pflicht=True, log=log)
+    buch, _ = buchordner(paar["sc"], titel, cfg)
+    erg = cp.lauf(paar["pdf_pfad"], titel, cfg_cover(cfg),
+                  doc=paar["doc"], reg=paar["reg"],
+                  mit_2d=mit_2d, mit_3d=mit_3d, vorlage=vorlage,
+                  ziel=cover_ordner(buch, cfg),
+                  share_pflicht=True, log=log)
+    # Der Buchordner ist das, woran sich alles Weitere orientiert — nicht der
+    # Unterordner, in den dieser Schritt geschrieben hat.
+    erg["buchordner"] = buch
+    # Umschlag-PDF und ONIX gehören zum Buch, nicht zum Zufall des Ordners,
+    # aus dem sie gerade kamen.
+    sichere_quellen(buch, cfg, log=log,
+                    umschlag=paar.get("pdf_pfad"), onix=paar.get("xml_pfad"))
+    return erg
 
 
 def schritt_pibi(paar: dict, ordner, cfg: dict, log=print) -> list[Path]:
     """Schritt 2 — ruft pi_bi_generator, mit dem Cover aus Schritt 1."""
-    ordner = Path(ordner)
+    buch = Path(ordner)
     ccfg = cfg_cover(cfg)
     muster = ccfg.get("muster_2d", cp.DEFAULT_CONFIG["muster_2d"])
     daten, suffix = None, ".jpg"
     for dpi in (int(ccfg.get("dpi_print", 300)), int(ccfg.get("dpi_web", 72))):
-        p = ordner / muster.format(dpi=dpi, sc=paar["sc"])
+        p = cover_ordner(buch, cfg) / muster.format(dpi=dpi, sc=paar["sc"])
         if p.exists():
             daten, suffix = pb.lade_cover_datei(p), p.suffix
             log(f"Cover aus Schritt 1: {p.name}")
@@ -499,7 +563,7 @@ def schritt_pibi(paar: dict, ordner, cfg: dict, log=print) -> list[Path]:
     if daten is None:
         log("⚠ Kein Cover aus Schritt 1 gefunden — die .docx behalten das "
             "Platzhalter-Cover.")
-    return pb.erzeuge_alle(paar["buch"], ordner, cfg_pibi(cfg),
+    return pb.erzeuge_alle(paar["buch"], pibi_ordner(buch, cfg), cfg_pibi(cfg),
                            cover_bytes=daten, cover_suffix=suffix, log=log)
 
 
@@ -508,7 +572,8 @@ def schritt_shop(paar: dict, ordner, cfg: dict, *, secret: str,
                  ueberschreiben: bool = False, log=print) -> dict:
     """Schritt 3 — ruft shopware_publisher, Bilder aus dem Buchordner."""
     scfg = cfg_shop(cfg)
-    bilder = sw.finde_bilder(paar["sc"], scfg, ordner=Path(ordner))
+    bilder = sw.finde_bilder(paar["sc"], scfg,
+                             ordner=cover_ordner(ordner, cfg))
     return sw.veroeffentliche(paar["felder"], scfg, bilder, secret=secret,
                               dry_run=dry_run, ueberschreiben=ueberschreiben,
                               kategorien=kategorien, log=log)
@@ -550,15 +615,18 @@ def schritt_ablegen(quelle, cfg: dict, *, log=print) -> dict:
             f"{cfg.get('ablageort') or '(nicht eingetragen)'}")
     ziel = basis / quelle.name
 
-    mitnehmen = sorted(p for p in quelle.iterdir()
-                       if p.is_file() and not p.name.startswith("_"))
-    uebersprungen = sorted(p.name for p in quelle.iterdir()
-                           if p.is_file() and p.name.startswith("_"))
+    # Rekursiv, damit Covers/, PI_BI/ und Quellen/ mitkommen — und mit ihnen
+    # die Gliederung. Ein flacher Kopiervorgang würde sie einebnen.
+    alle = sorted(p for p in quelle.rglob("*") if p.is_file())
+    mitnehmen = [p for p in alle if not p.name.startswith("_")]
+    uebersprungen = sorted(str(p.relative_to(quelle)) for p in alle
+                           if p.name.startswith("_"))
     if not mitnehmen:
         raise RuntimeError(f"Im Buchordner liegt nichts zum Ablegen:\n{quelle}")
 
     ziel.mkdir(parents=True, exist_ok=True)
-    vorhanden = [ziel / p.name for p in mitnehmen if (ziel / p.name).exists()]
+    vorhanden = [ziel / p.relative_to(quelle) for p in mitnehmen
+                 if (ziel / p.relative_to(quelle)).exists()]
     gesichert = None
     if vorhanden:
         gesichert = cp.sichere_weg(
@@ -568,7 +636,8 @@ def schritt_ablegen(quelle, cfg: dict, *, log=print) -> dict:
 
     kopiert, fehler = [], []
     for p in mitnehmen:
-        z = ziel / p.name
+        z = ziel / p.relative_to(quelle)
+        z.parent.mkdir(parents=True, exist_ok=True)
         try:
             log(f"Kopiere {p.name} …")
             # copyfile überträgt NUR die Daten. copy2 würde zusätzlich
@@ -578,7 +647,7 @@ def schritt_ablegen(quelle, cfg: dict, *, log=print) -> dict:
             # während in Wahrheit alles dalag.
             shutil.copyfile(p, z)
         except OSError as e:
-            fehler.append(f"{p.name}: {e}")
+            fehler.append(f"{p.relative_to(quelle)}: {e}")
             continue
         try:
             shutil.copystat(p, z)        # nett, aber nicht überall möglich
@@ -720,14 +789,16 @@ def presse_dateien(ordner, sc: str, cfg: dict, *, mit_pi: bool = True,
 
     # Die Presseinfo kommt als PDF aus Word — der Generator liefert nur .docx.
     # Erwartet wird sie unter demselben Namen im Buchordner.
+    cov = cover_ordner(ordner, cfg)
     if mit_pi:
-        dazu("Presseinfo", ordner / f"PI_{sc}.pdf", f"{presse}/PI/PI_{sc}.pdf")
-    dazu("3D-Cover", ordner / m3d, f"{presse}/3D/{m3d}")
-    dazu("2D-Cover", ordner / m2d, f"{presse}/2D/{m2d}")
+        dazu("Presseinfo", pibi_ordner(ordner, cfg) / f"PI_{sc}.pdf",
+             f"{presse}/PI/PI_{sc}.pdf")
+    dazu("3D-Cover", cov / m3d, f"{presse}/3D/{m3d}")
+    dazu("2D-Cover", cov / m2d, f"{presse}/2D/{m2d}")
     if bib_pdf:
         dazu("Blick ins Buch", bib_pdf, f"{presse}/bib/bib_{sc}.pdf")
     # Das Newsletter-Cover ist zugleich die dritte Bildquelle des Publishers.
-    dazu("Newsletter-Cover", ordner / mpng, f"{news}/{mpng}", pflicht=False)
+    dazu("Newsletter-Cover", cov / mpng, f"{news}/{mpng}", pflicht=False)
     return liste
 
 
@@ -829,6 +900,10 @@ def schritt_presse(ordner, sc: str, cfg: dict, *, passwort: str,
 
     Rückgabe: {"geladen", "fehlend", "fehler"}
     """
+    # Das Blick-ins-Buch-PDF gehört mit ins Archiv — es wurde von Hand
+    # gewählt und liegt sonst nur im Buchordner des Zufalls.
+    if bib_pdf:
+        sichere_quellen(ordner, cfg, log=log, blick_ins_buch=bib_pdf)
     liste = presse_dateien(ordner, sc, cfg, mit_pi=mit_pi, bib_pdf=bib_pdf)
     fehlend = [e for e in liste if not e["da"]]
     zu_laden = [e for e in liste if e["da"]]

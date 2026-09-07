@@ -135,27 +135,32 @@ ONIX      21,0 x 21,0 cm   ✓
 ## Der Buchordner
 
 Alles zu einem Buch liegt beieinander, benannt wie in `cover_previews`
-(`<Kurzcode>_<Titel>`):
+(`<Kurzcode>_<Titel>`) und nach Gewerken geteilt:
 
 ```
-<Ablageort>/05-609-4_Inszeniertes Glück/
-    2D_300_05-609-4.jpg   2D_72_05-609-4.jpg
-    3D_300_05-609-4.jpg   3D_72_05-609-4.jpg
-    05-609-4.png          3D_300_05-609-4.tif
-    PI_05-609-4.docx      PI_05-609-4.html
-    BI_05-609-4.docx      BI_05-609-4.html
-    cover_9783955056094.jpg
-    durchgang.json        <- Stand und Häkchen
+<Arbeitsordner>/05-609-4_Inszeniertes Glück/
+├── Covers/     2D_300_… 2D_72_… 3D_300_… 3D_72_… <sc>.png <sc>.tif
+├── PI_BI/      PI_…docx PI_…html BI_…docx BI_…html cover_<isbn>.jpg
+├── Quellen/    Umschlag-PDF · ONIX-XML · Blick-ins-Buch-PDF
+└── durchgang.json
 ```
 
-Nach Schritt 5 liegt derselbe Ordner auf dem Netz — ohne die
-Photoshop-Zwischendateien, aber **mit** `durchgang.json`: dort steht, welcher
-Schritt wann gelaufen ist und was abgehakt wurde.
+**`Quellen/` ist der Grund, warum der Ordner selbsttragend ist.** Umschlag-PDF,
+ONIX und das Blick-ins-Buch-PDF entstehen nicht hier — sie lagen irgendwo, wo
+sie jemand gerade hatte. Wer die Arbeit später nachvollziehen oder wiederholen
+will, braucht sie und fände sie sonst nicht mehr. Kopiert wird nur, was noch
+nicht in gleicher Größe da ist.
 
 `durchgang.json` liegt **beim Buch**, nicht beim Werkzeug: so sieht auch Wochen
 später und an einem anderen Rechner jeder, welcher Schritt wann gelaufen ist,
 mit welcher Datei, und was geprüft wurde. Ein unterbrochener Durchgang lässt
 sich damit fortsetzen — Fenster zu, Fenster auf, Stand ist wieder da.
+
+Die Ordnernamen stehen in der Konfiguration (`unterordner`) und lassen sich an
+eine gewachsene Ablage anpassen, ohne den Code anzufassen.
+
+Nach Schritt 5 liegt derselbe Ordner **mit seiner Gliederung** auf dem Netz —
+ohne die Photoshop-Zwischendateien, aber mit `durchgang.json`.
 
 ## Die Tore
 

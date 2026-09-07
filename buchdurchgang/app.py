@@ -905,7 +905,9 @@ class App(Tk):
             self.status.set("Cover-Schritt fehlgeschlagen.")
             messagebox.showerror("Cover", str(fehler))
             return
-        self.ordner = erg["out_dir"]
+        # Der BUCHordner, nicht der Unterordner, in den Schritt 1 geschrieben
+        # hat — daran orientieren sich alle folgenden Schritte.
+        self.ordner = erg.get("buchordner") or erg["out_dir"]
         for p in erg["erzeugt"]:
             self._schreibe(self._logs.get("cover"), f"   {Path(p).name}")
         for h in erg["hinweise"]:
