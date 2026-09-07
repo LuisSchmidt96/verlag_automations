@@ -6,6 +6,8 @@ Ein Fenster, drei Schritte, dazwischen Tore:
     1. Cover         cover_previews
     2. pi & bi       pi_bi_generator
     3. Shop          shopware_publisher
+    4. Presse        Dateien per SFTP auf den Webserver
+    5. Ablegen       Buchordner auf den Netzordner
 
 **Weiter** wird erst frei, wenn alle Häkchen des Schritts gesetzt sind. Die
 Häkchen liegen in ``durchgang.json`` im Buchordner — nicht beim Werkzeug —,
@@ -85,7 +87,7 @@ class App(Tk):
                 ("Arbeitsordner:", self.arbeit_var, self._waehle_arbeit,
                  "hier wird gearbeitet (örtlich, schnell)"),
                 ("Ablageort:", self.ablage_var, self._waehle_ablage,
-                 "dorthin wandert der fertige Ordner in Schritt 4")):
+                 "dorthin wandert der fertige Ordner in Schritt 5")):
             r = ttk.Frame(oben); r.pack(fill="x", padx=8, pady=3)
             ttk.Label(r, text=text, width=14).pack(side="left")
             ttk.Entry(r, textvariable=var).pack(side="left", fill="x", expand=True)
@@ -200,7 +202,7 @@ class App(Tk):
         return lambda m: self._nachrichten.put(("log", sid, str(m)))
 
     # ------------------------------------------------------------------
-    # Schritt 4 — Ablegen
+    # Schritt 5 — Ablegen
     # ------------------------------------------------------------------
     def _baue_ablegen(self):
         f = ttk.Frame(self.rechts); f.pack(fill="both", expand=True)
@@ -283,7 +285,7 @@ class App(Tk):
         self._pruefe_tor()
 
     # ------------------------------------------------------------------
-    # Schritt 5 — Presse-Dateien auf den Webserver
+    # Schritt 4 — Presse-Dateien auf den Webserver
     # ------------------------------------------------------------------
     def _baue_presse(self):
         f = ttk.Frame(self.rechts); f.pack(fill="both", expand=True)
@@ -703,7 +705,7 @@ class App(Tk):
 
         # Das Blick-ins-Buch-PDF entsteht nicht im Durchgang — es wird von
         # Hand gebaut und kann alles Mögliche heißen. Deshalb hier auswählen,
-        # damit es in Schritt 5 unter dem richtigen Namen hochgeht.
+        # damit es in Schritt 4 unter dem richtigen Namen hochgeht.
         r_bib = ttk.Frame(f); r_bib.pack(fill="x", padx=8, pady=4)
         ttk.Label(r_bib, text="Blick ins Buch:", width=14).pack(side="left")
         ttk.Entry(r_bib, textvariable=self.bib_var).pack(
@@ -1002,7 +1004,7 @@ class App(Tk):
                 + "\n".join(f"• {Path(d).name}" for d in docs)
                 + "\n\nDenk daran, anschließend als PDF zu exportieren — "
                   f"unter PI_{self.paar['sc']}.pdf im selben Ordner, sonst "
-                  "fehlt sie in Schritt 5."):
+                  "fehlt sie in Schritt 4."):
             for d in docs:
                 self._oeffnen(d)
         self._male_schrittliste()

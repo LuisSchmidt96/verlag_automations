@@ -9,8 +9,8 @@ eine Checkliste; erst wenn sie abgehakt ist, geht es weiter.
 1. Cover         cover_previews      2D / 3D / TIF
 2. pi & bi       pi_bi_generator     Presse- und Buchinformation
 3. Shop          shopware_publisher  Produkt als Entwurf
-4. Ablegen       Buchordner auf den Netzordner, mit Nachprüfung
-5. Presse        Presse-Dateien per SFTP auf den Webserver
+4. Presse        Presse-Dateien per SFTP auf den Webserver
+5. Ablegen       Buchordner auf den Netzordner, mit Nachprüfung
 ```
 
 ## Die Knöpfe auf der Produktseite
@@ -34,7 +34,7 @@ Daraus folgt zweierlei:
   Anzeige. Einen zweiten gibt es nicht.
 * Der Generator liefert die Presseinfo nur als `.docx`. Wer das PDF nicht aus
   Word exportiert und als `PI_<sc>.pdf` in den Buchordner legt, bekommt den
-  Knopf nicht — Schritt 5 sagt vorher, was fehlt.
+  Knopf nicht — Schritt 4 sagt vorher, was fehlt.
 
 **Blick ins Buch** entsteht nicht im Durchgang und heißt beliebig, deshalb wird
 es in Schritt 0 ausgewählt; hochgeladen wird es unter dem richtigen Namen.
@@ -76,7 +76,7 @@ Backend geht nach dem Anlegen **von selbst auf**.
 
 ## Örtlich arbeiten, am Ende ablegen
 
-Die Schritte 1–3 schreiben in einen **örtlichen Arbeitsordner**, erst Schritt 4
+Die Schritte 1–4 schreiben in einen **örtlichen Arbeitsordner**, erst Schritt 5
 legt den fertigen Buchordner auf den Netzordner. Das ist kein Geschmack,
 sondern gemessen: derselbe Cover-Schritt braucht örtlich **1,7 s**, über eine
 Netzeinbindung lief er wiederholt in Zeitüberschreitungen — er bewegt rund
@@ -85,7 +85,7 @@ Netzeinbindung lief er wiederholt in Zeitüberschreitungen — er bewegt rund
 | Einstellung | Bedeutung |
 |---|---|
 | `arbeitsordner` | die schnelle Werkbank (leer = `~/Buch_Arbeit`) |
-| `ablageort` | wohin der fertige Ordner in Schritt 4 wandert |
+| `ablageort` | wohin der fertige Ordner in Schritt 5 wandert |
 
 Beim Ablegen wird **kopiert und nachgeprüft** (Dateigröße am Ziel), nicht bloß
 kopiert: über das Netz bricht ein Kopiervorgang gern in der Mitte ab, und eine
@@ -148,7 +148,7 @@ Alles zu einem Buch liegt beieinander, benannt wie in `cover_previews`
     durchgang.json        <- Stand und Häkchen
 ```
 
-Nach Schritt 4 liegt derselbe Ordner auf dem Netz — ohne die
+Nach Schritt 5 liegt derselbe Ordner auf dem Netz — ohne die
 Photoshop-Zwischendateien, aber **mit** `durchgang.json`: dort steht, welcher
 Schritt wann gelaufen ist und was abgehakt wurde.
 

@@ -52,7 +52,7 @@ DEFAULT_CONFIG: dict = {
     # über die Netzeinbindung ein Vielfaches — er bewegt rund 11 MB.
     #
     # "arbeitsordner" = die schnelle Werkbank (leer = ~/Buch_Arbeit)
-    # "ablageort"     = wohin der fertige Buchordner in Schritt 4 wandert
+    # "ablageort"     = wohin der fertige Buchordner in Schritt 5 wandert
     "arbeitsordner": "",
     "ablageort": r"\\C019\d\Online\Webseite\Artikeldaten",
     # Abweichungen von den Vorgaben der drei Werkzeuge. Leer = deren Vorgabe.
@@ -166,7 +166,7 @@ def cfg_cover(cfg: dict) -> dict:
     """Konfiguration für cover_previews.
 
     `artikeldaten_dir` zeigt hier auf den ÖRTLICHEN Arbeitsordner, nicht auf
-    den Netzordner: gearbeitet wird schnell, abgelegt wird in Schritt 4.
+    den Netzordner: gearbeitet wird schnell, abgelegt wird in Schritt 5.
     """
     c = _misch(cp.DEFAULT_CONFIG, cfg.get("cover_previews", {}))
     c["artikeldaten_dir"] = str(arbeitsordner(cfg))
@@ -260,19 +260,19 @@ SCHRITTE: list[dict] = [
         ],
     },
     {
-        "id": "ablegen",
-        "titel": "4 — Ablegen",
-        "checkliste": [
-            "Alle Dateien sind auf dem Netzordner angekommen",
-            "Der örtliche Arbeitsordner kann weg",
-        ],
-    },
-    {
         "id": "presse",
-        "titel": "5 — Presse",
+        "titel": "4 — Presse",
         "checkliste": [
             "Die Knöpfe auf der Produktseite sind da und öffnen das Richtige",
             "Blick ins Buch zeigt die richtigen Seiten",
+        ],
+    },
+    {
+        "id": "ablegen",
+        "titel": "5 — Ablegen",
+        "checkliste": [
+            "Alle Dateien sind auf dem Netzordner angekommen",
+            "Der örtliche Arbeitsordner kann weg",
         ],
     },
 ]
@@ -515,7 +515,7 @@ def schritt_shop(paar: dict, ordner, cfg: dict, *, secret: str,
 
 
 def schritt_ablegen(quelle, cfg: dict, *, log=print) -> dict:
-    """Schritt 4 — den örtlichen Buchordner auf den Netzordner legen.
+    """Schritt 5 — den örtlichen Buchordner auf den Netzordner legen.
 
     Kopiert, **prüft nach** und meldet, was ankam. Die örtliche Kopie bleibt
     stehen: geht beim Übertragen etwas schief, ist die Arbeit noch da. Wann sie
@@ -684,7 +684,7 @@ def uebernimm_shop_zugang(cfg: dict, pfad=None) -> str:
 
 
 # ---------------------------------------------------------------------
-# Schritt 5 — Presse-Dateien auf den Webserver
+# Schritt 4 — Presse-Dateien auf den Webserver
 # ---------------------------------------------------------------------
 
 def presse_dateien(ordner, sc: str, cfg: dict, *, mit_pi: bool = True,
@@ -820,7 +820,7 @@ def sftp_pruefen(cfg: dict, passwort: str) -> dict:
 
 def schritt_presse(ordner, sc: str, cfg: dict, *, passwort: str,
                    mit_pi: bool = True, bib_pdf=None, log=print) -> dict:
-    """Schritt 5 — die Presse-Dateien auf den Webserver legen.
+    """Schritt 4 — die Presse-Dateien auf den Webserver legen.
 
     Übertragen wird nur, was da ist; nach jeder Datei wird die Größe am Ziel
     verglichen. Über eine Leitung bricht eine Übertragung gern in der Mitte ab,
