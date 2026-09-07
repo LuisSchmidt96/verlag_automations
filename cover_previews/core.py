@@ -867,6 +867,7 @@ def _baue_jsx(psd_pfad, eintrag: dict, slot_pngs: list[tuple[int, Path]],
     # Sichtbarkeit der Falz IMMER explizit setzen: die Vorlagen sind sich uneinig,
     # wie sie ausgeliefert werden (bei 16x16 und 29x22 ist sie aus, sonst an).
     falz_ids = ", ".join(str(i) for i in eintrag.get("falz", []))
+    spiegel_an = ", ".join(str(i) for i in (eintrag.get("spiegelung") or []))
     hide_ids = ", ".join(str(i) for i in eintrag.get("hide_bg", []))
     jpg_zeilen = "\n".join(
         f'    saveJpg(fertig, "{_jp(p)}", {dpi});' for dpi, p in jpg_pfade)
@@ -925,6 +926,17 @@ app.preferences.rulerUnits = Units.PIXELS;
     var FALZ = [{falz_ids}];
     for (var i = 0; i < FALZ.length; i++) {{
       try {{ setVis(FALZ[i], {str(bool(hardcover)).lower()}); }} catch (e) {{}}
+    }}
+
+    // 1c) Spiegelung einschalten. Gemessen an allen 14 Vorlagen: in zwölf ist
+    // die Gruppe sichtbar gespeichert, in 21x21.psd NICHT (EBOOK und MaGeBl
+    // haben gar keine). Wer sich auf den Speicherstand der PSD verlässt, kriegt
+    // bei genau einem Buchformat ein Mockup ohne Spiegelung — die Slots darin
+    // werden ja gefüllt, nur sieht man sie nicht. Also aktiv einschalten,
+    // statt die Vorlage zu reparieren: PSDs sind nicht eingecheckt.
+    var SPIEG_AN = [{spiegel_an}];
+    for (var i = 0; i < SPIEG_AN.length; i++) {{
+      try {{ setVis(SPIEG_AN[i], true); }} catch (e) {{}}
     }}
 
     // 2) Weiß-Korrektur (nur bei weißem Umschlag)

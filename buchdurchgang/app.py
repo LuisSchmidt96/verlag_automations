@@ -34,6 +34,18 @@ from shopware_publisher import core as sw
 PAD = {"padx": 8, "pady": 6}
 
 
+def _spur() -> None:
+    """Fehlerspur ausgeben, wenn es ein stderr gibt.
+
+    Der Fensterbau (``console=False``) hat keines: dort ist ``sys.stderr``
+    None, und ``traceback.print_exc()`` schriebe in ein Nichts — was einen
+    ZWEITEN Fehler auslöst, ausgerechnet im Fehlerzweig, und den eigentlichen
+    verschluckt.
+    """
+    if sys.stderr is not None:
+        traceback.print_exc()
+
+
 class App(Tk):
     def __init__(self):
         super().__init__()
@@ -238,7 +250,7 @@ class App(Tk):
                                            log=self._melde("ablegen"))
                 self._nachrichten.put(("fertig", "ablegen", erg, None))
             except Exception as e:
-                traceback.print_exc()
+                _spur()
                 self._nachrichten.put(("fertig", "ablegen", None, e))
 
         threading.Thread(target=arbeite, daemon=True).start()
@@ -492,7 +504,7 @@ class App(Tk):
                     log=self._melde("presse"))
                 self._nachrichten.put(("fertig", "presse", erg, None))
             except Exception as e:
-                traceback.print_exc()
+                _spur()
                 self._nachrichten.put(("fertig", "presse", None, e))
 
         threading.Thread(target=arbeite, daemon=True).start()
@@ -563,7 +575,7 @@ class App(Tk):
         except queue.Empty:
             pass
         except Exception:
-            traceback.print_exc()
+            _spur()
         self.after(150, self._pumpe)
 
     def _schreibe(self, feld: Text, text: str):
@@ -799,7 +811,7 @@ class App(Tk):
             return
         except Exception as e:
             self._schreibe(self._logs.get("buch"), f"✗ {e}")
-            traceback.print_exc()
+            _spur()
             messagebox.showerror("Fehler beim Einlesen", str(e))
             return
 
@@ -844,14 +856,25 @@ class App(Tk):
 
     @staticmethod
     def _oeffnen(pfad) -> None:
-        """Datei oder Ordner mit dem Programm des Systems öffnen."""
+        """Datei oder Ordner mit dem Programm des Systems öffnen.
+
+        Wirft NICHT: gebaut wird mit ``console=False``, da gibt es kein
+        stderr, auf dem ein Fehler sichtbar würde — er risse nur still die
+        Rückrufkette ab. Der Anwender soll stattdessen lesen, was schiefging.
+        """
         p = str(pfad)
-        if sys.platform == "win32":
-            os.startfile(p)                      # noqa: S606 — Windows-API
-        elif sys.platform == "darwin":
-            os.system(f'open "{p}"')
-        else:
-            os.system(f'xdg-open "{p}" >/dev/null 2>&1 &')
+        try:
+            if sys.platform == "win32":
+                os.startfile(p)                  # noqa: S606 — Windows-API
+            elif sys.platform == "darwin":
+                os.system(f'open "{p}"')
+            else:
+                os.system(f'xdg-open "{p}" >/dev/null 2>&1 &')
+        except Exception as e:
+            messagebox.showerror(
+                "Öffnen fehlgeschlagen",
+                f"{Path(p).name} ließ sich nicht öffnen:\n\n{e}\n\n"
+                f"Die Datei liegt hier:\n{p}")
 
     def _ordner_oeffnen(self):
         if self.ordner:
@@ -915,7 +938,7 @@ class App(Tk):
                     log=self._melde("cover"))
                 self._nachrichten.put(("fertig", "cover", erg, None))
             except Exception as e:
-                traceback.print_exc()
+                _spur()
                 self._nachrichten.put(("fertig", "cover", None, e))
 
         threading.Thread(target=arbeite, daemon=True).start()
@@ -998,7 +1021,7 @@ class App(Tk):
                     log=self._melde("pibi"))
                 self._nachrichten.put(("fertig", "pibi", dateien, None))
             except Exception as e:
-                traceback.print_exc()
+                _spur()
                 self._nachrichten.put(("fertig", "pibi", None, e))
 
         threading.Thread(target=arbeite, daemon=True).start()
@@ -1309,7 +1332,7 @@ class App(Tk):
                 self._nachrichten.put(
                     ("shop_bereit", kats, treffer, fehlend, vorhanden, None))
             except Exception as e:
-                traceback.print_exc()
+                _spur()
                 self._nachrichten.put(
                     ("shop_bereit", None, None, None, None, e))
 
@@ -1423,7 +1446,7 @@ class App(Tk):
                 erg["dry_run"] = dry
                 self._nachrichten.put(("fertig", "shop", erg, None))
             except Exception as e:
-                traceback.print_exc()
+                _spur()
                 self._nachrichten.put(("fertig", "shop", None, e))
 
         threading.Thread(target=arbeite, daemon=True).start()
