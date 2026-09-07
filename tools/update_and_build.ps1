@@ -1,4 +1,4 @@
-<#
+﻿<#
     update_and_build.ps1
     --------------------
     Holt die neuesten Aenderungen aus dem Git-Repo und baut alle Tools neu.
@@ -105,18 +105,26 @@ if (-not $Specs) {
     return
 }
 
-# Grosse Nutzdaten, die NICHT in die .exe gehoeren, aber im fertigen Ordner
-# liegen muessen, damit er sich einfach kopieren laesst. Es gewinnt die erste
-# Quelle, die es gibt.
-$Beigaben = @{
-    'CoverPreviews' = @{
-        Ordner  = '_NEU_Vorlage'                 # muss neben der .exe liegen
-        Quellen = @(
-            '\\C019\d\Online\Webseite\Artikeldaten\_NEU_Vorlage',   # Original
-            (Join-Path $RepoRoot 'cover_previews\_NEU_Vorlage')     # lokale Kopie
-        )
-    }
-}
+# Die Mockup-Vorlagen (~480 MB) gehoeren nicht in die .exe, muessen aber
+# erreichbar sein. Sie liegen EINMAL auf dem Share neben den Tool-Ordnern -
+# nicht mehr in jedem Werkzeugordner und damit auch nicht in jeder lokalen
+# Kopie jedes Anwenders. CoverPreviews und Buchdurchgang kennen diesen Pfad
+# fest im Code (SHARE_VORLAGEN); ueber die config.json ginge es nicht, die
+# wird bewusst nicht gespiegelt und gaelte nur auf einem Rechner.
+# Bewusst NICHT von $ShareRoot abgeleitet: die Vorlagen liegen auf dem NAS
+# (VR-Austausch ist erreichbar und beschreibbar), nicht auf C019. Muss mit
+# SHARE_VORLAGEN in cover_previews/core.py und buchdurchgang/core.py
+# uebereinstimmen - dort steht derselbe Pfad fest im Code.
+$VorlagenWurzel  = '\\VR-Archiv\VR-Austausch\VR-Tools'
+$VorlagenZiel    = Join-Path $VorlagenWurzel '_NEU_Vorlage'
+$VorlagenQuellen = @(
+    '\\C019\d\Online\Webseite\Artikeldaten\_NEU_Vorlage',       # Original
+    (Join-Path $RepoRoot 'cover_previews\_NEU_Vorlage'),        # lokale Kopie
+    # Umzugshilfe: bis hierher lagen die Vorlagen IM CoverPreviews-Ordner.
+    # So holt der erste Lauf sie von dort an den gemeinsamen Ort, auch wenn
+    # weder C019 verbunden noch eine lokale Kopie da ist.
+    (Join-Path $VorlagenWurzel 'CoverPreviews\_NEU_Vorlage')
+)
 
 # Legt NUR die Programmteile ab: .exe, _internal\, Anleitung.txt, Beigaben.
 # Bewusst NICHT die Nutzdaten daneben (config.json, kommliste.xlsx, paketnr.txt,
@@ -124,7 +132,7 @@ $Beigaben = @{
 # Ordner spiegeln, landete die eigene config.json bei allen anderen - und /MIR
 # wuerde die kommliste.xlsx auf dem Share loeschen.
 function Copy-Programmteile {
-    param([string]$Src, [string]$Dst, [string]$Anleitung, [hashtable]$Beigabe)
+    param([string]$Src, [string]$Dst, [string]$Anleitung)
 
     New-Item -ItemType Directory -Force -Path $Dst | Out-Null
     # robocopy-Exitcodes 0-7 sind Erfolg, erst ab 8 ist es ein Fehler.
@@ -133,18 +141,6 @@ function Copy-Programmteile {
     Copy-Item (Join-Path $Src '*.exe') $Dst -Force
 
     if ($Anleitung -and (Test-Path $Anleitung)) { Copy-Item $Anleitung $Dst -Force }
-
-    if ($Beigabe) {
-        $Quelle = $Beigabe.Quellen | Where-Object { Test-Path $_ } | Select-Object -First 1
-        if ($Quelle) {
-            Write-Host "     $($Beigabe.Ordner) -> $Dst" -ForegroundColor DarkGray
-            # /MIR uebertraegt nur Geaendertes; nur der erste Lauf kostet Zeit.
-            robocopy $Quelle (Join-Path $Dst $Beigabe.Ordner) /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
-            if ($LASTEXITCODE -ge 8) { throw "Konnte $($Beigabe.Ordner) nicht kopieren." }
-        } else {
-            Write-Warning "  $($Beigabe.Ordner) nicht gefunden - muss von Hand neben die .exe gelegt werden."
-        }
-    }
 }
 
 foreach ($Spec in $Specs) {
@@ -156,16 +152,31 @@ foreach ($Spec in $Specs) {
 
     $Src       = Join-Path $StageDir $Name
     $Anleitung = Join-Path $Spec.Directory 'Anleitung.txt'
-    $Beigabe   = $Beigaben[$Name]
 
-    Copy-Programmteile -Src $Src -Dst (Join-Path $OutRoot $Name) `
-                       -Anleitung $Anleitung -Beigabe $Beigabe
+    Copy-Programmteile -Src $Src -Dst (Join-Path $OutRoot $Name) -Anleitung $Anleitung
 
     # Und auf den Share - von dort holt der Launcher die neue Fassung ab.
     if ($ShareBereit) {
-        Copy-Programmteile -Src $Src -Dst (Join-Path $ShareRoot $Name) `
-                           -Anleitung $Anleitung -Beigabe $Beigabe
+        Copy-Programmteile -Src $Src -Dst (Join-Path $ShareRoot $Name) -Anleitung $Anleitung
     }
+}
+
+# --- 3a) Mockup-Vorlagen: EINE Kopie fuer alle Werkzeuge --------------------
+if (Test-Path $VorlagenWurzel) {
+    $VorlagenQuelle = $VorlagenQuellen | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if ($VorlagenQuelle) {
+        Write-Host "  -> _NEU_Vorlage -> $VorlagenZiel" -ForegroundColor Yellow
+        # /MIR uebertraegt nur Geaendertes; nur der erste Lauf kostet Zeit.
+        robocopy $VorlagenQuelle $VorlagenZiel /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
+        if ($LASTEXITCODE -ge 8) { throw "Konnte _NEU_Vorlage nicht nach $VorlagenZiel kopieren." }
+    } elseif (-not (Test-Path $VorlagenZiel)) {
+        # Nur warnen, wenn auf dem Share auch nichts liegt: sind die Vorlagen
+        # dort schon aktuell, ist eine fehlende Quelle kein Problem.
+        Write-Warning "  _NEU_Vorlage nicht gefunden - der 3D-Zweig findet keine Vorlage."
+        Write-Warning "  Erwartet unter: $VorlagenZiel"
+    }
+} else {
+    Write-Warning "  $VorlagenWurzel nicht erreichbar - Mockup-Vorlagen nicht veroeffentlicht."
 }
 
 # --- 3b) Launcher veroeffentlichen -----------------------------------------
@@ -198,5 +209,6 @@ if ($ShareBereit) {
 
 Write-Host "`nHinweis: Die Tools legen config.json & Co. direkt neben der .exe an"  -ForegroundColor DarkGray
 Write-Host "(kein data-Unterordner). BooxpressEtiketten braucht dort zusaetzlich"    -ForegroundColor DarkGray
-Write-Host "die kommliste.xlsx (Stammdaten), CoverPreviews den Ordner _NEU_Vorlage"  -ForegroundColor DarkGray
-Write-Host "(wird oben automatisch mitkopiert)."                                     -ForegroundColor DarkGray
+Write-Host "die kommliste.xlsx (Stammdaten). Die Mockup-Vorlagen liegen EINMAL"     -ForegroundColor DarkGray
+Write-Host "unter $VorlagenZiel - CoverPreviews und Buchdurchgang finden sie dort"   -ForegroundColor DarkGray
+Write-Host "von selbst, wenn kein _NEU_Vorlage neben der .exe liegt."                -ForegroundColor DarkGray

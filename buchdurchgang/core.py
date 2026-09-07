@@ -166,6 +166,14 @@ def arbeitsordner(cfg: dict) -> Path:
     return p
 
 
+# Ein Ort auf dem Share fuer ALLE Werkzeuge, neben den Tool-Ordnern. Steht
+# fest im Code und nicht in der config.json: die wird weder auf den Share noch
+# zurueck gespiegelt, ein Pfad dort gaelte also auf genau einem Rechner.
+# Der NAS, nicht C019: VR-Austausch ist nachweislich erreichbar und
+# beschreibbar, C019 antwortet zwar auf SMB, weist aber ab.
+SHARE_VORLAGEN = r"\\VR-Archiv\VR-Austausch\VR-Tools\_NEU_Vorlage"
+
+
 def mockup_vorlagen(cfg: dict) -> str:
     """Wo die Mockup-PSDs liegen (``_NEU_Vorlage``, rund 480 MB).
 
@@ -191,9 +199,12 @@ def mockup_vorlagen(cfg: dict) -> str:
         # Geschwisterordner: unter VR-Tools\ liegen die Werkzeuge nebeneinander,
         # und launch.ps1 baut dieselbe Anordnung unter %LOCALAPPDATA% nach.
         kandidaten.append(APP_DIR.parent / name / "_NEU_Vorlage")
-    # Das Original auf C019. Greift, wenn der Anwender nur den Buchdurchgang
-    # startet und CoverPreviews nie — dann hat launch.ps1 die 480 MB nie
-    # herangeholt. Ueber das Netz langsamer, aber besser als gar keine Vorlage.
+    # Der gemeinsame Ort auf dem Share: eine Kopie fuer alle Werkzeuge, neben
+    # den Tool-Ordnern. Greift, wenn der Anwender nur den Buchdurchgang startet
+    # und CoverPreviews nie — dann hat launch.ps1 die 480 MB nie herangeholt.
+    # Ueber das Netz langsamer, aber besser als gar keine Vorlage.
+    kandidaten.append(Path(SHARE_VORLAGEN))
+    # Und zuletzt das Original in der Artikeldaten-Ablage.
     ablage = (cfg.get("ablageort") or "").strip()
     if ablage:
         kandidaten.append(Path(ablage) / "_NEU_Vorlage")

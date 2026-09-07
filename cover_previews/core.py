@@ -156,7 +156,20 @@ def vorlagen_dir(cfg: dict) -> Path:
     if raw:
         return Path(os.path.expandvars(raw)).expanduser()
     basis = _base_dir() if getattr(sys, "frozen", False) else Path(__file__).parent
-    return basis / "_NEU_Vorlage"
+    neben = basis / "_NEU_Vorlage"
+    if neben.is_dir():
+        return neben
+    # Rueckfall auf den gemeinsamen Ort auf dem Share: eine Kopie fuer alle
+    # Werkzeuge statt 480 MB je Tool-Ordner und je Anwender. Fest im Code und
+    # nicht in der config.json — die wird nicht gespiegelt und gaelte nur auf
+    # einem Rechner. Der NAS, nicht C019 — VR-Austausch ist erreichbar.
+    gemeinsam = Path(r"\\VR-Archiv\VR-Austausch\VR-Tools\_NEU_Vorlage")
+    try:
+        if gemeinsam.is_dir():
+            return gemeinsam
+    except OSError:
+        pass
+    return neben          # nicht da — die Fehlermeldung nennt diesen Pfad
 
 
 def vorlagen_liste(cfg: dict) -> list[dict]:
