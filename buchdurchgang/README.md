@@ -10,7 +10,43 @@ eine Checkliste; erst wenn sie abgehakt ist, geht es weiter.
 2. pi & bi       pi_bi_generator     Presse- und Buchinformation
 3. Shop          shopware_publisher  Produkt als Entwurf
 4. Ablegen       Buchordner auf den Netzordner, mit Nachprüfung
+5. Presse        Presse-Dateien per SFTP auf den Webserver
 ```
+
+## Die Knöpfe auf der Produktseite
+
+Presseinfo, 2D-Cover, 3D-Cover und „Blick ins Buch" sind **kein Produktfeld**
+und keine Einstellung im Shop. Das Storefront-Template zeigt einen Knopf, wenn
+die Datei am erwarteten Pfad liegt — an zwölf Fällen nachgemessen: Knopf da
+genau dann, wenn Datei da.
+
+| Knopf | Pfad auf dem Webserver | kommt aus |
+|---|---|---|
+| Presseinfo | `/presse/PI/PI_<sc>.pdf` | Schritt 2, **als PDF aus Word** |
+| 3D-Cover | `/presse/3D/3D_300_<sc>.jpg` | Schritt 1 (nur Windows) |
+| 2D-Cover | `/presse/2D/2D_300_<sc>.jpg` | Schritt 1 |
+| Blick ins Buch | `/presse/bib/bib_<sc>.pdf` | in Schritt 0 ausgewählt |
+| — | `/newsletter_/<sc>.png` | Schritt 1 (nur Windows) |
+
+Daraus folgt zweierlei:
+
+* Das **Häkchen „Presseinfo mit hochladen"** *ist* der Schalter für die
+  Anzeige. Einen zweiten gibt es nicht.
+* Der Generator liefert die Presseinfo nur als `.docx`. Wer das PDF nicht aus
+  Word exportiert und als `PI_<sc>.pdf` in den Buchordner legt, bekommt den
+  Knopf nicht — Schritt 5 sagt vorher, was fehlt.
+
+**Blick ins Buch** entsteht nicht im Durchgang und heißt beliebig, deshalb wird
+es in Schritt 0 ausgewählt; hochgeladen wird es unter dem richtigen Namen.
+
+Übertragen wird per **SFTP** — der Server bietet nichts anderes an (Port 21 und
+990 sind zu). Zugangsdaten stehen verschlüsselt in der `config.json`, wie das
+Shop-Secret. Der Serverschlüssel wird beim ersten Mal gemerkt und danach
+verglichen; ändert er sich, bricht das Werkzeug ab statt zu fragen.
+
+Nach jeder Datei wird die Größe am Ziel geprüft: bricht eine Übertragung in der
+Mitte ab, sieht eine halbe PDF aus wie eine ganze — nur dass der Knopf dann ins
+Leere führt.
 
 ## Kategorien: geraten, nicht gefragt
 

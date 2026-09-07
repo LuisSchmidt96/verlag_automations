@@ -32,7 +32,10 @@ binaries = []
 # win32com steuert Photoshop und existiert nur unter Windows; PyInstaller
 # findet den Import nicht von selbst, weil er in erzeuge_3d_photoshop() lokal
 # steht (damit der Linux-Trockenlauf ohne pywin32 läuft).
-hiddenimports = ['win32com', 'win32com.client']
+# paramiko wird ERST IN DER FUNKTION importiert (_sftp_verbinden), damit der
+# Durchgang ohne SFTP-Schritt auch ohne die Abhängigkeit läuft. PyInstaller
+# findet solche Importe nicht von selbst.
+hiddenimports = ['win32com', 'win32com.client', 'paramiko']
 
 
 a = Analysis(

@@ -12,5 +12,10 @@ pyinstaller==6.20.0
 # abgelegt (scrypt aus der stdlib + AES-GCM von hier).
 cryptography==49.0.0
 
+# buchdurchgang: Presse-Dateien per SFTP auf den Webserver. Der Server bietet
+# nur SSH an (Port 21 und 990 sind zu), also SFTP — cryptography von oben
+# bringt paramiko ohnehin schon mit.
+paramiko==5.0.0
+
 # cover_previews 3D-Schritt steuert Photoshop per COM — nur unter Windows.
 pywin32==306 ; sys_platform == "win32"

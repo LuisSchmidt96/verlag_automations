@@ -66,6 +66,21 @@ DEFAULT_CONFIG: dict = {
     # bevor gewarnt wird? Der Beschnitt macht das gemessene Maß größer
     # (3 mm ringsum = 0,6 cm je Kante); 1,0 cm lässt auch 5 mm Beschnitt durch.
     "format_tol_cm": 1.0,
+    # Webserver für die Presse-Dateien. Die Knöpfe auf der Produktseite
+    # (Presseinfo, 2D, 3D, Blick ins Buch) sind KEIN Produktfeld — das Template
+    # zeigt sie, wenn die Datei unter dem erwarteten Pfad liegt. Gemessen an
+    # zwölf Fällen: Knopf da genau dann, wenn Datei da.
+    #
+    # Der Server bietet nur SSH an (21 und 990 sind zu), also SFTP. Das
+    # Passwort liegt verschlüsselt daneben, wie das Shop-Secret.
+    "sftp": {
+        "host": "verlag-regionalkultur.de",
+        "port": 22,
+        "benutzer": "",
+        "presse_basis": "/presse",
+        "newsletter_basis": "/newsletter_",
+        "hostkey": "",          # beim ersten Verbinden gemerkt (wie SSH selbst)
+    },
     "config_version": 1,
 }
 
@@ -136,6 +151,18 @@ def cfg_pibi(cfg: dict) -> dict:
     return _misch(pb.DEFAULT_CONFIG, cfg.get("pi_bi_generator", {}))
 
 
+def sftp_zugang(cfg: dict) -> dict:
+    """Der SFTP-Abschnitt — **lebend**, nicht kopiert.
+
+    Wer hier das Passwort setzt, schreibt in die Konfiguration des Durchgangs;
+    ein anschließendes ``speichere_config`` behält es.
+    """
+    z = cfg.setdefault("sftp", {})
+    for k, v in DEFAULT_CONFIG["sftp"].items():
+        z.setdefault(k, v)
+    return z
+
+
 def cfg_shop(cfg: dict) -> dict:
     """Die Shopware-Konfiguration — **lebend**, nicht kopiert.
 
@@ -189,6 +216,14 @@ SCHRITTE: list[dict] = [
         "checkliste": [
             "Alle Dateien sind auf dem Netzordner angekommen",
             "Der örtliche Arbeitsordner kann weg",
+        ],
+    },
+    {
+        "id": "presse",
+        "titel": "5 — Presse",
+        "checkliste": [
+            "Die Knöpfe auf der Produktseite sind da und öffnen das Richtige",
+            "Blick ins Buch zeigt die richtigen Seiten",
         ],
     },
 ]
@@ -578,3 +613,149 @@ def uebernimm_shop_zugang(cfg: dict, pfad=None) -> str:
         raise RuntimeError(f"In {pfad} ist keine Umgebung eingerichtet.")
     eigene["aktive_umgebung"] = fremd.get("aktive_umgebung", "dev")
     return f"Übernommen aus {pfad}: " + ", ".join(uebernommen)
+
+
+# ---------------------------------------------------------------------
+# Schritt 5 — Presse-Dateien auf den Webserver
+# ---------------------------------------------------------------------
+
+def presse_dateien(ordner, sc: str, cfg: dict, *, mit_pi: bool = True,
+                   bib_pdf=None) -> list[dict]:
+    """Welche Datei wohin gehört — und ob sie da ist.
+
+    Die vier Knöpfe auf der Produktseite sind kein Produktfeld: das Template
+    zeigt sie, wenn die Datei unter dem erwarteten Pfad liegt. Hochladen und
+    Anzeigen sind also dasselbe. Deshalb steuert ``mit_pi`` die Presseinfo —
+    einen zweiten Schalter gibt es nicht.
+
+    ``bib_pdf`` ist die von Hand gewählte Blick-ins-Buch-Datei; sie entsteht
+    nicht im Durchgang und kann alles Mögliche heißen.
+
+    Rückgabe je Eintrag: {"art", "lokal", "fern", "da", "pflicht"}
+    """
+    ordner = Path(ordner)
+    z = sftp_zugang(cfg)
+    presse = (z.get("presse_basis") or "/presse").rstrip("/")
+    news = (z.get("newsletter_basis") or "/newsletter_").rstrip("/")
+    ccfg = cfg_cover(cfg)
+    dpi = int(ccfg.get("dpi_print", 300))
+    m2d = ccfg.get("muster_2d", cp.DEFAULT_CONFIG["muster_2d"]).format(dpi=dpi, sc=sc)
+    m3d = ccfg.get("muster_3d", cp.DEFAULT_CONFIG["muster_3d"]).format(dpi=dpi, sc=sc)
+    mpng = ccfg.get("muster_3d_png", cp.DEFAULT_CONFIG["muster_3d_png"]).format(sc=sc)
+
+    liste: list[dict] = []
+
+    def dazu(art, lokal, fern, pflicht=True):
+        lokal = Path(lokal)
+        liste.append({"art": art, "lokal": lokal, "fern": fern,
+                      "da": lokal.is_file(), "pflicht": pflicht})
+
+    # Die Presseinfo kommt als PDF aus Word — der Generator liefert nur .docx.
+    # Erwartet wird sie unter demselben Namen im Buchordner.
+    if mit_pi:
+        dazu("Presseinfo", ordner / f"PI_{sc}.pdf", f"{presse}/PI/PI_{sc}.pdf")
+    dazu("3D-Cover", ordner / m3d, f"{presse}/3D/{m3d}")
+    dazu("2D-Cover", ordner / m2d, f"{presse}/2D/{m2d}")
+    if bib_pdf:
+        dazu("Blick ins Buch", bib_pdf, f"{presse}/bib/bib_{sc}.pdf")
+    # Das Newsletter-Cover ist zugleich die dritte Bildquelle des Publishers.
+    dazu("Newsletter-Cover", ordner / mpng, f"{news}/{mpng}", pflicht=False)
+    return liste
+
+
+class SftpFehler(RuntimeError):
+    """Verbindung oder Übertragung ist gescheitert."""
+
+
+def _sftp_verbinden(cfg: dict, passwort: str):
+    """Verbindung aufbauen und den Serverschlüssel prüfen.
+
+    Beim ersten Mal wird der Schlüssel gemerkt, danach verglichen — dasselbe
+    Vorgehen wie SSH selbst. Ändert er sich, wird abgebrochen statt gefragt:
+    hier werden Dateien auf einen öffentlichen Webserver geschoben, das ist
+    kein guter Ort für ein Achselzucken.
+    """
+    import paramiko
+
+    z = sftp_zugang(cfg)
+    host, port = z.get("host") or "", int(z.get("port") or 22)
+    benutzer = (z.get("benutzer") or "").strip()
+    if not (host and benutzer):
+        raise SftpFehler("Server oder Benutzer fehlt — bitte eintragen.")
+
+    try:
+        transport = paramiko.Transport((host, port))
+        transport.connect(username=benutzer, password=passwort)
+    except Exception as e:
+        raise SftpFehler(f"Verbindung zu {host}:{port} gescheitert: {e}")
+
+    schluessel = transport.get_remote_server_key()
+    finger = schluessel.get_base64()
+    gemerkt = (z.get("hostkey") or "").strip()
+    if gemerkt and gemerkt != finger:
+        transport.close()
+        raise SftpFehler(
+            "Der Serverschlüssel hat sich geändert. Entweder wurde der Server "
+            "neu aufgesetzt — dann den Eintrag 'hostkey' in der config.json "
+            "leeren — oder es antwortet jemand anderes.")
+    if not gemerkt:
+        z["hostkey"] = finger
+    return transport, paramiko.SFTPClient.from_transport(transport)
+
+
+def _sftp_mkdirs(sftp, pfad: str) -> None:
+    """Fehlende Ordner anlegen — SFTP kennt kein mkdir -p."""
+    teile = [t for t in pfad.strip("/").split("/") if t]
+    lauf = ""
+    for t in teile:
+        lauf += "/" + t
+        try:
+            sftp.stat(lauf)
+        except IOError:
+            sftp.mkdir(lauf)
+
+
+def schritt_presse(ordner, sc: str, cfg: dict, *, passwort: str,
+                   mit_pi: bool = True, bib_pdf=None, log=print) -> dict:
+    """Schritt 5 — die Presse-Dateien auf den Webserver legen.
+
+    Übertragen wird nur, was da ist; nach jeder Datei wird die Größe am Ziel
+    verglichen. Über eine Leitung bricht eine Übertragung gern in der Mitte ab,
+    und eine halbe PDF sieht aus wie eine ganze — nur dass dann der Knopf auf
+    der Produktseite ins Leere führt.
+
+    Rückgabe: {"geladen", "fehlend", "fehler"}
+    """
+    liste = presse_dateien(ordner, sc, cfg, mit_pi=mit_pi, bib_pdf=bib_pdf)
+    fehlend = [e for e in liste if not e["da"]]
+    zu_laden = [e for e in liste if e["da"]]
+    if not zu_laden:
+        raise SftpFehler("Es gibt nichts hochzuladen — keine der erwarteten "
+                         "Dateien liegt im Buchordner.")
+
+    transport, sftp = _sftp_verbinden(cfg, passwort)
+    geladen, fehler = [], []
+    try:
+        for e in zu_laden:
+            ziel_ordner = str(Path(e["fern"]).parent).replace("\\", "/")
+            try:
+                _sftp_mkdirs(sftp, ziel_ordner)
+                log(f"Lade hoch: {e['art']} → {e['fern']}")
+                sftp.put(str(e["lokal"]), e["fern"])
+                fern_gross = sftp.stat(e["fern"]).st_size
+                lokal_gross = e["lokal"].stat().st_size
+                if fern_gross != lokal_gross:
+                    fehler.append(f"{e['art']}: Größe weicht ab "
+                                  f"({fern_gross} statt {lokal_gross} Bytes)")
+                    continue
+            except Exception as ex:
+                fehler.append(f"{e['art']}: {ex}")
+                continue
+            geladen.append(e)
+    finally:
+        try:
+            sftp.close(); transport.close()
+        except Exception:
+            pass
+
+    return {"geladen": geladen, "fehlend": fehlend, "fehler": fehler}

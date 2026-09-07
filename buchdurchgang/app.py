@@ -67,6 +67,8 @@ class App(Tk):
         self.xml_var = StringVar()
         self.titel_var = StringVar()
         self.ordner_var = StringVar(value="—")
+        self.bib_var = StringVar()          # Blick-ins-Buch-PDF (von Hand)
+        self._sftp_pw = None                # entsperrt, nur im RAM
         self.status = StringVar(value="Umschlag-PDF und ONIX-XML wählen.")
 
         self._build()
@@ -138,7 +140,7 @@ class App(Tk):
             sid, core.schritt(sid)["titel"] if sid != "buch" else ""))
         {"buch": self._baue_buch, "cover": self._baue_cover,
          "pibi": self._baue_pibi, "shop": self._baue_shop,
-         "ablegen": self._baue_ablegen}[sid]()
+         "ablegen": self._baue_ablegen, "presse": self._baue_presse}[sid]()
         self._male_schrittliste()
         self._pruefe_tor()
 
@@ -253,6 +255,191 @@ class App(Tk):
         self._male_schrittliste()
         self._pruefe_tor()
 
+    # ------------------------------------------------------------------
+    # Schritt 5 — Presse-Dateien auf den Webserver
+    # ------------------------------------------------------------------
+    def _baue_presse(self):
+        f = ttk.Frame(self.rechts); f.pack(fill="both", expand=True)
+        ttk.Label(f, wraplength=640, justify="left", padding=(8, 6),
+                  text="Die Knöpfe auf der Produktseite (Presseinfo, 2D, 3D, "
+                       "Blick ins Buch) sind kein Produktfeld — das Template "
+                       "zeigt sie, wenn die Datei am erwarteten Pfad liegt. "
+                       "Hochladen und Anzeigen ist hier dasselbe."
+                  ).pack(anchor="w")
+
+        z = core.sftp_zugang(self.cfg)
+        self.sftp_host = StringVar(value=z.get("host", ""))
+        self.sftp_user = StringVar(value=z.get("benutzer", ""))
+        r = ttk.Frame(f); r.pack(fill="x", padx=8, pady=3)
+        ttk.Label(r, text="SFTP-Server:", width=13).pack(side="left")
+        ttk.Entry(r, textvariable=self.sftp_host).pack(
+            side="left", fill="x", expand=True)
+        r2 = ttk.Frame(f); r2.pack(fill="x", padx=8, pady=3)
+        ttk.Label(r2, text="Benutzer:", width=13).pack(side="left")
+        ttk.Entry(r2, textvariable=self.sftp_user).pack(
+            side="left", fill="x", expand=True)
+        ttk.Button(r2, text="Passwort setzen…",
+                   command=self._sftp_passwort_setzen).pack(side="left", padx=(6, 0))
+
+        self.mit_pi = BooleanVar(
+            value=bool(self.cfg.get("presseinfo_hochladen", True)))
+        r3 = ttk.Frame(f); r3.pack(fill="x", padx=8, pady=(6, 2))
+        ttk.Checkbutton(r3, text="Presseinfo mit hochladen (= sie wird auf der "
+                                 "Produktseite angeboten)",
+                        variable=self.mit_pi,
+                        command=self._zeige_presse_liste).pack(side="left")
+
+        self.presse_liste = Text(f, height=6, wrap="none", state=DISABLED,
+                                 background="#fbfbfb")
+        self.presse_liste.pack(fill="x", padx=8, pady=(2, 6))
+
+        r4 = ttk.Frame(f); r4.pack(fill="x", padx=8, pady=(0, 4))
+        self.btn_presse = ttk.Button(r4, text="Auf den Webserver laden",
+                                     command=self._lauf_presse)
+        self.btn_presse.pack(side="right")
+
+        self.presse_log = self._log_feld(f, "presse")
+        self._baue_checkliste(f, "presse")
+        self._zeige_presse_liste()
+
+    def _zeige_presse_liste(self):
+        """Was hochginge — und was fehlt. Vor dem Klick, nicht danach."""
+        if not (self.ordner and self.paar):
+            return
+        eintraege = core.presse_dateien(
+            self.ordner, self.paar["sc"], self.cfg,
+            mit_pi=self.mit_pi.get(), bib_pdf=self.bib_var.get() or None)
+        self.presse_liste.configure(state=NORMAL)
+        self.presse_liste.delete("1.0", END)
+        for e in eintraege:
+            marke = "✓" if e["da"] else ("⚠" if e["pflicht"] else "·")
+            self.presse_liste.insert(
+                END, f" {marke}  {e['art']:<18} {e['fern']}\n")
+        fehlt = [e["art"] for e in eintraege if not e["da"]]
+        if fehlt:
+            self.presse_liste.insert(
+                END, f"\n Fehlt im Buchordner: {', '.join(fehlt)}")
+        self.presse_liste.configure(state=DISABLED)
+
+    def _sftp_passwort_setzen(self):
+        pw = simpledialog.askstring("SFTP-Passwort",
+                                    f"Passwort für {self.sftp_user.get()}:",
+                                    show="*", parent=self)
+        if not pw:
+            return
+        master = simpledialog.askstring("Master-Passwort",
+                                        "Passwort zum Verschlüsseln:",
+                                        show="*", parent=self)
+        if not master:
+            return
+        self._merke_sftp()
+        sw.setze_secret(core.sftp_zugang(self.cfg), pw, master)
+        core.speichere_config(self.cfg)
+        self._sftp_pw = pw
+        messagebox.showinfo("Gesetzt", "SFTP-Passwort verschlüsselt gespeichert.")
+
+    def _merke_sftp(self):
+        z = core.sftp_zugang(self.cfg)
+        z["host"] = self.sftp_host.get().strip()
+        z["benutzer"] = self.sftp_user.get().strip()
+
+    def _sftp_entsperren(self) -> bool:
+        if self._sftp_pw:
+            return True
+        z = core.sftp_zugang(self.cfg)
+        if not sw.hat_secret(z):
+            messagebox.showwarning("Kein Passwort",
+                                   "Bitte zuerst „Passwort setzen…“ drücken.")
+            return False
+        master = simpledialog.askstring("Master-Passwort", "Master-Passwort:",
+                                        show="*", parent=self)
+        if not master:
+            return False
+        try:
+            self._sftp_pw = sw.hole_secret(z, master)
+            return True
+        except sw.PasswortFehler as e:
+            messagebox.showerror("Passwort", str(e))
+            return False
+
+    def _lauf_presse(self):
+        self._merke_sftp()
+        core.speichere_config(self.cfg)
+        if not self._sftp_entsperren():
+            return
+        eintraege = core.presse_dateien(
+            self.ordner, self.paar["sc"], self.cfg,
+            mit_pi=self.mit_pi.get(), bib_pdf=self.bib_var.get() or None)
+        da = [e for e in eintraege if e["da"]]
+        fehlt = [e["art"] for e in eintraege if not e["da"]]
+        if not da:
+            messagebox.showwarning(
+                "Nichts da", "Keine der erwarteten Dateien liegt im "
+                             "Buchordner.")
+            return
+        hinweis = (f"\n\nNicht dabei (fehlt im Buchordner):\n"
+                   + "\n".join(f"• {a}" for a in fehlt)) if fehlt else ""
+        if not messagebox.askokcancel(
+                "Hochladen?",
+                f"{len(da)} Datei(en) gehen auf {core.sftp_zugang(self.cfg)['host']}:"
+                f"\n\n" + "\n".join(f"• {e['art']} → {e['fern']}" for e in da)
+                + hinweis):
+            return
+
+        self.btn_presse.configure(state="disabled")
+        self.status.set("Lade auf den Webserver …")
+        mit_pi, bib = self.mit_pi.get(), self.bib_var.get() or None
+        self.cfg["presseinfo_hochladen"] = mit_pi
+        core.speichere_config(self.cfg)
+
+        def arbeite():
+            try:
+                erg = core.schritt_presse(
+                    self.ordner, self.paar["sc"], self.cfg,
+                    passwort=self._sftp_pw or "", mit_pi=mit_pi, bib_pdf=bib,
+                    log=self._melde("presse"))
+                self._nachrichten.put(("fertig", "presse", erg, None))
+            except Exception as e:
+                traceback.print_exc()
+                self._nachrichten.put(("fertig", "presse", None, e))
+
+        threading.Thread(target=arbeite, daemon=True).start()
+
+    def _presse_fertig(self, erg, fehler):
+        self.btn_presse.configure(state="normal")
+        if fehler:
+            self._schreibe(self.presse_log, f"✗ {fehler}")
+            self.status.set("Hochladen fehlgeschlagen.")
+            messagebox.showerror("Presse", str(fehler))
+            return
+        core.speichere_config(self.cfg)      # ggf. gemerkter Serverschlüssel
+        for e in erg["geladen"]:
+            self._schreibe(self.presse_log, f"   {e['art']} → {e['fern']}")
+        for e in erg["fehlend"]:
+            self._schreibe(self.presse_log,
+                           f"⚠ nicht hochgeladen (fehlt): {e['art']}")
+        if erg["fehler"]:
+            for f in erg["fehler"]:
+                self._schreibe(self.presse_log, f"✗ {f}")
+            self.status.set("Nicht alles angekommen — siehe Protokoll.")
+            messagebox.showerror("Unvollständig",
+                                 "\n".join(erg["fehler"][:5]))
+            return
+        self._schreibe(self.presse_log,
+                       f"✓ {len(erg['geladen'])} Datei(en) angekommen und "
+                       f"nachgeprüft.")
+        core.vermerke_lauf(self.stand, "presse",
+                           quelle=core.sftp_zugang(self.cfg).get("host", ""),
+                           dateien=[e["fern"] for e in erg["geladen"]],
+                           hinweise=[f"nicht dabei: {e['art']}"
+                                     for e in erg["fehlend"]])
+        core.speichere_stand(self.ordner, self.stand)
+        self._gib_checkliste_frei("presse")
+        self._zeige_presse_liste()
+        self.status.set("Hochgeladen — bitte die Produktseite ansehen und abhaken.")
+        self._male_schrittliste()
+        self._pruefe_tor()
+
     def _pumpe(self):
         """Läuft im Hauptthread und leert die Warteschlange.
 
@@ -260,7 +447,8 @@ class App(Tk):
         durch — Protokollzeilen wie Ergebnisse.
         """
         fertig = {"cover": self._cover_fertig, "pibi": self._pibi_fertig,
-                  "shop": self._shop_fertig, "ablegen": self._ablegen_fertig}
+                  "shop": self._shop_fertig, "ablegen": self._ablegen_fertig,
+                  "presse": self._presse_fertig}
         try:
             while True:
                 art, *rest = self._nachrichten.get_nowait()
@@ -397,6 +585,18 @@ class App(Tk):
             ttk.Entry(r, textvariable=var).pack(side="left", fill="x", expand=True)
             ttk.Button(r, text="Auswählen…", command=cmd).pack(side="left", padx=(6, 0))
 
+        # Das Blick-ins-Buch-PDF entsteht nicht im Durchgang — es wird von
+        # Hand gebaut und kann alles Mögliche heißen. Deshalb hier auswählen,
+        # damit es in Schritt 5 unter dem richtigen Namen hochgeht.
+        r_bib = ttk.Frame(f); r_bib.pack(fill="x", padx=8, pady=4)
+        ttk.Label(r_bib, text="Blick ins Buch:", width=14).pack(side="left")
+        ttk.Entry(r_bib, textvariable=self.bib_var).pack(
+            side="left", fill="x", expand=True)
+        ttk.Button(r_bib, text="Auswählen…", command=self._waehle_bib).pack(
+            side="left", padx=(6, 0))
+        ttk.Label(r_bib, text="(optional)", foreground="gray").pack(
+            side="left", padx=(8, 0))
+
         r = ttk.Frame(f); r.pack(fill="x", padx=8, pady=4)
         ttk.Label(r, text="Titel (Ordner):", width=14).pack(side="left")
         e = ttk.Entry(r, textvariable=self.titel_var)
@@ -432,6 +632,18 @@ class App(Tk):
         if p:
             self.pdf_var.set(p)
             self.cfg["last_pdf_dir"] = str(Path(p).parent)
+
+    def _waehle_bib(self):
+        p = filedialog.askopenfilename(
+            title="Blick ins Buch (PDF)",
+            filetypes=[("PDF", "*.pdf"), ("Alle Dateien", "*.*")],
+            initialdir=self.cfg.get("last_bib_dir") or None)
+        if p:
+            self.bib_var.set(p)
+            self.cfg["last_bib_dir"] = str(Path(p).parent)
+            if self.ordner:
+                self.stand["bib_pdf"] = p
+                core.speichere_stand(self.ordner, self.stand)
 
     def _waehle_xml(self):
         p = filedialog.askopenfilename(
@@ -492,6 +704,8 @@ class App(Tk):
             self.titel_var.set(fel["titel"])
         self._zeige_ordner()
         self.stand = core.lade_stand(self.ordner) if self.ordner else {"schritte": {}}
+        if self.stand.get("bib_pdf") and not self.bib_var.get():
+            self.bib_var.set(self.stand["bib_pdf"])
         self.status.set(f"Kurzcode {paar['sc']} — weiter zum Cover.")
         self._male_schrittliste()
         self._pruefe_tor()
