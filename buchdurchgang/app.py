@@ -915,6 +915,35 @@ class App(Tk):
         core.speichere_stand(self.ordner, self.stand)
         self._gib_checkliste_frei("cover")
         self.status.set("Cover erzeugt — bitte prüfen und abhaken.")
+
+        # Die Checkliste fragt nach weißem Rand und heller Kante — beides
+        # sieht man nur im Bild. Also gleich anbieten.
+        #
+        # Die Web-Fassung ist pixelgleich mit der Druckfassung, nur der
+        # eingebettete DPI-Wert unterscheidet sich (siehe speichere_2d in
+        # cover_previews). Zum Ansehen genügt eine je Paar.
+        ccfg = core.cfg_cover(self.cfg)
+        web, druck = (str(int(ccfg.get("dpi_web", 72))),
+                      str(int(ccfg.get("dpi_print", 300))))
+        bilder = []
+        for pfad in erg["erzeugt"]:
+            name = Path(pfad).name
+            if name.startswith("_") or Path(name).suffix.lower() not in (
+                    ".jpg", ".jpeg", ".png"):
+                continue
+            zwilling = Path(str(pfad).replace(f"_{web}_", f"_{druck}_"))
+            if f"_{web}_" in name and zwilling.exists():
+                continue
+            bilder.append(pfad)
+
+        if bilder and messagebox.askyesno(
+                "Bilder ansehen?",
+                "Jetzt öffnen, um Rand und Kanten zu prüfen?\n\n"
+                + "\n".join(f"• {Path(b).name}" for b in bilder)
+                + ("\n\n(Die 72-dpi-Fassungen sind pixelgleich und deshalb "
+                   "nicht dabei.)" if len(bilder) < len(erg["erzeugt"]) else "")):
+            for b in bilder:
+                self._oeffnen(b)
         self._male_schrittliste()
         self._pruefe_tor()
 
