@@ -274,10 +274,11 @@ SCHRITTE: list[dict] = [
     {
         "id": "ablegen",
         "titel": "5 — Ablegen",
-        "checkliste": [
-            "Alle Dateien sind auf dem Netzordner angekommen",
-            "Der örtliche Arbeitsordner kann weg",
-        ],
+        # Keine Checkliste: der Schritt vergleicht selbst die Dateigröße am
+        # Ziel und meldet jede Abweichung. Ein Mensch soll nicht bestätigen,
+        # was das Werkzeug schon bewiesen hat — solche Häkchen setzt man
+        # irgendwann ungelesen, und dann prüfen sie gar nichts mehr.
+        "checkliste": [],
     },
 ]
 

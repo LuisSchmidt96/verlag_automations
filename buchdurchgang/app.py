@@ -584,14 +584,17 @@ class App(Tk):
         Checkliste, die man vorher abhaken kann, prüft nichts — sie wäre nur
         ein Klick auf dem Weg nach vorn.
         """
+        punkte = core.schritt(sid)["checkliste"]
+        self._haken[sid] = []
+        if not punkte:
+            return              # Schritt ohne Checkliste — kein leerer Rahmen
         rahmen = ttk.LabelFrame(eltern, text="Bevor es weitergeht — bitte prüfen")
         rahmen.pack(fill="x", padx=8, pady=(6, 8))
         gelaufen = core.ist_gelaufen(self.stand, sid)
         gesetzt = set(self.stand.get("schritte", {}).get(sid, {}).get("haken", []))
-        self._haken[sid] = []
         self._haken_felder = getattr(self, "_haken_felder", {})
         self._haken_felder[sid] = []
-        for punkt in core.schritt(sid)["checkliste"]:
+        for punkt in punkte:
             v = BooleanVar(value=punkt in gesetzt)
             v.trace_add("write", lambda *_a, s=sid: self._haken_geaendert(s))
             cb = ttk.Checkbutton(rahmen, text=punkt, variable=v,

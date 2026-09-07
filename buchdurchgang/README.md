@@ -172,6 +172,11 @@ Ein **Dry-Run zählt nicht als Lauf**: er sendet nichts, also bleibt der Schritt
 offen und die Häkchen gesperrt. Sonst käme man durch den ganzen Durchgang, ohne
 je etwas zu veröffentlichen.
 
+Schritt 5 hat **keine** Checkliste: er vergleicht selbst die Dateigröße am
+Ziel und meldet jede Abweichung. Ein Mensch soll nicht bestätigen, was das
+Werkzeug schon bewiesen hat — solche Häkchen setzt man irgendwann ungelesen,
+und dann prüfen sie gar nichts mehr.
+
 Ein Punkt, der mit **`(optional)`** beginnt, hält das Tor nicht auf. So lässt
 sich Erwünschtes von Nötigem trennen, ohne eine zweite Liste zu führen, und die
 Markierung steht dort, wo man sie liest.
