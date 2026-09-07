@@ -82,11 +82,16 @@ DEFAULT_CONFIG: dict = {
         "host": "verlag-regionalkultur.de",
         "port": 22,
         "benutzer": "sftpuser",
-        "presse_basis": "/var/www/shopware/public/presse",
-        "newsletter_basis": "/var/www/shopware/public/newsletter_",
+        # Web-Wurzel JE UMGEBUNG. dev und prod liegen auf demselben Server in
+        # verschiedenen Verzeichnissen — ohne diese Unterscheidung landeten
+        # Testdateien im Verzeichnis des Livesystems.
+        "web_wurzel": {
+            "dev": "/var/www/dev-shopware/public",
+            "prod": "/var/www/shopware/public",
+        },
         "hostkey": "",          # beim ersten Verbinden gemerkt (wie SSH selbst)
     },
-    "config_version": 2,
+    "config_version": 3,
 }
 
 
@@ -118,13 +123,17 @@ def lade_config() -> dict:
     # ("/presse") statt aus dem Dateisystem ("/var/www/shopware/public/presse").
     # Das muss auch eine gewachsene Konfiguration mitbekommen — Passwort und
     # Serverschlüssel bleiben dabei unangetastet.
-    if int(cfg.get("config_version", 1)) < 2:
+    # Version 2: die Basispfade waren aus den URL-Pfaden abgeleitet.
+    # Version 3: sie hingen nicht an der Umgebung — dev-Dateien wären im
+    # Verzeichnis des Livesystems gelandet. Jetzt eine Web-Wurzel je Umgebung.
+    if int(cfg.get("config_version", 1)) < 3:
         z = cfg.setdefault("sftp", {})
-        for k in ("presse_basis", "newsletter_basis"):
-            z[k] = DEFAULT_CONFIG["sftp"][k]
+        z.pop("presse_basis", None)
+        z.pop("newsletter_basis", None)
+        z["web_wurzel"] = dict(DEFAULT_CONFIG["sftp"]["web_wurzel"])
         if not (z.get("benutzer") or "").strip():
             z["benutzer"] = DEFAULT_CONFIG["sftp"]["benutzer"]
-        cfg["config_version"] = 2
+        cfg["config_version"] = 3
     return cfg
 
 
@@ -178,6 +187,28 @@ def sftp_zugang(cfg: dict) -> dict:
     for k, v in DEFAULT_CONFIG["sftp"].items():
         z.setdefault(k, v)
     return z
+
+
+def web_wurzel(cfg: dict) -> str:
+    """Das Web-Verzeichnis der AKTIVEN Shopware-Umgebung.
+
+    dev und prod liegen auf demselben Server nebeneinander
+    (/var/www/dev-shopware/public gegen /var/www/shopware/public). Der Upload
+    muss der Umgebung folgen, sonst schiebt ein Test seine Dateien in den
+    Livebetrieb.
+    """
+    z = sftp_zugang(cfg)
+    umg = sw.aktive_umgebung(cfg_shop(cfg))
+    wurzeln = z.get("web_wurzel") or DEFAULT_CONFIG["sftp"]["web_wurzel"]
+    return (wurzeln.get(umg) or "").rstrip("/")
+
+
+def presse_basis(cfg: dict) -> str:
+    return f"{web_wurzel(cfg)}/presse"
+
+
+def newsletter_basis(cfg: dict) -> str:
+    return f"{web_wurzel(cfg)}/newsletter_"
 
 
 def cfg_shop(cfg: dict) -> dict:
@@ -652,8 +683,8 @@ def presse_dateien(ordner, sc: str, cfg: dict, *, mit_pi: bool = True,
     """
     ordner = Path(ordner)
     z = sftp_zugang(cfg)
-    presse = (z.get("presse_basis") or "/presse").rstrip("/")
-    news = (z.get("newsletter_basis") or "/newsletter_").rstrip("/")
+    presse = presse_basis(cfg)
+    news = newsletter_basis(cfg)
     ccfg = cfg_cover(cfg)
     dpi = int(ccfg.get("dpi_print", 300))
     m2d = ccfg.get("muster_2d", cp.DEFAULT_CONFIG["muster_2d"]).format(dpi=dpi, sc=sc)
@@ -748,8 +779,8 @@ def sftp_pruefen(cfg: dict, passwort: str) -> dict:
         bericht = {"start": sftp.normalize("."),
                    "hostkey_neu": not vorher,
                    "presse": None, "newsletter": None}
-        for name, pfad in (("presse", z.get("presse_basis")),
-                           ("newsletter", z.get("newsletter_basis"))):
+        for name, pfad in (("presse", presse_basis(cfg)),
+                           ("newsletter", newsletter_basis(cfg))):
             try:
                 sftp.stat(pfad)
                 inhalt = sorted(sftp.listdir(pfad))

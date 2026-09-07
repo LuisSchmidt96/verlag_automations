@@ -170,6 +170,30 @@ class App(Tk):
         self._logs[sid] = t
         return t
 
+    def _knopf(self, name: str):
+        """Knopf, falls es ihn noch gibt.
+
+        Läuft ein Schritt und man blättert weiter, wird sein Panel zerstört;
+        der Abschluss-Handler fasst dann ins Leere ("invalid command name").
+        """
+        b = getattr(self, name, None)
+        try:
+            return b if b is not None and b.winfo_exists() else None
+        except Exception:
+            return None
+
+    def _leere_log(self, sid: str) -> None:
+        """Protokollfeld leeren, falls es gerade angezeigt wird."""
+        feld = self._logs.get(sid)
+        try:
+            if feld is None or not feld.winfo_exists():
+                return
+            feld.configure(state=NORMAL)
+            feld.delete("1.0", END)
+            feld.configure(state=DISABLED)
+        except Exception:
+            pass
+
     def _melde(self, sid: str):
         """Protokoll-Rückruf für einen Arbeitsthread — schreibt nur in die
         Warteschlange, nie ins Fenster."""
@@ -218,25 +242,25 @@ class App(Tk):
         threading.Thread(target=arbeite, daemon=True).start()
 
     def _ablegen_fertig(self, erg, fehler):
-        self.btn_ablegen.configure(state="normal")
+        (b := self._knopf("btn_ablegen")) and b.configure(state="normal")
         if fehler:
-            self._schreibe(self.ablegen_log, f"✗ {fehler}")
+            self._schreibe(self._logs.get("ablegen"), f"✗ {fehler}")
             self.status.set("Ablegen fehlgeschlagen.")
             messagebox.showerror("Ablegen", str(fehler))
             return
         if erg["gesichert"] is not None:
-            self._schreibe(self.ablegen_log,
+            self._schreibe(self._logs.get("ablegen"),
                            f"   Vorhandenes nach _alt/{erg['gesichert'].name}/ "
                            f"gesichert.")
         for p in erg["kopiert"]:
-            self._schreibe(self.ablegen_log, f"   {Path(p).name}")
+            self._schreibe(self._logs.get("ablegen"), f"   {Path(p).name}")
         if erg["uebersprungen"]:
-            self._schreibe(self.ablegen_log,
+            self._schreibe(self._logs.get("ablegen"),
                            "   übersprungen (Photoshop-Zwischendateien): "
                            + ", ".join(erg["uebersprungen"]))
         if erg["fehler"]:
             for f in erg["fehler"]:
-                self._schreibe(self.ablegen_log, f"✗ {f}")
+                self._schreibe(self._logs.get("ablegen"), f"✗ {f}")
             self.status.set("Nicht alles angekommen — siehe Protokoll.")
             messagebox.showerror(
                 "Unvollständig",
@@ -244,10 +268,10 @@ class App(Tk):
                 f"Arbeitsordner bleibt unangetastet.\n\n"
                 + "\n".join(erg["fehler"][:5]))
             return
-        self._schreibe(self.ablegen_log,
+        self._schreibe(self._logs.get("ablegen"),
                        f"✓ {len(erg['kopiert'])} Datei(en) angekommen und "
                        f"nachgeprüft.")
-        self._schreibe(self.ablegen_log,
+        self._schreibe(self._logs.get("ablegen"),
                        f"   Der Arbeitsordner bleibt stehen: {erg['quelle']}")
         core.vermerke_lauf(self.stand, "ablegen", quelle=str(erg["quelle"]),
                            dateien=erg["kopiert"])
@@ -284,15 +308,17 @@ class App(Tk):
         ttk.Button(r2, text="Passwort setzen…",
                    command=self._sftp_passwort_setzen).pack(side="left", padx=(6, 0))
 
-        # Die Basispfade sind DATEISYSTEM-Pfade, nicht die URL-Pfade. Sie
-        # gehören sichtbar hierher — nicht versteckt in die config.json.
-        self.sftp_presse = StringVar(value=z.get("presse_basis", ""))
-        self.sftp_news = StringVar(value=z.get("newsletter_basis", ""))
-        for text, var in (("Presse-Ordner:", self.sftp_presse),
-                          ("Newsletter:", self.sftp_news)):
-            rr = ttk.Frame(f); rr.pack(fill="x", padx=8, pady=2)
-            ttk.Label(rr, text=text, width=13).pack(side="left")
-            ttk.Entry(rr, textvariable=var).pack(side="left", fill="x", expand=True)
+        # DATEISYSTEM-Pfad, nicht der URL-Pfad — und je Umgebung ein anderer:
+        # dev und prod liegen auf demselben Server nebeneinander.
+        umg = sw.aktive_umgebung(core.cfg_shop(self.cfg))
+        self.sftp_wurzel = StringVar(value=core.web_wurzel(self.cfg))
+        rr = ttk.Frame(f); rr.pack(fill="x", padx=8, pady=2)
+        ttk.Label(rr, text=f"Web-Wurzel ({umg}):", width=17).pack(side="left")
+        ttk.Entry(rr, textvariable=self.sftp_wurzel).pack(
+            side="left", fill="x", expand=True)
+        ttk.Label(f, foreground="gray", padding=(8, 0),
+                  text=f"→ {core.presse_basis(self.cfg)}/…  und  "
+                       f"{core.newsletter_basis(self.cfg)}/…").pack(anchor="w")
         rp = ttk.Frame(f); rp.pack(fill="x", padx=8, pady=(2, 4))
         ttk.Label(rp, text="", width=13).pack(side="left")
         ttk.Button(rp, text="Verbindung prüfen (lädt nichts hoch)",
@@ -359,9 +385,10 @@ class App(Tk):
         z = core.sftp_zugang(self.cfg)
         z["host"] = self.sftp_host.get().strip()
         z["benutzer"] = self.sftp_user.get().strip()
-        if hasattr(self, "sftp_presse"):
-            z["presse_basis"] = self.sftp_presse.get().strip()
-            z["newsletter_basis"] = self.sftp_news.get().strip()
+        if hasattr(self, "sftp_wurzel"):
+            umg = sw.aktive_umgebung(core.cfg_shop(self.cfg))
+            z.setdefault("web_wurzel", {})[umg] = \
+                self.sftp_wurzel.get().strip().rstrip("/")
 
     def _sftp_pruefen(self):
         """Nachsehen, wo man landet — bevor irgendetwas hochgeht."""
@@ -382,26 +409,26 @@ class App(Tk):
 
     def _sftp_bericht(self, bericht, fehler):
         if fehler:
-            self._schreibe(self.presse_log, f"✗ {fehler}")
+            self._schreibe(self._logs.get("presse"), f"✗ {fehler}")
             self.status.set("Verbindung fehlgeschlagen.")
             messagebox.showerror("SFTP", str(fehler))
             return
         core.speichere_config(self.cfg)      # ggf. gemerkter Serverschlüssel
-        self._schreibe(self.presse_log,
+        self._schreibe(self._logs.get("presse"),
                        f"✓ Angemeldet. Startverzeichnis: {bericht['start']}")
         if bericht["hostkey_neu"]:
-            self._schreibe(self.presse_log,
+            self._schreibe(self._logs.get("presse"),
                            "   Serverschlüssel gemerkt — künftig wird er "
                            "verglichen.")
         for name, titel in (("presse", "Presse-Ordner"),
                             ("newsletter", "Newsletter-Ordner")):
             b = bericht[name]
             if b["da"]:
-                self._schreibe(self.presse_log,
+                self._schreibe(self._logs.get("presse"),
                                f"✓ {titel}: {b['pfad']}  ({b['anzahl']} "
                                f"Einträge: {', '.join(b['inhalt'][:6])})")
             else:
-                self._schreibe(self.presse_log,
+                self._schreibe(self._logs.get("presse"),
                                f"✗ {titel}: {b['pfad']} — nicht da "
                                f"({b.get('grund', '')}). Pfad korrigieren.")
         self.status.set("Verbindung geprüft.")
@@ -469,26 +496,26 @@ class App(Tk):
         threading.Thread(target=arbeite, daemon=True).start()
 
     def _presse_fertig(self, erg, fehler):
-        self.btn_presse.configure(state="normal")
+        (b := self._knopf("btn_presse")) and b.configure(state="normal")
         if fehler:
-            self._schreibe(self.presse_log, f"✗ {fehler}")
+            self._schreibe(self._logs.get("presse"), f"✗ {fehler}")
             self.status.set("Hochladen fehlgeschlagen.")
             messagebox.showerror("Presse", str(fehler))
             return
         core.speichere_config(self.cfg)      # ggf. gemerkter Serverschlüssel
         for e in erg["geladen"]:
-            self._schreibe(self.presse_log, f"   {e['art']} → {e['fern']}")
+            self._schreibe(self._logs.get("presse"), f"   {e['art']} → {e['fern']}")
         for e in erg["fehlend"]:
-            self._schreibe(self.presse_log,
+            self._schreibe(self._logs.get("presse"),
                            f"⚠ nicht hochgeladen (fehlt): {e['art']}")
         if erg["fehler"]:
             for f in erg["fehler"]:
-                self._schreibe(self.presse_log, f"✗ {f}")
+                self._schreibe(self._logs.get("presse"), f"✗ {f}")
             self.status.set("Nicht alles angekommen — siehe Protokoll.")
             messagebox.showerror("Unvollständig",
                                  "\n".join(erg["fehler"][:5]))
             return
-        self._schreibe(self.presse_log,
+        self._schreibe(self._logs.get("presse"),
                        f"✓ {len(erg['geladen'])} Datei(en) angekommen und "
                        f"nachgeprüft.")
         core.vermerke_lauf(self.stand, "presse",
@@ -538,6 +565,11 @@ class App(Tk):
         self.after(150, self._pumpe)
 
     def _schreibe(self, feld: Text, text: str):
+        # Das Feld kann zerstört sein, wenn der Schritt noch lief und der
+        # Bediener inzwischen weitergeblättert hat. Die Meldung ist dann
+        # gegenstandslos, kein Fehler.
+        if feld is None or not feld.winfo_exists():
+            return
         feld.configure(state=NORMAL)
         feld.insert(END, text + "\n")
         feld.see(END)
@@ -565,15 +597,34 @@ class App(Tk):
             cb.pack(anchor="w", padx=8, pady=1)
             self._haken[sid].append(v)
             self._haken_felder[sid].append(cb)
+        self._haken_hinweis = getattr(self, "_haken_hinweis", {})
         if not gelaufen:
-            ttk.Label(rahmen, foreground="gray",
-                      text="(erst nach dem Lauf)").pack(anchor="w", padx=8,
-                                                        pady=(2, 4))
+            hinweis = ttk.Label(rahmen, foreground="gray",
+                                text="(erst nach dem Lauf)")
+            hinweis.pack(anchor="w", padx=8, pady=(2, 4))
+            self._haken_hinweis[sid] = hinweis
 
     def _gib_checkliste_frei(self, sid: str):
-        """Nach einem gelaufenen Schritt die Häkchen freischalten."""
+        """Nach einem gelaufenen Schritt die Häkchen freischalten.
+
+        Alles hier kann zerstört sein: läuft ein Schritt und man blättert
+        weiter, ist das Panel weg, bevor der Abschluss ankommt. Beim nächsten
+        Betreten wird es ohnehin neu gebaut — dann schon freigeschaltet, weil
+        der Schritt inzwischen als gelaufen vermerkt ist.
+        """
         for cb in getattr(self, "_haken_felder", {}).get(sid, []):
-            cb.configure(state="normal")
+            try:
+                if cb.winfo_exists():
+                    cb.configure(state="normal")
+            except Exception:
+                pass
+        # Der Hinweis „(erst nach dem Lauf)" hat sich damit erledigt.
+        hinweis = getattr(self, "_haken_hinweis", {}).pop(sid, None)
+        try:
+            if hinweis is not None and hinweis.winfo_exists():
+                hinweis.destroy()
+        except Exception:
+            pass
 
     def _haken_geaendert(self, sid: str):
         punkte = core.schritt(sid)["checkliste"]
@@ -732,38 +783,36 @@ class App(Tk):
             except Exception:
                 pass
         self.paar = None
-        self.buch_log.configure(state=NORMAL)
-        self.buch_log.delete("1.0", END)
-        self.buch_log.configure(state=DISABLED)
+        self._leere_log("buch")
         try:
             paar = core.pruefe_paar(self.pdf_var.get(), self.xml_var.get(), self.cfg)
         except core.PaarFehler as e:
-            self._schreibe(self.buch_log, f"✗ {e}")
+            self._schreibe(self._logs.get("buch"), f"✗ {e}")
             self.status.set("PDF und ONIX gehören nicht zusammen.")
             messagebox.showerror("Passt nicht zusammen", str(e))
             self._male_schrittliste(); self._pruefe_tor()
             return
         except Exception as e:
-            self._schreibe(self.buch_log, f"✗ {e}")
+            self._schreibe(self._logs.get("buch"), f"✗ {e}")
             traceback.print_exc()
             messagebox.showerror("Fehler beim Einlesen", str(e))
             return
 
         self.paar = paar
         fel = paar["felder"]
-        self._schreibe(self.buch_log, f"✓ ISBN stimmt überein: {paar['isbn']}")
-        self._schreibe(self.buch_log, f"   Titel        {fel['titel']}")
+        self._schreibe(self._logs.get("buch"), f"✓ ISBN stimmt überein: {paar['isbn']}")
+        self._schreibe(self._logs.get("buch"), f"   Titel        {fel['titel']}")
         if fel.get("untertitel"):
-            self._schreibe(self.buch_log, f"   Untertitel   {fel['untertitel']}")
-        self._schreibe(self.buch_log,
+            self._schreibe(self._logs.get("buch"), f"   Untertitel   {fel['untertitel']}")
+        self._schreibe(self._logs.get("buch"),
                        f"   Preis        {fel['preis_brutto']:.2f} {fel['waehrung']}")
         if paar["gemessen_cm"] and all(paar["onix_cm"]):
             g, o = paar["gemessen_cm"], paar["onix_cm"]
-            self._schreibe(self.buch_log,
+            self._schreibe(self._logs.get("buch"),
                            f"✓ Format      gemessen {g[0]:.1f} x {g[1]:.1f} cm "
                            f"(mit Beschnitt), ONIX {o[0]:.1f} x {o[1]:.1f} cm")
         for w in paar["warnungen"]:
-            self._schreibe(self.buch_log, f"⚠ {w}")
+            self._schreibe(self._logs.get("buch"), f"⚠ {w}")
 
         if not self.titel_var.get().strip():
             self.titel_var.set(fel["titel"])
@@ -788,16 +837,20 @@ class App(Tk):
         self.ordner_var.set(f"Buchordner: {ordner.name}  "
                             f"({'vorhanden' if existiert else 'wird angelegt'})")
 
-    def _ordner_oeffnen(self):
-        if not self.ordner:
-            return
-        p = str(self.ordner)
+    @staticmethod
+    def _oeffnen(pfad) -> None:
+        """Datei oder Ordner mit dem Programm des Systems öffnen."""
+        p = str(pfad)
         if sys.platform == "win32":
-            os.startfile(p)
+            os.startfile(p)                      # noqa: S606 — Windows-API
         elif sys.platform == "darwin":
             os.system(f'open "{p}"')
         else:
             os.system(f'xdg-open "{p}" >/dev/null 2>&1 &')
+
+    def _ordner_oeffnen(self):
+        if self.ordner:
+            self._oeffnen(self.ordner)
 
     # ------------------------------------------------------------------
     # Schritt 1 — Cover
@@ -844,18 +897,18 @@ class App(Tk):
         threading.Thread(target=arbeite, daemon=True).start()
 
     def _cover_fertig(self, erg, fehler):
-        self.btn_cover.configure(state="normal")
+        (b := self._knopf("btn_cover")) and b.configure(state="normal")
         if fehler:
-            self._schreibe(self.cover_log, f"✗ {fehler}")
+            self._schreibe(self._logs.get("cover"), f"✗ {fehler}")
             self.status.set("Cover-Schritt fehlgeschlagen.")
             messagebox.showerror("Cover", str(fehler))
             return
         self.ordner = erg["out_dir"]
         for p in erg["erzeugt"]:
-            self._schreibe(self.cover_log, f"   {Path(p).name}")
+            self._schreibe(self._logs.get("cover"), f"   {Path(p).name}")
         for h in erg["hinweise"]:
-            self._schreibe(self.cover_log, f"⚠ {h}")
-        self._schreibe(self.cover_log, f"✓ {len(erg['erzeugt'])} Datei(en).")
+            self._schreibe(self._logs.get("cover"), f"⚠ {h}")
+        self._schreibe(self._logs.get("cover"), f"✓ {len(erg['erzeugt'])} Datei(en).")
         self.stand = core.lade_stand(self.ordner)
         core.vermerke_lauf(self.stand, "cover", quelle=self.paar["pdf_pfad"],
                            dateien=erg["erzeugt"], hinweise=erg["hinweise"])
@@ -896,19 +949,33 @@ class App(Tk):
         threading.Thread(target=arbeite, daemon=True).start()
 
     def _pibi_fertig(self, dateien, fehler):
-        self.btn_pibi.configure(state="normal")
+        (b := self._knopf("btn_pibi")) and b.configure(state="normal")
         if fehler:
-            self._schreibe(self.pibi_log, f"✗ {fehler}")
+            self._schreibe(self._logs.get("pibi"), f"✗ {fehler}")
             messagebox.showerror("pi & bi", str(fehler))
             return
         for p in dateien:
-            self._schreibe(self.pibi_log, f"   {Path(p).name}")
-        self._schreibe(self.pibi_log, f"✓ {len(dateien)} Datei(en).")
+            self._schreibe(self._logs.get("pibi"), f"   {Path(p).name}")
+        self._schreibe(self._logs.get("pibi"), f"✓ {len(dateien)} Datei(en).")
         core.vermerke_lauf(self.stand, "pibi", quelle=self.paar["xml_pfad"],
                            dateien=dateien)
         core.speichere_stand(self.ordner, self.stand)
         self._gib_checkliste_frei("pibi")
         self.status.set("pi & bi erzeugt — in Word kürzen, dann abhaken.")
+
+        # Der nächste Handgriff ist ohnehin Word: Werbetext kürzen und als PDF
+        # exportieren. Also gleich anbieten, statt den Ordner suchen zu lassen.
+        docs = [d for d in dateien if str(d).lower().endswith(".docx")]
+        if docs and messagebox.askyesno(
+                "In Word öffnen?",
+                "Jetzt in Word öffnen, um den Werbetext auf eine Seite zu "
+                "kürzen?\n\n"
+                + "\n".join(f"• {Path(d).name}" for d in docs)
+                + "\n\nDenk daran, anschließend als PDF zu exportieren — "
+                  f"unter PI_{self.paar['sc']}.pdf im Buchordner, sonst fehlt "
+                  "sie in Schritt 5."):
+            for d in docs:
+                self._oeffnen(d)
         self._male_schrittliste()
         self._pruefe_tor()
 
@@ -1001,8 +1068,8 @@ class App(Tk):
         umg = sw.umgebung(scfg)
         self.shop_url.set(umg.get("shop_url", ""))
         self.key_var.set(umg.get("access_key_id", ""))
-        self._schreibe(self.shop_log, f"✓ {meldung}")
-        self._schreibe(self.shop_log,
+        self._schreibe(self._logs.get("shop"), f"✓ {meldung}")
+        self._schreibe(self._logs.get("shop"),
                        "   Das Master-Passwort wurde NICHT übernommen — es "
                        "entsperrt beim Verbinden genauso wie im Publisher.")
         self.status.set("Zugang übernommen — jetzt „Verbinden“.")
@@ -1108,7 +1175,7 @@ class App(Tk):
         core.speichere_config(self.cfg)
         kanal = (vorlage or {}).get("sales_channel_name") or "⚠ keiner"
         self.status.set(f"Verbunden (Shopware {version}) — Verkaufskanal: {kanal}")
-        self._schreibe(self.shop_log, f"✓ Verbunden mit Shopware {version}")
+        self._schreibe(self._logs.get("shop"), f"✓ Verbunden mit Shopware {version}")
         self._schlage_kategorien_vor()
 
     # -- Kategorien ----------------------------------------------------
@@ -1153,14 +1220,14 @@ class App(Tk):
         """
         for k in treffer:
             self._kat_gewaehlt[k["id"]] = k.get("name") or k["id"]
-            self._schreibe(self.shop_log, f"   Kategorie: {k.get('name')}")
+            self._schreibe(self._logs.get("shop"), f"   Kategorie: {k.get('name')}")
         if not treffer:
-            self._schreibe(self.shop_log, "   Keine Kategorie gefunden.")
+            self._schreibe(self._logs.get("shop"), "   Keine Kategorie gefunden.")
         self._kat_fehlend = list(fehlend)
         for name in fehlend:
-            self._schreibe(self.shop_log, f"⚠ ohne eigene Kategorie: {name}")
+            self._schreibe(self._logs.get("shop"), f"⚠ ohne eigene Kategorie: {name}")
         if fehlend:
-            self._schreibe(self.shop_log,
+            self._schreibe(self._logs.get("shop"),
                            "   → beim Anlegen wird gefragt, ob sie entstehen "
                            "sollen.")
 
@@ -1220,9 +1287,9 @@ class App(Tk):
 
     def _shop_bereit(self, kats, treffer, fehlend, vorhanden, fehler):
         """Alle Rückfragen, hintereinander weg — im Hauptthread."""
-        self.btn_shop.configure(state="normal")
+        (b := self._knopf("btn_shop")) and b.configure(state="normal")
         if fehler:
-            self._schreibe(self.shop_log, f"✗ {fehler}")
+            self._schreibe(self._logs.get("shop"), f"✗ {fehler}")
             self.status.set("Fehlgeschlagen.")
             messagebox.showerror("Shop", str(fehler))
             return
@@ -1248,7 +1315,7 @@ class App(Tk):
                     f"gehen dort gepflegte Angaben verloren (Name, "
                     f"Beschreibung, Preis, Bilder …).\n\nWirklich "
                     f"überschreiben?", icon="warning", default="no"):
-                self._schreibe(self.shop_log, "Abgebrochen — nichts geändert.")
+                self._schreibe(self._logs.get("shop"), "Abgebrochen — nichts geändert.")
                 return
             ueberschreiben = True
 
@@ -1272,10 +1339,10 @@ class App(Tk):
         for pl in plaene:
             if pl["vorhanden"]:
                 self._kat_gewaehlt[pl["vorhanden"]["id"]] = pl["vorhanden"]["name"]
-                self._schreibe(self.shop_log,
+                self._schreibe(self._logs.get("shop"),
                                f"✓ vorhanden, wird verwendet: {pl['pfad']}")
             elif not pl["moeglich"]:
-                self._schreibe(self.shop_log, f"✗ {pl['name']}: {pl['grund']}")
+                self._schreibe(self._logs.get("shop"), f"✗ {pl['name']}: {pl['grund']}")
 
         machbar = [pl for pl in plaene if pl["moeglich"]]
         if not machbar:
@@ -1289,7 +1356,7 @@ class App(Tk):
                 f"Für diese Beteiligten gibt es noch keine Kategorie:\n\n"
                 f"{liste}\n\nAnlegen?{warnung}"):
             return machbar
-        self._schreibe(self.shop_log,
+        self._schreibe(self._logs.get("shop"),
                        "Kategorien nicht angelegt — das Buch bekommt sie nicht.")
         return []
 
@@ -1331,26 +1398,26 @@ class App(Tk):
         threading.Thread(target=arbeite, daemon=True).start()
 
     def _shop_fertig(self, erg, fehler):
-        self.btn_shop.configure(state="normal")
+        (b := self._knopf("btn_shop")) and b.configure(state="normal")
         if fehler:
             # Überschrieben wird nach vorheriger Frage; kommt der Fehler
             # trotzdem, hat sich zwischen Prüfen und Senden etwas geändert.
             if isinstance(fehler, sw.ProduktExistiert):
-                self._schreibe(self.shop_log,
+                self._schreibe(self._logs.get("shop"),
                                f"✗ {fehler.nummer} wurde zwischenzeitlich "
                                f"angelegt — nichts geändert.")
                 messagebox.showwarning("Inzwischen vorhanden", str(fehler))
                 return
-            self._schreibe(self.shop_log, f"✗ {fehler}")
+            self._schreibe(self._logs.get("shop"), f"✗ {fehler}")
             messagebox.showerror("Shop", str(fehler))
             return
         pl = erg["payload"]
-        self._schreibe(self.shop_log,
+        self._schreibe(self._logs.get("shop"),
                        f"✓ {pl['productNumber']} — {pl['name']}")
         # Nachgesehen und ergänzt wird ohnehin im Backend — also gleich hin.
         # Beim Dry-Run gibt es nichts zu öffnen, da wurde nichts angelegt.
         if erg.get("admin_url"):
-            self._schreibe(self.shop_log, f"   {erg['admin_url']}")
+            self._schreibe(self._logs.get("shop"), f"   {erg['admin_url']}")
             try:
                 webbrowser.open(erg["admin_url"])
             except Exception:

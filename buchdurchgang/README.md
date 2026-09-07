@@ -44,10 +44,17 @@ es in Schritt 0 ausgewählt; hochgeladen wird es unter dem richtigen Namen.
 Shop-Secret. Der Serverschlüssel wird beim ersten Mal gemerkt und danach
 verglichen; ändert er sich, bricht das Werkzeug ab statt zu fragen.
 
-> **Die Basispfade sind Dateisystempfade, nicht die URL-Pfade.** Die Seite liegt
-> unter `verlag-regionalkultur.de/presse/…`, auf der Platte aber unter
-> `/var/www/shopware/public/presse` — `public/` ist das Web-Verzeichnis von
-> Shopware. Wer den URL-Pfad einträgt, landet in der Dateisystemwurzel.
+> **Der Pfad ist ein Dateisystempfad, nicht der URL-Pfad** — und er hängt an
+> der Shopware-Umgebung. Die Seite liegt unter
+> `verlag-regionalkultur.de/presse/…`, auf der Platte aber unter:
+>
+> | Umgebung | Web-Wurzel |
+> |---|---|
+> | dev | `/var/www/dev-shopware/public` |
+> | prod | `/var/www/shopware/public` |
+>
+> Beide liegen auf demselben Server. Ohne diese Unterscheidung landeten
+> Testdateien im Verzeichnis des Livesystems.
 >
 > **„Verbindung prüfen"** sagt, wo der Benutzer landet und ob es die Zielordner
 > gibt — ohne etwas hochzuladen. Bei einem geerbten Server ist das der erste
