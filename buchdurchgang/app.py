@@ -885,10 +885,15 @@ class App(Tk):
         ttk.Label(f, foreground="gray" if anzahl else "#a00",
                   wraplength=620, justify="left", padding=(8, 0),
                   text=(f"Mockup-Vorlagen: {pfad}  ({anzahl} PSD)" if anzahl
-                        else f"⚠ Mockup-Vorlagen nicht gefunden"
-                             f"{f' unter {pfad}' if pfad else ''} — der "
-                             f"3D-Schritt kann so nicht laufen. Pfad in der "
-                             f"config.json unter cover_previews.vorlagen_dir.")
+                        else "⚠ Mockup-Vorlagen nicht gefunden — der 3D-Schritt "
+                             "kann so nicht laufen. Gesucht" +
+                             (f" unter {pfad}" if pfad else
+                              f" neben dem Programm unter CoverPreviews"
+                              f"\\_NEU_Vorlage und unter "
+                              f"{core.cfg_wert(self.cfg, 'ablageort')}"
+                              f"\\_NEU_Vorlage") +
+                             ". Fester Pfad: config.json, "
+                             "cover_previews.vorlagen_dir.")
                   ).pack(anchor="w")
 
         self.cover_log = self._log_feld(f, "cover")

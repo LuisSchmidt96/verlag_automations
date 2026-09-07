@@ -180,14 +180,37 @@ def mockup_vorlagen(cfg: dict) -> str:
     eigen = (cfg.get("cover_previews") or {}).get("vorlagen_dir")
     if eigen:
         return eigen
+
+    # Der Reihe nach, schnellste Quelle zuerst. Die config.json bleibt bewusst
+    # letzte Wahl statt erste: sie wird weder auf den Share noch zurueck
+    # gespiegelt (update_and_build.ps1 und launch.ps1 nehmen nur die
+    # Programmteile mit). Ein Pfad, den man dort eintraegt, gilt auf genau
+    # einem Rechner — diese Suche dagegen reist mit dem Build.
+    kandidaten = []
     for name in ("CoverPreviews", "cover_previews"):
-        nachbar = APP_DIR.parent / name / "_NEU_Vorlage"
+        # Geschwisterordner: unter VR-Tools\ liegen die Werkzeuge nebeneinander,
+        # und launch.ps1 baut dieselbe Anordnung unter %LOCALAPPDATA% nach.
+        kandidaten.append(APP_DIR.parent / name / "_NEU_Vorlage")
+    # Das Original auf C019. Greift, wenn der Anwender nur den Buchdurchgang
+    # startet und CoverPreviews nie — dann hat launch.ps1 die 480 MB nie
+    # herangeholt. Ueber das Netz langsamer, aber besser als gar keine Vorlage.
+    ablage = (cfg.get("ablageort") or "").strip()
+    if ablage:
+        kandidaten.append(Path(ablage) / "_NEU_Vorlage")
+
+    for pfad in kandidaten:
         try:
-            if nachbar.is_dir():
-                return str(nachbar)
+            if pfad.is_dir():
+                return str(pfad)
         except OSError:
             continue
     return ""                       # nicht gefunden — cover_previews meldet es
+
+
+def cfg_wert(cfg: dict, schluessel: str) -> str:
+    """Ein Konfigurationswert samt Vorgabe — für Meldungen, die dem Anwender
+    sagen sollen, WO gesucht wurde."""
+    return str(cfg.get(schluessel) or DEFAULT_CONFIG.get(schluessel) or "?")
 
 
 def cfg_cover(cfg: dict) -> dict:
