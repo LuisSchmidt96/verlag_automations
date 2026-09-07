@@ -110,8 +110,9 @@ class App(Tk):
 
         # --- Fuß ---------------------------------------------------------
         fuss = ttk.Frame(self); fuss.pack(fill="x", **PAD)
-        ttk.Label(fuss, textvariable=self.ordner_var,
-                  foreground="gray").pack(side="left")
+        # Die Knöpfe ZUERST packen. Tk verteilt in Reihenfolge; stand die
+        # Pfadzeile vorn, beanspruchte sie ihre volle Breite und schob die
+        # Knöpfe aus dem Fenster — bei langen Pfaden waren sie schlicht weg.
         self.btn_weiter = ttk.Button(fuss, text="Weiter ▸",
                                      command=self._weiter, state="disabled")
         self.btn_weiter.pack(side="right")
@@ -123,6 +124,8 @@ class App(Tk):
         self.btn_zurueck.pack(side="right", padx=(0, 6))
         ttk.Button(fuss, text="Ordner öffnen",
                    command=self._ordner_oeffnen).pack(side="right", padx=6)
+        ttk.Label(fuss, textvariable=self.ordner_var, foreground="gray",
+                  anchor="w").pack(side="left", fill="x", expand=True)
         ttk.Label(self, textvariable=self.status,
                   foreground="#036").pack(fill="x", padx=16, pady=(0, 8))
 
@@ -780,7 +783,9 @@ class App(Tk):
         ordner, existiert = core.buchordner(self.paar["sc"],
                                             self.titel_var.get(), self.cfg)
         self.ordner = ordner
-        self.ordner_var.set(f"Arbeitsordner: {ordner}  "
+        # Nur der Ordnername: der volle Pfad steht bereits oben im Feld
+        # „Arbeitsordner", und eine zweite lange Zeile drängt hier alles weg.
+        self.ordner_var.set(f"Buchordner: {ordner.name}  "
                             f"({'vorhanden' if existiert else 'wird angelegt'})")
 
     def _ordner_oeffnen(self):
