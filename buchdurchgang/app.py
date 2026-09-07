@@ -877,6 +877,20 @@ class App(Tk):
                            "Slot-PNGs, aber KEIN Mockup.").pack(
                 anchor="w", padx=8, pady=(0, 4))
 
+        # Wo die Mockup-PSDs liegen, gehört sichtbar hierher: sie werden nicht
+        # mitgeliefert (rund 480 MB) und liegen beim Geschwisterwerkzeug. Fehlt
+        # der Ordner, scheitert der 3D-Schritt erst mittendrin.
+        pfad = core.mockup_vorlagen(self.cfg)
+        anzahl = len(sorted(Path(pfad).glob("*.psd"))) if pfad and Path(pfad).is_dir() else 0
+        ttk.Label(f, foreground="gray" if anzahl else "#a00",
+                  wraplength=620, justify="left", padding=(8, 0),
+                  text=(f"Mockup-Vorlagen: {pfad}  ({anzahl} PSD)" if anzahl
+                        else f"⚠ Mockup-Vorlagen nicht gefunden"
+                             f"{f' unter {pfad}' if pfad else ''} — der "
+                             f"3D-Schritt kann so nicht laufen. Pfad in der "
+                             f"config.json unter cover_previews.vorlagen_dir.")
+                  ).pack(anchor="w")
+
         self.cover_log = self._log_feld(f, "cover")
         self._baue_checkliste(f, "cover")
 

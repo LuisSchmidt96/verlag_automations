@@ -1001,7 +1001,21 @@ def erzeuge_3d_photoshop(reg: Regionen, bild_hi: Image.Image, cfg: dict,
                          "— sie muss manuell in Photoshop befüllt werden.")
     psd = vorlagen_dir(cfg) / vorlage_name
     if not dry_run and not psd.exists():
-        raise FileNotFoundError(f"Vorlage nicht gefunden: {psd}")
+        # Sagen, WO gesucht wurde und was dort liegt. "Vorlage nicht gefunden"
+        # allein lässt offen, ob der Ordner fehlt, leer ist oder nur diese eine
+        # PSD fehlt — und der Ordner (rund 480 MB) wird oft anderswo gehalten.
+        ordner = vorlagen_dir(cfg)
+        try:
+            vorhanden = sorted(p.name for p in ordner.glob("*.psd"))
+        except OSError:
+            vorhanden = []
+        raise FileNotFoundError(
+            f"Mockup-Vorlage nicht gefunden: {psd}\n"
+            f"Ordner: {ordner} — "
+            + ("gibt es nicht." if not ordner.is_dir() else
+               f"enthält {len(vorhanden)} PSD(s)"
+               + (f": {', '.join(vorhanden[:8])}" if vorhanden else " (leer)"))
+            + "\nPfad ändern über 'vorlagen_dir' in der config.json.")
 
     dpi_print = int(cfg.get("dpi_print", 300))
     dpi_web = int(cfg.get("dpi_web", 72))
@@ -1185,7 +1199,21 @@ def lauf(pdf_pfad, titel: str, cfg: dict, *,
         if mit_3d:
             gewaehlt = vorlage or (waehle_vorlage(reg, cfg) or {}).get("name", "")
             if not gewaehlt:
-                hinweise.append("3D übersprungen: keine passende Vorlage.")
+                # Sagen, WO gesucht wurde und was dort lag. Sonst steht nur
+                # "keine passende Vorlage" da, und es ist nicht zu
+                # unterscheiden, ob der Ordner leer, falsch oder das Format
+                # ungewöhnlich ist.
+                ordner = vorlagen_dir(cfg)
+                vorhanden = vorlagen_liste(cfg)
+                masse = front_masse_cm(reg)
+                hinweise.append(
+                    f"3D übersprungen: keine passende Vorlage. Gesucht in "
+                    f"{ordner} ({len(vorhanden)} Vorlage(n)"
+                    + (f": {', '.join(v['name'] for v in vorhanden[:6])}"
+                       if vorhanden else " — Ordner leer oder nicht da")
+                    + ")"
+                    + (f", gemessen {masse[0]:.1f} x {masse[1]:.1f} cm."
+                       if masse else "."))
             else:
                 log(f"Erzeuge 3D-Mockup ({gewaehlt}) …")
                 erzeugt += erzeuge_3d_photoshop(
