@@ -1396,6 +1396,7 @@ class App(Tk):
                     kategorien=sorted(kategorien),
                     dry_run=dry, ueberschreiben=ueberschreiben,
                     log=self._melde("shop"))
+                erg["dry_run"] = dry
                 self._nachrichten.put(("fertig", "shop", erg, None))
             except Exception as e:
                 traceback.print_exc()
@@ -1418,10 +1419,23 @@ class App(Tk):
             messagebox.showerror("Shop", str(fehler))
             return
         pl = erg["payload"]
+
+        # Ein Dry-Run hat NICHTS getan. Er darf den Schritt deshalb nicht als
+        # gelaufen vermerken — sonst gäbe die Checkliste das Tor frei, und man
+        # käme durch den ganzen Durchgang, ohne je etwas zu veröffentlichen.
+        if erg.get("dry_run"):
+            self._schreibe(self._logs.get("shop"),
+                           f"✓ Dry-Run: {pl['productNumber']} — {pl['name']} "
+                           f"({len(pl.get('categories', []))} Kategorien, "
+                           f"{len(erg.get('medien', []))} Bild(er)). "
+                           f"NICHTS gesendet.")
+            self.status.set("Dry-Run — nichts gesendet. Zum Anlegen das "
+                            "Häkchen entfernen.")
+            return
+
         self._schreibe(self._logs.get("shop"),
                        f"✓ {pl['productNumber']} — {pl['name']}")
         # Nachgesehen und ergänzt wird ohnehin im Backend — also gleich hin.
-        # Beim Dry-Run gibt es nichts zu öffnen, da wurde nichts angelegt.
         if erg.get("admin_url"):
             self._schreibe(self._logs.get("shop"), f"   {erg['admin_url']}")
             try:
