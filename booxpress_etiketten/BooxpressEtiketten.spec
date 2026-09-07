@@ -6,6 +6,14 @@ from PyInstaller.utils.hooks import collect_all
 # Pakete `booxpress_etiketten` und `shared` importierbar sind.
 REPO_ROOT = os.path.dirname(SPECPATH)
 
+# Beim Bauen meldet PyInstaller: WARNING: Hidden import "jinja2" not found!
+# Die Warnung ist erwartet und harmlos. Sie kommt aus dem mitgelieferten Hook
+# hook-pandas.io.formats.style.py: pandas' Styler (DataFrame.style, to_html)
+# braucht jinja2, das ist aber eine OPTIONALE pandas-Abhaengigkeit. Hier wird
+# pandas nur fuer read_excel und isna benutzt (booxpress_etiketten/core.py),
+# nie der Styler — darum steht jinja2 auch nicht in requirements.txt.
+# Nicht ueber excludes stummschalten: das nimmt pandas ein Modul weg, das es
+# selbst importiert, und tauscht eine Warnung gegen einen Absturz.
 datas = []
 binaries = []
 hiddenimports = []
