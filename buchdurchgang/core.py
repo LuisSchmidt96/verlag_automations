@@ -73,15 +73,20 @@ DEFAULT_CONFIG: dict = {
     #
     # Der Server bietet nur SSH an (21 und 990 sind zu), also SFTP. Das
     # Passwort liegt verschlüsselt daneben, wie das Shop-Secret.
+    # ACHTUNG: Dateisystempfade, KEINE URL-Pfade. Die Seite liegt unter
+    # verlag-regionalkultur.de/presse/… — auf der Platte aber unter
+    # /var/www/shopware/public/presse. Das public/ von Shopware ist das
+    # Web-Verzeichnis. Wer den URL-Pfad hier einträgt, landet in der
+    # Dateisystemwurzel und scheitert an den Rechten.
     "sftp": {
         "host": "verlag-regionalkultur.de",
         "port": 22,
-        "benutzer": "",
-        "presse_basis": "/presse",
-        "newsletter_basis": "/newsletter_",
+        "benutzer": "sftpuser",
+        "presse_basis": "/var/www/shopware/public/presse",
+        "newsletter_basis": "/var/www/shopware/public/newsletter_",
         "hostkey": "",          # beim ersten Verbinden gemerkt (wie SSH selbst)
     },
-    "config_version": 1,
+    "config_version": 2,
 }
 
 
@@ -108,6 +113,18 @@ def lade_config() -> dict:
         grund["aktive_umgebung"] = "dev"
         shop = grund
     cfg["shopware_publisher"] = shop
+
+    # Version 2: die SFTP-Basispfade waren aus den URL-Pfaden abgeleitet
+    # ("/presse") statt aus dem Dateisystem ("/var/www/shopware/public/presse").
+    # Das muss auch eine gewachsene Konfiguration mitbekommen — Passwort und
+    # Serverschlüssel bleiben dabei unangetastet.
+    if int(cfg.get("config_version", 1)) < 2:
+        z = cfg.setdefault("sftp", {})
+        for k in ("presse_basis", "newsletter_basis"):
+            z[k] = DEFAULT_CONFIG["sftp"][k]
+        if not (z.get("benutzer") or "").strip():
+            z["benutzer"] = DEFAULT_CONFIG["sftp"]["benutzer"]
+        cfg["config_version"] = 2
     return cfg
 
 
@@ -713,6 +730,41 @@ def _sftp_mkdirs(sftp, pfad: str) -> None:
             sftp.stat(lauf)
         except IOError:
             sftp.mkdir(lauf)
+
+
+def sftp_pruefen(cfg: dict, passwort: str) -> dict:
+    """Nachsehen, wohin man kommt — ohne etwas hochzuladen.
+
+    Beantwortet die Fragen, die man sonst rät: Wo landet der Benutzer? Gibt es
+    die Zielordner? Was liegt darin? Ein falsch geratener Basispfad fällt hier
+    auf und nicht erst, wenn Dateien an der falschen Stelle liegen.
+
+    Rückgabe: {"start", "presse", "newsletter", "hostkey_neu"}
+    """
+    z = sftp_zugang(cfg)
+    vorher = (z.get("hostkey") or "").strip()
+    transport, sftp = _sftp_verbinden(cfg, passwort)
+    try:
+        bericht = {"start": sftp.normalize("."),
+                   "hostkey_neu": not vorher,
+                   "presse": None, "newsletter": None}
+        for name, pfad in (("presse", z.get("presse_basis")),
+                           ("newsletter", z.get("newsletter_basis"))):
+            try:
+                sftp.stat(pfad)
+                inhalt = sorted(sftp.listdir(pfad))
+                bericht[name] = {"pfad": pfad, "da": True,
+                                 "inhalt": inhalt[:12],
+                                 "anzahl": len(inhalt)}
+            except IOError as e:
+                bericht[name] = {"pfad": pfad, "da": False, "grund": str(e),
+                                 "inhalt": [], "anzahl": 0}
+        return bericht
+    finally:
+        try:
+            sftp.close(); transport.close()
+        except Exception:
+            pass
 
 
 def schritt_presse(ordner, sc: str, cfg: dict, *, passwort: str,

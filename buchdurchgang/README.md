@@ -44,6 +44,15 @@ es in Schritt 0 ausgewählt; hochgeladen wird es unter dem richtigen Namen.
 Shop-Secret. Der Serverschlüssel wird beim ersten Mal gemerkt und danach
 verglichen; ändert er sich, bricht das Werkzeug ab statt zu fragen.
 
+> **Die Basispfade sind Dateisystempfade, nicht die URL-Pfade.** Die Seite liegt
+> unter `verlag-regionalkultur.de/presse/…`, auf der Platte aber unter
+> `/var/www/shopware/public/presse` — `public/` ist das Web-Verzeichnis von
+> Shopware. Wer den URL-Pfad einträgt, landet in der Dateisystemwurzel.
+>
+> **„Verbindung prüfen"** sagt, wo der Benutzer landet und ob es die Zielordner
+> gibt — ohne etwas hochzuladen. Bei einem geerbten Server ist das der erste
+> Griff, statt den Pfad zu raten.
+
 Nach jeder Datei wird die Größe am Ziel geprüft: bricht eine Übertragung in der
 Mitte ab, sieht eine halbe PDF aus wie eine ganze — nur dass der Knopf dann ins
 Leere führt.

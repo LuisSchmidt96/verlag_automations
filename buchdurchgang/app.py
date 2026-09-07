@@ -281,6 +281,20 @@ class App(Tk):
         ttk.Button(r2, text="Passwort setzen…",
                    command=self._sftp_passwort_setzen).pack(side="left", padx=(6, 0))
 
+        # Die Basispfade sind DATEISYSTEM-Pfade, nicht die URL-Pfade. Sie
+        # gehören sichtbar hierher — nicht versteckt in die config.json.
+        self.sftp_presse = StringVar(value=z.get("presse_basis", ""))
+        self.sftp_news = StringVar(value=z.get("newsletter_basis", ""))
+        for text, var in (("Presse-Ordner:", self.sftp_presse),
+                          ("Newsletter:", self.sftp_news)):
+            rr = ttk.Frame(f); rr.pack(fill="x", padx=8, pady=2)
+            ttk.Label(rr, text=text, width=13).pack(side="left")
+            ttk.Entry(rr, textvariable=var).pack(side="left", fill="x", expand=True)
+        rp = ttk.Frame(f); rp.pack(fill="x", padx=8, pady=(2, 4))
+        ttk.Label(rp, text="", width=13).pack(side="left")
+        ttk.Button(rp, text="Verbindung prüfen (lädt nichts hoch)",
+                   command=self._sftp_pruefen).pack(side="left")
+
         self.mit_pi = BooleanVar(
             value=bool(self.cfg.get("presseinfo_hochladen", True)))
         r3 = ttk.Frame(f); r3.pack(fill="x", padx=8, pady=(6, 2))
@@ -342,6 +356,52 @@ class App(Tk):
         z = core.sftp_zugang(self.cfg)
         z["host"] = self.sftp_host.get().strip()
         z["benutzer"] = self.sftp_user.get().strip()
+        if hasattr(self, "sftp_presse"):
+            z["presse_basis"] = self.sftp_presse.get().strip()
+            z["newsletter_basis"] = self.sftp_news.get().strip()
+
+    def _sftp_pruefen(self):
+        """Nachsehen, wo man landet — bevor irgendetwas hochgeht."""
+        self._merke_sftp()
+        core.speichere_config(self.cfg)
+        if not self._sftp_entsperren():
+            return
+        self.status.set("Prüfe Verbindung …")
+
+        def arbeite():
+            try:
+                bericht = core.sftp_pruefen(self.cfg, self._sftp_pw or "")
+                self._nachrichten.put(("sftp_bericht", bericht, None))
+            except Exception as e:
+                self._nachrichten.put(("sftp_bericht", None, e))
+
+        threading.Thread(target=arbeite, daemon=True).start()
+
+    def _sftp_bericht(self, bericht, fehler):
+        if fehler:
+            self._schreibe(self.presse_log, f"✗ {fehler}")
+            self.status.set("Verbindung fehlgeschlagen.")
+            messagebox.showerror("SFTP", str(fehler))
+            return
+        core.speichere_config(self.cfg)      # ggf. gemerkter Serverschlüssel
+        self._schreibe(self.presse_log,
+                       f"✓ Angemeldet. Startverzeichnis: {bericht['start']}")
+        if bericht["hostkey_neu"]:
+            self._schreibe(self.presse_log,
+                           "   Serverschlüssel gemerkt — künftig wird er "
+                           "verglichen.")
+        for name, titel in (("presse", "Presse-Ordner"),
+                            ("newsletter", "Newsletter-Ordner")):
+            b = bericht[name]
+            if b["da"]:
+                self._schreibe(self.presse_log,
+                               f"✓ {titel}: {b['pfad']}  ({b['anzahl']} "
+                               f"Einträge: {', '.join(b['inhalt'][:6])})")
+            else:
+                self._schreibe(self.presse_log,
+                               f"✗ {titel}: {b['pfad']} — nicht da "
+                               f"({b.get('grund', '')}). Pfad korrigieren.")
+        self.status.set("Verbindung geprüft.")
 
     def _sftp_entsperren(self) -> bool:
         if self._sftp_pw:
@@ -466,6 +526,8 @@ class App(Tk):
                     self._vorschlag(*rest)
                 elif art == "shop_bereit":
                     self._shop_bereit(*rest)
+                elif art == "sftp_bericht":
+                    self._sftp_bericht(*rest)
         except queue.Empty:
             pass
         except Exception:
