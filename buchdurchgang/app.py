@@ -1001,8 +1001,8 @@ class App(Tk):
                 "kürzen?\n\n"
                 + "\n".join(f"• {Path(d).name}" for d in docs)
                 + "\n\nDenk daran, anschließend als PDF zu exportieren — "
-                  f"unter PI_{self.paar['sc']}.pdf im Buchordner, sonst fehlt "
-                  "sie in Schritt 5."):
+                  f"unter PI_{self.paar['sc']}.pdf im selben Ordner, sonst "
+                  "fehlt sie in Schritt 5."):
             for d in docs:
                 self._oeffnen(d)
         self._male_schrittliste()
