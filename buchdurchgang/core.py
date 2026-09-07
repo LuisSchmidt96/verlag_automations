@@ -166,6 +166,30 @@ def arbeitsordner(cfg: dict) -> Path:
     return p
 
 
+def mockup_vorlagen(cfg: dict) -> str:
+    """Wo die Mockup-PSDs liegen (``_NEU_Vorlage``, rund 480 MB).
+
+    Sie werden NICHT mit ausgeliefert: ausgeliefert liegen die Werkzeuge als
+    Geschwisterordner unter VR-Tools, und dort hat ``CoverPreviews`` sie
+    schon. Ein zweites Mal wären es 480 MB umsonst auf dem Netzordner.
+
+    Ohne diese Auflösung suchte cover_previews sie neben der EIGENEN .exe —
+    also neben ``Buchdurchgang.exe``, wo sie nicht liegen, und der 3D-Schritt
+    fände keine Vorlage.
+    """
+    eigen = (cfg.get("cover_previews") or {}).get("vorlagen_dir")
+    if eigen:
+        return eigen
+    for name in ("CoverPreviews", "cover_previews"):
+        nachbar = APP_DIR.parent / name / "_NEU_Vorlage"
+        try:
+            if nachbar.is_dir():
+                return str(nachbar)
+        except OSError:
+            continue
+    return ""                       # nicht gefunden — cover_previews meldet es
+
+
 def cfg_cover(cfg: dict) -> dict:
     """Konfiguration für cover_previews.
 
@@ -174,6 +198,7 @@ def cfg_cover(cfg: dict) -> dict:
     """
     c = _misch(cp.DEFAULT_CONFIG, cfg.get("cover_previews", {}))
     c["artikeldaten_dir"] = str(arbeitsordner(cfg))
+    c["vorlagen_dir"] = mockup_vorlagen(cfg)
     return c
 
 
