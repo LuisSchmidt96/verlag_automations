@@ -570,6 +570,8 @@ class App(Tk):
                     self._vorschlag(*rest)
                 elif art == "shop_bereit":
                     self._shop_bereit(*rest)
+                elif art == "oeffnen_fehler":
+                    self._oeffnen_fehler(*rest)
                 elif art == "sftp_bericht":
                     self._sftp_bericht(*rest)
         except queue.Empty:
@@ -855,7 +857,7 @@ class App(Tk):
                             f"({'vorhanden' if existiert else 'wird angelegt'})")
 
     @staticmethod
-    def _oeffnen(pfad) -> None:
+    def _oeffnen(pfad, melden: bool = True) -> None:
         """Datei oder Ordner mit dem Programm des Systems öffnen.
 
         Wirft NICHT: gebaut wird mit ``console=False``, da gibt es kein
@@ -871,14 +873,49 @@ class App(Tk):
             else:
                 os.system(f'xdg-open "{p}" >/dev/null 2>&1 &')
         except Exception as e:
+            if not melden:
+                raise                    # der Aufrufer meldet über die Pumpe
             messagebox.showerror(
                 "Öffnen fehlgeschlagen",
                 f"{Path(p).name} ließ sich nicht öffnen:\n\n{e}\n\n"
                 f"Die Datei liegt hier:\n{p}")
 
+    def _oeffne_alle(self, pfade) -> None:
+        """Mehrere Dateien öffnen, ohne die Oberfläche anzuhalten.
+
+        NICHT im Hauptthread, und das ist der ganze Punkt: ``os.startfile``
+        kehrt bei Word NICHT sofort zurück. Die Dateizuordnung von .docx läuft
+        über DDE — Windows startet Word, wartet, bis es bereit ist, und wartet
+        auf dessen Antwort. Beim zweiten Dokument wartet es erneut, und zeigt
+        Word dabei einen Dialog (Geschützte Ansicht, Aktivierung), wartet es,
+        bis jemand ihn wegklickt. So lange steht die Tk-Schleife: das Fenster
+        nimmt keine Klicks mehr an und sieht abgestürzt aus. Genau das war zu
+        beobachten — ohne Word ging alles.
+
+        Fehler gehen über die Warteschlange zurück, nie direkt ins Fenster.
+        """
+        liste = [str(x) for x in pfade]
+
+        def arbeite():
+            for x in liste:
+                try:
+                    self._oeffnen(x, melden=False)
+                except Exception as e:
+                    self._nachrichten.put(("oeffnen_fehler", x, e, None))
+
+        threading.Thread(target=arbeite, daemon=True).start()
+
+    def _oeffnen_fehler(self, pfad, fehler, _unbenutzt=None):
+        messagebox.showerror(
+            "Öffnen fehlgeschlagen",
+            f"{Path(pfad).name} ließ sich nicht öffnen:\n\n{fehler}\n\n"
+            f"Die Datei liegt hier:\n{pfad}")
+
     def _ordner_oeffnen(self):
+        # Auch hier über den Hintergrund: der Explorer startet meist flott,
+        # auf einem trägen Netzordner aber nicht — und dann steht das Fenster.
         if self.ordner:
-            self._oeffnen(self.ordner)
+            self._oeffne_alle([self.ordner])
 
     # ------------------------------------------------------------------
     # Schritt 1 — Cover
@@ -991,8 +1028,7 @@ class App(Tk):
                 + "\n".join(f"• {Path(b).name}" for b in bilder)
                 + ("\n\n(Die 72-dpi-Fassungen sind pixelgleich und deshalb "
                    "nicht dabei.)" if len(bilder) < len(erg["erzeugt"]) else "")):
-            for b in bilder:
-                self._oeffnen(b)
+            self._oeffne_alle(bilder)
         self._male_schrittliste()
         self._pruefe_tor()
 
@@ -1043,17 +1079,20 @@ class App(Tk):
 
         # Der nächste Handgriff ist ohnehin Word: Werbetext kürzen und als PDF
         # exportieren. Also gleich anbieten, statt den Ordner suchen zu lassen.
+        # Word UND Browser: die .docx werden gekürzt und als PDF exportiert,
+        # die .html gehen so in den Newsletter — beide will man ansehen, und
+        # beide von Hand zu suchen ist derselbe Weg zweimal.
         docs = [d for d in dateien if str(d).lower().endswith(".docx")]
-        if docs and messagebox.askyesno(
-                "In Word öffnen?",
-                "Jetzt in Word öffnen, um den Werbetext auf eine Seite zu "
-                "kürzen?\n\n"
-                + "\n".join(f"• {Path(d).name}" for d in docs)
+        webs = [d for d in dateien if str(d).lower().endswith(".html")]
+        if (docs or webs) and messagebox.askyesno(
+                "Jetzt öffnen?",
+                "Die .docx in Word öffnen (Werbetext auf eine Seite kürzen) "
+                "und die .html im Browser (Ansicht prüfen)?\n\n"
+                + "\n".join(f"• {Path(d).name}" for d in docs + webs)
                 + "\n\nDenk daran, anschließend als PDF zu exportieren — "
                   f"unter PI_{self.paar['sc']}.pdf im selben Ordner, sonst "
                   "fehlt sie in Schritt 4."):
-            for d in docs:
-                self._oeffnen(d)
+            self._oeffne_alle(docs + webs)
         self._male_schrittliste()
         self._pruefe_tor()
 
