@@ -82,16 +82,50 @@ DEFAULT_CONFIG = {
     "bib_base_url": "https://verlag-regionalkultur.de/presse/bib/",
     # Fallback-Link auf die Webshop-Detailseite (nicht aus der XML ableitbar).
     "detail_fallback_url": "https://verlag-regionalkultur.de/",
-    # Einband-Code (ONIX b012) -> Klartext. Nur BB ist datenbelegt.
+    # Einband-Code (ONIX b012) -> Klartext, so wie der Verlag ihn schreibt.
+    # BC/PB hiessen hier "kartoniert" — das Wort benutzt der Verlag nicht;
+    # in PI, BI und im Shop heisst der Softcover "Broschur" (im Shopbestand
+    # 124 x "Broschur" gegen 1 x "kartoniert").
     "einband_map": {
         "BB": "fester Einband",
-        "BC": "kartoniert",
+        "BC": "Broschur",
         "BE": "Klappenbroschur",
-        "PB": "kartoniert",
+        "PB": "Broschur",
         "BZ": "Leinen",
     },
+    # Beugung nach „hrsg. von“: Name der Körperschaft -> Dativform samt
+    # Artikel. Aus den Daten ist sie nicht abzuleiten — „der Deutschen
+    # Waldenservereinigung“, aber „dem Stadtarchiv“, je nach Geschlecht des
+    # Namens. Geraten wird sie deshalb nicht: einmal hier eintragen, dann
+    # stimmt sie für jeden weiteren Band der Reihe.
+    "koerperschaft_dativ": {
+        "Deutsche Waldenservereinigung e.V. Ötisheim-Schönenberg":
+            "der Deutschen Waldenservereinigung e.V. Ötisheim-Schönenberg",
+    },
     "cover_timeout": 15,
+    # Wird erhöht, wenn eine der Tabellen oben sich ändert — sonst bliebe in
+    # einer gewachsenen config.json (sie liegt neben der .exe) für immer der
+    # alte Wert stehen, z. B. „kartoniert“ statt „Broschur“.
+    "config_version": 2,
 }
+
+# Rein technische Tabellen: die gehören dem Code, nicht dem Bediener, und
+# werden bei einer Versionserhöhung aufgefrischt.
+_VORGABE_SCHLUESSEL = ("einband_map",)
+
+
+def _migriere(cfg: dict) -> dict:
+    """Vorgaben auffrischen, ohne eigene Einträge zu verlieren."""
+    if cfg.get("config_version", 0) < DEFAULT_CONFIG["config_version"]:
+        for k in _VORGABE_SCHLUESSEL:
+            cfg[k] = json.loads(json.dumps(DEFAULT_CONFIG[k]))
+        cfg["config_version"] = DEFAULT_CONFIG["config_version"]
+    # Die Dativ-Tabelle wächst beim Verlag weiter — hier nur ergänzen, was
+    # noch fehlt, sonst wären eigene Einträge nach einem Update weg.
+    tabelle = cfg.setdefault("koerperschaft_dativ", {})
+    for k, v in DEFAULT_CONFIG["koerperschaft_dativ"].items():
+        tabelle.setdefault(k, v)
+    return cfg
 
 
 def lade_config() -> dict:
@@ -100,6 +134,8 @@ def lade_config() -> dict:
             cfg = json.load(f)
         for k, v in DEFAULT_CONFIG.items():
             cfg.setdefault(k, v)
+        cfg = _migriere(cfg)
+        speichere_config(cfg)          # damit die Auffrischung nicht verpufft
         return cfg
     with open(CONFIG_PFAD, "w", encoding="utf-8") as f:
         json.dump(DEFAULT_CONFIG, f, indent=2, ensure_ascii=False)
@@ -118,9 +154,12 @@ def speichere_config(cfg: dict) -> None:
 class Buchdaten:
     __slots__ = (
         "isbn13", "isbn13_formatiert", "shortcode",
-        "titel", "serientitel", "band", "band_text",
-        "herausgeber", "autoren",
-        "editoren_slash", "editoren_und", "mitwirkende",
+        "titel", "untertitel", "serientitel", "band", "band_text",
+        "herausgeber", "koerperschaften", "autoren",
+        # Kopf = die Zeilen über dem Werbetext, Kasten = der Rahmen darunter.
+        # Beide zeigen dieselben Namen, aber anders getrennt (siehe unten).
+        "editoren_kopf", "editoren_kasten", "kopf_zusatz",
+        "mitwirkende", "reihe_zeile", "kasten_zusatz",
         "umfang_zeile", "titel_band",
         "verlag", "preis", "verlag_isbn_preis", "datum",
         "cover_url", "werbetext_absaetze",
@@ -129,10 +168,10 @@ class Buchdaten:
     def __init__(self, **kw):
         for name in self.__slots__:
             setattr(self, name, kw.get(name, ""))
-        if not self.herausgeber:
-            self.herausgeber = []
-        if not self.autoren:
-            self.autoren = []
+        for liste in ("herausgeber", "koerperschaften", "autoren",
+                      "kasten_zusatz"):
+            if not getattr(self, liste):
+                setattr(self, liste, [])
         if not self.werbetext_absaetze:
             self.werbetext_absaetze = []
 
@@ -173,18 +212,29 @@ def _join_und(namen: list[str]) -> str:
     return ", ".join(namen[:-1]) + " und " + namen[-1]
 
 
-def _kontributoren(product, rolle: str) -> list[str]:
+def _kontributoren(product, rolle: str) -> list[dict]:
+    """[{'name': 'Albert de Lange', 'koerperschaft': False}, …]
+
+    b047 = Körperschaft („Deutsche Waldenservereinigung e.V. Ötisheim-
+    Schönenberg“). Gelesen wurde bisher nur b036, der Personenname — ein
+    körperschaftlicher Herausgeber fiel damit stillschweigend aus PI und BI
+    heraus. Bei den Waldenserstudien fehlte so die herausgebende Vereinigung
+    ganz, und in der Kopfzeile stand nur einer von mehreren Herausgebern.
+    """
     dd = product.find("descriptivedetail")
     if dd is None:
         return []
     beitraege = []
     for c in dd.findall("contributor"):
-        if _txt(c.find("b035")) == rolle:
-            seq = _txt(c.find("b034"))
-            name = _txt(c.find("b036"))
-            if name:
-                beitraege.append((int(seq) if seq.isdigit() else 999, name))
-    return [n for _, n in sorted(beitraege)]
+        if _txt(c.find("b035")) != rolle:
+            continue
+        seq = int(_txt(c.find("b034"))) if _txt(c.find("b034")).isdigit() else 999
+        koerperschaft = _txt(c.find("b047"))
+        name = koerperschaft or _txt(c.find("b036"))
+        if name:
+            beitraege.append((seq, {"name": name,
+                                    "koerperschaft": bool(koerperschaft)}))
+    return [k for _, k in sorted(beitraege, key=lambda x: x[0])]
 
 
 # VLB liefert dieselben Daten in zwei Schreibweisen: mit KURZ-Tags (<b012>) und
@@ -287,14 +337,19 @@ def lade_buchdaten(xml_pfad, cfg: dict | None = None) -> Buchdaten:
     isbn13_formatiert = f"{isbn_prefix}-{e[9:12]}-{e[12]}"
     shortcode = f"{e[7:9]}-{e[9:12]}-{e[12]}"
 
-    # -- Titel (Produktebene, NICHT die Collection-Kopie) ---------------
-    titel = ""
+    # -- Titel + Untertitel (Produktebene, NICHT die Collection-Kopie) --
+    # b029 (Untertitel) wurde bisher gar nicht gelesen. Er gehört im Kasten
+    # hinter den Titel und im Kopf unter den Titel — sonst fehlt bei einem
+    # Tagungsband die halbe Aussage („Zwischen Bild und Wirklichkeit in
+    # England, Piemont, Nordamerika und Württemberg (1600–1900)“).
+    titel, untertitel = "", ""
     if dd is not None:
         for td in dd.findall("titledetail"):
             if _txt(td.find("b202")) == "01":
                 for te in td.findall("titleelement"):
                     if _txt(te.find("x409")) == "01":
                         titel = _txt(te.find("b203"))
+                        untertitel = _txt(te.find("b029"))
                         break
             if titel:
                 break
@@ -314,12 +369,51 @@ def lade_buchdaten(xml_pfad, cfg: dict | None = None) -> Buchdaten:
     band_text = f"Band {band}" if band else ""
 
     # -- Beteiligte -----------------------------------------------------
-    herausgeber = _kontributoren(product, "B01")
-    autoren = _kontributoren(product, "A01")
-    editoren_slash = (" / ".join(herausgeber) + " (Hrsg.)") if herausgeber else ""
-    editoren_und = (_join_und(herausgeber) + " (Hrsg.)") if herausgeber else ""
+    hrsg = _kontributoren(product, "B01")
+    herausgeber = [k["name"] for k in hrsg if not k["koerperschaft"]]
+    koerperschaften = [k["name"] for k in hrsg if k["koerperschaft"]]
+    autoren = [k["name"] for k in _kontributoren(product, "A01")]
     mitwirkende = (f"Mit Beiträgen von {_join_und(autoren)}."
                    if autoren else "")
+
+    # -- Reihenzeile ----------------------------------------------------
+    # Die Reihe kommt nur dann in den Kasten, wenn sie NICHT der Buchtitel
+    # selbst ist: bei den „Bausteinen“ heisst die Reihe wie das Buch, dort
+    # stünde sonst zweimal dasselbe (so hält es auch das Musterdokument).
+    #
+    # Die herausgebende Körperschaft steht in dieser Zeile, nicht bei den
+    # Personen — so korrigiert der Verlag es von Hand. Gibt es keine
+    # Reihenzeile, gehört sie zu den Herausgebern, sonst verschwände sie
+    # wieder.
+    reihe_zeile = ""
+    if serientitel and serientitel.strip() != titel.strip():
+        stuecke = [serientitel]
+        if koerperschaften:
+            # „hrsg. von der Deutschen Waldenservereinigung e.V.“ — Artikel
+            # und Beugung stehen in der Tabelle koerperschaft_dativ. Fehlt
+            # ein Name dort, steht die ungebeugte Form da und das Werkzeug
+            # sagt Bescheid; geraten wird nicht.
+            dativ = cfg.get("koerperschaft_dativ", {})
+            gebeugt = []
+            for k in koerperschaften:
+                if k in dativ:
+                    gebeugt.append(dativ[k])
+                else:
+                    gebeugt.append(k)
+                    print(f"⚠ Körperschaft {k!r} steht nicht in "
+                          f"koerperschaft_dativ (config.json) — in der "
+                          f"Reihenzeile fehlt die Beugung ('der …'/'dem …').")
+            stuecke.append("hrsg. von " + _join_und(gebeugt))
+        if band:
+            stuecke.append(f"Bd. {band}")
+        reihe_zeile = ", ".join(stuecke)
+
+    # Kopf: „A, B und C (Hrsg.)“ — Kasten: „A, B, C (Hrsg.)“. Beides so
+    # vorgegeben; im alten Musterdokument war es genau andersherum (Kopf mit
+    # Schrägstrichen), das war nicht gewollt.
+    namen = herausgeber + ([] if reihe_zeile else koerperschaften)
+    editoren_kopf = (_join_und(namen) + " (Hrsg.)") if namen else ""
+    editoren_kasten = (", ".join(namen) + " (Hrsg.)") if namen else ""
 
     # -- Umfang / Einband ----------------------------------------------
     seiten = _txt(dd.find("extent/b219")) if dd is not None else ""
@@ -342,7 +436,23 @@ def lade_buchdaten(xml_pfad, cfg: dict | None = None) -> Buchdaten:
     if umfang_zeile:
         umfang_zeile += "."
 
-    titel_band = titel + (f". {band_text}." if band_text else ".")
+    # Kasten-Titelzeile: „Titel. Untertitel.“ Die Bandangabe steht hier nur
+    # noch, wenn es keine eigene Reihenzeile gibt (Muster: „Bausteine …
+    # Band 5.“) — sonst stünde sie zweimal.
+    stuecke = [titel]
+    if untertitel:
+        stuecke.append(untertitel)
+    if band_text and not reihe_zeile:
+        stuecke.append(band_text)
+    titel_band = ". ".join(t.rstrip(". ") for t in stuecke if t) + "."
+
+    # Kopfzeile unter dem Titel: der Untertitel, wenn es einen gibt, sonst
+    # die Bandangabe (Muster: „Band 5“). Beides zugleich stand dort nie.
+    kopf_zusatz = untertitel or band_text
+
+    # Zusatzzeilen im Kasten, in dieser Reihenfolge. Leere fallen weg —
+    # der Absatz wird dann entfernt, statt eine Leerzeile zu hinterlassen.
+    kasten_zusatz = [z for z in (reihe_zeile, mitwirkende) if z]
 
     # -- Verlag / Preis / Datum ----------------------------------------
     verlag = _txt(product.find("publishingdetail/publisher/b081")) \
@@ -383,9 +493,13 @@ def lade_buchdaten(xml_pfad, cfg: dict | None = None) -> Buchdaten:
 
     return Buchdaten(
         isbn13=isbn13, isbn13_formatiert=isbn13_formatiert, shortcode=shortcode,
-        titel=titel, serientitel=serientitel, band=band, band_text=band_text,
-        herausgeber=herausgeber, autoren=autoren,
-        editoren_slash=editoren_slash, editoren_und=editoren_und,
+        titel=titel, untertitel=untertitel,
+        serientitel=serientitel, band=band, band_text=band_text,
+        herausgeber=herausgeber, koerperschaften=koerperschaften,
+        autoren=autoren,
+        editoren_kopf=editoren_kopf, editoren_kasten=editoren_kasten,
+        kopf_zusatz=kopf_zusatz, reihe_zeile=reihe_zeile,
+        kasten_zusatz=kasten_zusatz,
         mitwirkende=mitwirkende, umfang_zeile=umfang_zeile, titel_band=titel_band,
         verlag=verlag, preis=preis, verlag_isbn_preis=verlag_isbn_preis,
         datum=datum, cover_url=cover_url, werbetext_absaetze=werbetext_absaetze,
@@ -418,15 +532,29 @@ def lade_cover_web(url: str, timeout: float = 15.0) -> bytes:
 TOKEN_WERBETEXT = "{{WERBETEXT}}"
 
 
+# Die Platzhalternamen stammen aus den Musterdokumenten und sind historisch —
+# sie sagen, WO etwas steht, nicht mehr, wie es getrennt ist:
+#
+#   {{EDITOREN}}      Kopf, über dem Titel      -> „A, B und C (Hrsg.)“
+#   {{BAND}}          Kopf, unter dem Titel     -> Untertitel, sonst „Band 5“
+#   {{EDITOREN_UND}}  Kasten, erste Zeile       -> „A, B, C (Hrsg.)“
+#   {{TITEL_BAND}}    Kasten, Titelzeile        -> „Titel. Untertitel.“
+#   {{MITWIRKENDE}}   Kasten, Zusatzzeilen      -> Reihe + „Mit Beiträgen von“
+#
+# Umbenennen hiesse, die beiden .docx-Vorlagen anzufassen; der Gewinn wäre
+# rein kosmetisch, das Risiko nicht.
 def _mapping(buch: Buchdaten) -> dict:
-    """Einzeilige Platzhalter -> Wert (Werbetext separat, siehe unten)."""
+    """Einzeilige Platzhalter -> Wert.
+
+    Werbetext und Kasten-Zusatzzeilen sind mehrzeilig und stehen deshalb
+    nicht hier, sondern in _fuelle_mehrzeilig.
+    """
     return {
-        "{{EDITOREN}}": buch.editoren_slash,
+        "{{EDITOREN}}": buch.editoren_kopf,
         "{{TITEL}}": buch.titel,
-        "{{BAND}}": buch.band_text,
-        "{{EDITOREN_UND}}": buch.editoren_und,
+        "{{BAND}}": buch.kopf_zusatz,
+        "{{EDITOREN_UND}}": buch.editoren_kasten,
         "{{TITEL_BAND}}": buch.titel_band,
-        "{{MITWIRKENDE}}": buch.mitwirkende,
         "{{UMFANG_ZEILE}}": buch.umfang_zeile,
         "{{VERLAG_ISBN_PREIS}}": buch.verlag_isbn_preis,
     }
@@ -472,17 +600,23 @@ def _ersetze_platzhalter(doc, mapping):
     _ersetze_in_absaetzen(list(_alle_absaetze(doc)), mapping)
 
 
-def _fuelle_werbetext(doc, absaetze: list[str]):
-    """Ersetzt den {{WERBETEXT}}-Absatz durch je einen Absatz pro Zeile,
-    unter Beibehaltung von Formatierung/Absatzstil der Vorlage."""
+def _fuelle_mehrzeilig(doc, token: str, zeilen: list[str],
+                       leer_behalten: bool = False):
+    """Ersetzt einen Platzhalter-Absatz durch je einen Absatz pro Zeile,
+    unter Beibehaltung von Formatierung und Absatzstil der Vorlage.
+
+    ``leer_behalten`` steuert den Fall ohne Inhalt: der Werbetext behält
+    seinen (leeren) Absatz, die Zusatzzeilen im Kasten nicht — dort bliebe
+    sonst eine Leerzeile zwischen Titel und Umfangzeile stehen.
+    """
     ziel = None
     for p in doc.paragraphs:
-        if p.text.strip() == TOKEN_WERBETEXT:
+        if p.text.strip() == token:
             ziel = p
             break
     if ziel is None:
         return
-    for line in (absaetze or [""]):
+    for line in (zeilen or ([""] if leer_behalten else [])):
         neu = deepcopy(ziel._p)
         para = Paragraph(neu, ziel._parent)
         runs = _textruns(para)
@@ -553,7 +687,9 @@ def _tausche_cover(doc, cover_bytes: bytes) -> bool:
 def generiere_docx(vorlage_pfad, buch: Buchdaten, cover_bytes: bytes | None,
                    ziel_pfad) -> None:
     doc = Document(str(vorlage_pfad))
-    _fuelle_werbetext(doc, buch.werbetext_absaetze)
+    _fuelle_mehrzeilig(doc, TOKEN_WERBETEXT, buch.werbetext_absaetze,
+                       leer_behalten=True)
+    _fuelle_mehrzeilig(doc, "{{MITWIRKENDE}}", buch.kasten_zusatz)
     _ersetze_platzhalter(doc, _mapping(buch))
     if cover_bytes:
         _tausche_cover(doc, cover_bytes)
@@ -571,11 +707,21 @@ def _html_mapping(buch: Buchdaten, detail_url: str, cfg: dict) -> dict:
     bib = cfg.get("bib_base_url", "")
     werbetext_html = "<br />\n".join(
         html.escape(a) for a in buch.werbetext_absaetze)
+    # Eine Zeile je Zusatzangabe, mit derselben Auszeichnung wie der Rest des
+    # Kastens. Ohne Zusatzangaben bleibt der Platz leer statt eine
+    # Leerzeile zu erzeugen — deshalb steht das Markup hier und nicht in der
+    # Vorlage.
+    zusatz_html = "".join(
+        f'<font size="2" style="font-style:italic">{html.escape(z)}</font>'
+        "<br />\n\t\t\t" for z in buch.kasten_zusatz)
     return {
-        "{{EDITOREN}}": html.escape(buch.editoren_slash),
+        "{{EDITOREN}}": html.escape(buch.editoren_kopf),
+        "{{EDITOREN_UND}}": html.escape(buch.editoren_kasten),
         "{{TITEL_HTML}}": html.escape(buch.titel),
+        "{{TITEL_BAND}}": html.escape(buch.titel_band),
+        "{{KASTEN_ZUSATZ_HTML}}": zusatz_html,
         "{{BAND}}": html.escape(buch.band),
-        "{{BAND_TEXT}}": html.escape(buch.band_text),
+        "{{BAND_TEXT}}": html.escape(buch.kopf_zusatz),
         "{{DATUM}}": html.escape(buch.datum),
         "{{DETAIL_URL}}": html.escape(detail_url, quote=True),
         "{{COVER_THUMB_URL}}": html.escape(f"{nl}{buch.shortcode}.png", quote=True),

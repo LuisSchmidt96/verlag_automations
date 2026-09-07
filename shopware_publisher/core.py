@@ -86,7 +86,7 @@ DEFAULT_CONFIG = {
     # Wird bei jeder Änderung der Verlags-Vorgaben (unten) erhöht, damit
     # bestehende config.json-Dateien die neuen Werte übernehmen (siehe
     # _migriere). Ohne das blieben alte Werte per setdefault eingefroren.
-    "config_version": 4,
+    "config_version": 5,
 
     # --- Umgebungen ---------------------------------------------------------
     "aktive_umgebung": "dev",
@@ -170,11 +170,15 @@ DEFAULT_CONFIG = {
     # --- Buchdaten ----------------------------------------------------------
     "verlag_name": "verlag regionalkultur",
     "isbn_prefix": "978-3-95505",
+    # "kartoniert" stand hier für BC/PB — das Wort benutzt der Verlag nicht.
+    # Im Shopbestand steht 124 x "Broschur" gegen genau 1 x "kartoniert"
+    # (gezählt beim Lernen des Gewichtsmodells); PI und BI schreiben es
+    # ebenso. Das Wort landet im Format-Feld und in der Beschreibung.
     "einband_map": {
         "BB": "fester Einband",
-        "BC": "kartoniert",
+        "BC": "Broschur",
         "BE": "Klappenbroschur",
-        "PB": "kartoniert",
+        "PB": "Broschur",
         "BZ": "Leinen",
     },
     "last_input_dir": "",
@@ -202,7 +206,10 @@ _VORGABE_SCHLUESSEL = ("aktiv", "default_stock", "is_closeout", "restock_time",
                        # (Region)" statt "Karlsruhe-Region"). Gewachsene
                        # Configs müssen das mitbekommen.
                        "autoren_wurzel", "warengruppe_kategorien",
-                       "ort_regionen")
+                       "ort_regionen",
+                       # BC/PB heissen "Broschur", nicht "kartoniert" — das
+                       # muss auch in einer gewachsenen config.json ankommen.
+                       "einband_map")
 
 
 def _migriere(cfg: dict) -> dict:

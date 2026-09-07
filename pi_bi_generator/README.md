@@ -20,6 +20,47 @@ Der PDF-Export erfolgt weiterhin manuell aus Word.
 Der Werbetext wird **vollständig** aus der XML übernommen; die prüfende Person
 kürzt ihn anschließend in Word, bis er auf eine Seite passt.
 
+Der Einband kommt aus ONIX `b012` über `einband_map`: `BB` → „fester Einband“,
+`BC`/`PB` → „**Broschur**“ (nicht „kartoniert“ — das Wort benutzt der Verlag
+nicht), `BE` → „Klappenbroschur“, `BZ` → „Leinen“.
+
+## Was wo steht
+
+Die Dokumente haben zwei Stellen, an denen dieselben Angaben auftauchen — den
+**Kopf** über dem Werbetext und den **Kasten** darunter. Sie sind bewusst
+verschieden gesetzt:
+
+| Zeile | Kopf | Kasten |
+|-------|------|--------|
+| Beteiligte | `A, B und C (Hrsg.)` | `A, B, C (Hrsg.)` |
+| Titel | nur der Titel | `Titel. Untertitel.` |
+| darunter | Untertitel, sonst `Band 5` | Reihenzeile, `Mit Beiträgen von …` |
+
+Dazu die Regeln, die man sonst wieder herausnimmt:
+
+* **Körperschaften sind Herausgeber.** ONIX `b047` („Deutsche
+  Waldenservereinigung e.V. Ötisheim-Schönenberg“) wurde früher gar nicht
+  gelesen — ein solcher Herausgeber fiel ersatzlos aus PI und BI heraus.
+* **Die Reihe steht nur im Kasten, wenn sie nicht der Buchtitel selbst ist.**
+  Bei den „Bausteinen“ heisst die Reihe wie das Buch; dort stünde sonst zweimal
+  dasselbe. Ohne Reihenzeile bleibt die Bandangabe in der Titelzeile
+  (`… und ihres Umlands. Band 5.`), mit Reihenzeile wandert sie dorthin
+  (`Waldenserstudien, hrsg. von …, Bd. 9`).
+* **Die herausgebende Körperschaft steht in der Reihenzeile**, nicht bei den
+  Personen — es sei denn, es gibt keine Reihe; dann steht sie bei den
+  Herausgebern, sonst verschwände sie wieder.
+* **`koerperschaft_dativ` in der `config.json`** hält die gebeugte Form für
+  „hrsg. von …“: `"Deutsche Waldenservereinigung e.V. …"` →
+  `"der Deutschen Waldenservereinigung e.V. …"`. Ob es *der*, *dem* oder *den*
+  heisst, hängt am Geschlecht des Namens und steht in keinen Daten — geraten
+  wird es deshalb nicht. Fehlt ein Name in der Tabelle, erscheint die
+  ungebeugte Form und das Werkzeug sagt es in der Ausgabe.
+
+**Was das Werkzeug nicht wissen kann:** Wer im VLB als `A01` (Autor) steht,
+wird als „Mit Beiträgen von …“ geführt — auch wenn er auf dem Umschlag als
+Mitherausgeber erscheint. Das steht so in der ONIX; korrigiert werden muss es
+im VLB oder von Hand in Word.
+
 ## Wichtig
 
 - **Web-Assets manuell hochladen:** Die HTML-Fassung verweist auf
