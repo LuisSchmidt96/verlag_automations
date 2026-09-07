@@ -255,6 +255,7 @@ SCHRITTE: list[dict] = [
             "Kategorien gewählt",
             "Beschreibung im Admin angesehen",
             "Cover sitzt",
+            "Einmal vollständig kontrolliert",
             "(optional) Buch auf aktiv gestellt",
         ],
     },
@@ -282,6 +283,21 @@ def schritt(schritt_id: str) -> dict:
         if s["id"] == schritt_id:
             return s
     raise KeyError(schritt_id)
+
+
+# Ein Punkt, der mit "(optional)" beginnt, hält das Tor nicht auf. So lässt
+# sich Erwünschtes von Nötigem trennen, ohne eine zweite Liste zu führen —
+# und die Markierung steht dort, wo man sie liest.
+OPTIONAL_PRAEFIX = "(optional)"
+
+
+def ist_optional(punkt: str) -> bool:
+    return (punkt or "").strip().lower().startswith(OPTIONAL_PRAEFIX)
+
+
+def pflichtpunkte(schritt_id: str) -> list[str]:
+    """Die Punkte, die für „Weiter" gesetzt sein müssen."""
+    return [p for p in schritt(schritt_id)["checkliste"] if not ist_optional(p)]
 
 
 # ---------------------------------------------------------------------
@@ -437,9 +453,13 @@ def ist_gelaufen(stand: dict, schritt_id: str) -> bool:
 
 
 def ist_abgehakt(stand: dict, schritt_id: str) -> bool:
-    """Alle Häkchen des Schritts gesetzt? Nur dann geht es weiter."""
+    """Alle PFLICHT-Häkchen gesetzt? Nur dann geht es weiter.
+
+    Optionale Punkte („(optional) …") zählen nicht mit: sie sind Erinnerung,
+    keine Bedingung.
+    """
     gesetzt = set(stand.get("schritte", {}).get(schritt_id, {}).get("haken", []))
-    return set(schritt(schritt_id)["checkliste"]) <= gesetzt
+    return set(pflichtpunkte(schritt_id)) <= gesetzt
 
 
 def ist_fertig(stand: dict, schritt_id: str) -> bool:

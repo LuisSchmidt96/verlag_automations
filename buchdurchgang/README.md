@@ -163,6 +163,10 @@ sich damit fortsetzen — Fenster zu, Fenster auf, Stand ist wieder da.
 Die Häkchen selbst sind bis zum Lauf gesperrt — eine Checkliste, die man vorher
 abhaken kann, prüft nichts.
 
+Ein Punkt, der mit **`(optional)`** beginnt, hält das Tor nicht auf. So lässt
+sich Erwünschtes von Nötigem trennen, ohne eine zweite Liste zu führen, und die
+Markierung steht dort, wo man sie liest.
+
 In der Schrittliste links: `·` offen · `◐` gelaufen, aber nicht abgehakt ·
 `✓` fertig.
 
