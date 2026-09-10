@@ -1,7 +1,20 @@
 ﻿<#
     update_and_build.ps1
     --------------------
-    Holt die neuesten Aenderungen aus dem Git-Repo und baut alle Tools neu.
+    Holt die neuesten Aenderungen aus dem Git-Repo und baut nur die Tools neu,
+    an denen sich seit dem letzten Build etwas geaendert hat.
+
+    Welche Tools gebaut werden, entscheidet ein Baustempel je Tool: die Git-SHA,
+    aus der es zuletzt erfolgreich gebaut wurde (unter $StampDir, lokal neben der
+    venv). Ein Tool wird neu gebaut, wenn seit seinem Stempel etwas in seinem
+    eigenen Paket ODER in einem Paket, das es benutzt, ODER in requirements.txt
+    geaendert wurde - oder wenn sein fertiger Ordner fehlt. Buchdurchgang haengt
+    an cover_previews, pi_bi_generator und shopware_publisher (siehe $Deps);
+    aendert sich eines davon, wird Buchdurchgang mitgebaut.
+
+    Der Baustempel misst gegen HEAD NACH dem Pull, nicht nur gegen das, was der
+    Pull gebracht hat - so werden auch lokale Commits erfasst, die schon da
+    waren. Mit -Force werden alle Tools gebaut, egal was sich geaendert hat.
 
     Ergebnis-Layout im gemeinsamen VR-Tools-Ordner (eine Ebene UEBER dem Repo),
     damit alle fertigen Programme ordentlich nebeneinander liegen:
@@ -46,6 +59,11 @@
     Voraussetzung: Python 3.12 (inkl. tkinter) und git im PATH.
 #>
 
+param(
+    # Alle Tools bauen, auch die unveraenderten.
+    [switch]$Force
+)
+
 $ErrorActionPreference = 'Stop'
 
 # --- Pfade bestimmen --------------------------------------------------------
@@ -65,7 +83,14 @@ if ($ShareBereit) {
 
 # --- 1) Neueste Aenderungen holen ------------------------------------------
 Write-Host "`n[1/4] git pull ..." -ForegroundColor Cyan
+$VorPull = (git -C $RepoRoot rev-parse HEAD).Trim()
 git -C $RepoRoot pull --ff-only
+$NachPull = (git -C $RepoRoot rev-parse HEAD).Trim()
+if ($VorPull -ne $NachPull) {
+    Write-Host "  $($VorPull.Substring(0,7)) -> $($NachPull.Substring(0,7))" -ForegroundColor DarkGray
+} else {
+    Write-Host "  schon aktuell ($($NachPull.Substring(0,7)))" -ForegroundColor DarkGray
+}
 
 # --- 2) Virtuelle Umgebung sicherstellen (LOKAL, nicht auf dem Share) -------
 Write-Host "`n[2/4] Virtuelle Umgebung / Abhaengigkeiten ..." -ForegroundColor Cyan
@@ -103,6 +128,57 @@ $Specs = Get-ChildItem -Path $RepoRoot -Recurse -Filter *.spec |
 if (-not $Specs) {
     Write-Warning "Keine *.spec-Dateien gefunden - nichts zu bauen."
     return
+}
+
+# Welches Tool haengt an welchen fremden Paketen? Nur Buchdurchgang benutzt
+# andere Werkzeuge (es importiert cover_previews, pi_bi_generator und
+# shopware_publisher); alle uebrigen sind fuer sich. Aendert sich ein
+# benutztes Paket, muss der Abhaengige mitgebaut werden. Schluessel ist der
+# Paket-Ordnername (== $Spec.Directory.Name), wie er in den Git-Pfaden steht.
+$Deps = @{
+    'buchdurchgang' = @('cover_previews', 'pi_bi_generator', 'shopware_publisher')
+}
+
+# Baustempel je Tool (Git-SHA des letzten erfolgreichen Builds), lokal neben
+# der venv. Bleibt ein Build aus, behaelt das Tool seinen alten Stempel und
+# wird beim naechsten Mal erneut geprueft.
+$StampDir = Join-Path $BuildHome 'build_stamps'
+New-Item -ItemType Directory -Force -Path $StampDir | Out-Null
+
+# git diff je Ausgangs-SHA nur einmal rechnen (die Tools teilen sich meist
+# denselben Stempel). $null bedeutet: SHA unbekannt (z. B. durch gc) -> neu bauen.
+$DiffCache = @{}
+function Get-GeaenderteDateien([string]$Von, [string]$Bis) {
+    if (-not $DiffCache.ContainsKey($Von)) {
+        $d = git -C $RepoRoot diff --name-only $Von $Bis 2>$null
+        if ($LASTEXITCODE -ne 0) { $DiffCache[$Von] = $null }
+        else { $DiffCache[$Von] = @($d | Where-Object { $_ }) }
+    }
+    return $DiffCache[$Von]
+}
+
+# Entscheidet (und begruendet), ob ein Tool gebaut werden muss.
+function Get-BauGrund {
+    param([string]$PkgName, [string]$OutLocal, [string]$OutShare, [string]$Stempel)
+
+    if ($Force)                     { return 'erzwungen (-Force)' }
+    if (-not (Test-Path $OutLocal)) { return 'kein lokaler Build' }
+    if ($ShareBereit -and -not (Test-Path $OutShare)) { return 'fehlt auf dem Share' }
+    if (-not $Stempel)              { return 'kein Baustempel' }
+
+    $diff = Get-GeaenderteDateien $Stempel $NachPull
+    if ($null -eq $diff)            { return 'Baustempel unbekannt' }
+    if ($diff.Count -eq 0)          { return $null }        # nichts geaendert
+    if ($diff -contains 'requirements.txt') { return 'requirements.txt geaendert' }
+
+    # Beobachtet: das eigene Paket + alle benutzten Pakete.
+    $beobachtet = @($PkgName) + $Deps[$PkgName]
+    $treffer = $diff |
+        ForEach-Object { ($_ -split '/')[0] } |
+        Where-Object { $beobachtet -contains $_ } |
+        Sort-Object -Unique
+    if ($treffer) { return "geaendert: $($treffer -join ', ')" }
+    return $null
 }
 
 # Die Mockup-Vorlagen (~480 MB) gehoeren nicht in die .exe, muessen aber
@@ -143,9 +219,26 @@ function Copy-Programmteile {
     if ($Anleitung -and (Test-Path $Anleitung)) { Copy-Item $Anleitung $Dst -Force }
 }
 
+$Gebaut        = @()
+$Uebersprungen = @()
+
 foreach ($Spec in $Specs) {
-    $Name = $Spec.BaseName                       # == COLLECT-Name in der .spec
-    Write-Host "  -> $($Spec.Name)" -ForegroundColor Yellow
+    $Name    = $Spec.BaseName                    # == COLLECT-Name in der .spec
+    $PkgName = $Spec.Directory.Name              # Paket-Ordner, wie in Git-Pfaden
+    $OutLocal  = Join-Path $OutRoot   $Name
+    $OutShare  = Join-Path $ShareRoot $Name
+    $StampFile = Join-Path $StampDir "$Name.sha"
+    $Stempel   = if (Test-Path $StampFile) { (Get-Content $StampFile -Raw).Trim() } else { '' }
+
+    $Grund = Get-BauGrund -PkgName $PkgName -OutLocal $OutLocal `
+                          -OutShare $OutShare -Stempel $Stempel
+    if (-not $Grund) {
+        Write-Host "  = $($Spec.Name) unveraendert - uebersprungen" -ForegroundColor DarkGray
+        $Uebersprungen += $Name
+        continue
+    }
+
+    Write-Host "  -> $($Spec.Name)  ($Grund)" -ForegroundColor Yellow
     & $VenvPython -m PyInstaller --noconfirm --log-level WARN `
         --distpath $StageDir --workpath $WorkPath $Spec.FullName
     if ($LASTEXITCODE -ne 0) { throw "PyInstaller-Build fehlgeschlagen: $Name" }
@@ -153,12 +246,21 @@ foreach ($Spec in $Specs) {
     $Src       = Join-Path $StageDir $Name
     $Anleitung = Join-Path $Spec.Directory 'Anleitung.txt'
 
-    Copy-Programmteile -Src $Src -Dst (Join-Path $OutRoot $Name) -Anleitung $Anleitung
+    Copy-Programmteile -Src $Src -Dst $OutLocal -Anleitung $Anleitung
 
     # Und auf den Share - von dort holt der Launcher die neue Fassung ab.
     if ($ShareBereit) {
-        Copy-Programmteile -Src $Src -Dst (Join-Path $ShareRoot $Name) -Anleitung $Anleitung
+        Copy-Programmteile -Src $Src -Dst $OutShare -Anleitung $Anleitung
     }
+
+    # Erst nach erfolgreichem Build + Kopieren stempeln: bricht etwas vorher ab,
+    # bleibt der alte Stempel stehen und der naechste Lauf versucht es erneut.
+    Set-Content -Path $StampFile -Value $NachPull -Encoding ASCII
+    $Gebaut += $Name
+}
+
+if (-not $Gebaut) {
+    Write-Host "  Nichts zu bauen - alle Tools sind aktuell." -ForegroundColor Green
 }
 
 # --- 3a) Mockup-Vorlagen: EINE Kopie fuer alle Werkzeuge --------------------
@@ -192,15 +294,17 @@ if ($ShareBereit) {
 }
 
 # --- 4) Ergebnis ------------------------------------------------------------
-Write-Host "`n[4/4] Fertige Tools:" -ForegroundColor Green
-foreach ($Spec in $Specs) {
-    $ToolDir = Join-Path $OutRoot $Spec.BaseName   # COLLECT-Name == .spec-Basisname
-    if (Test-Path $ToolDir) { Write-Host "  $ToolDir" }
+Write-Host "`n[4/4] Ergebnis:" -ForegroundColor Green
+if ($Gebaut) {
+    Write-Host "  Neu gebaut: $($Gebaut -join ', ')" -ForegroundColor Green
 }
-if ($ShareBereit) {
+if ($Uebersprungen) {
+    Write-Host "  Unveraendert: $($Uebersprungen -join ', ')" -ForegroundColor DarkGray
+}
+if ($Gebaut -and $ShareBereit) {
     Write-Host "`nVeroeffentlicht auf $ShareRoot :" -ForegroundColor Green
-    foreach ($Spec in $Specs) {
-        $ToolDir = Join-Path $ShareRoot $Spec.BaseName
+    foreach ($Name in $Gebaut) {
+        $ToolDir = Join-Path $ShareRoot $Name
         if (Test-Path $ToolDir) { Write-Host "  $ToolDir" }
     }
     Write-Host "`nDie Kollegen bekommen das beim naechsten Start automatisch." -ForegroundColor Green
