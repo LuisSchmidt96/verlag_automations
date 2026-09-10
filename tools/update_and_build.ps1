@@ -16,14 +16,17 @@
     Pull gebracht hat - so werden auch lokale Commits erfasst, die schon da
     waren. Mit -Force werden alle Tools gebaut, egal was sich geaendert hat.
 
-    Ergebnis-Layout im gemeinsamen VR-Tools-Ordner (eine Ebene UEBER dem Repo),
-    damit alle fertigen Programme ordentlich nebeneinander liegen:
+    Ergebnis-Layout im MASTER-Ordner auf dem NAS ($MasterRoot). Von dort holen
+    die Clients ihre Fassung ab; einen zweiten Ablageort gibt es nicht mehr:
 
-        VR-Tools\
+        \\VR-Archiv\VR-Austausch\VR-Tools\
         |-- repo\                 <- dieses Git-Repo (Quellcode)
-        |-- BooxpressEtiketten\   <- fertiges Tool  (Doppelklick auf die .exe)
+        |-- launch.ps1            <- Launcher, den die Verknuepfungen aufrufen
+        |-- Einrichten.cmd        <- legt die Verknuepfungen an
+        |-- _NEU_Vorlage\         <- Mockup-Vorlagen, EINE Kopie fuer alle
+        |-- BooxpressEtiketten\   <- fertiges Tool
         |-- PiBiGenerator\        <- fertiges Tool
-        `-- CoverPreviews\        <- fertiges Tool  (inkl. _NEU_Vorlage\)
+        `-- CoverPreviews\        <- fertiges Tool
 
     Jedes Tool hat eine eigene *.spec-Datei in seinem Unterordner. Das Skript
     findet automatisch ALLE *.spec-Dateien im Repo und baut sie einzeln - direkt
@@ -36,11 +39,17 @@
     $Beigaben - fuer CoverPreviews sind das die Mockup-Vorlagen (_NEU_Vorlage,
     rund 460 MB), die neben der .exe liegen muessen.
 
-    Zusaetzlich werden die fertigen Ordner auf den Share gespiegelt, zusammen
-    mit dem Launcher (launch.ps1 / Einrichten.cmd, siehe daneben). Die Kollegen
-    kopieren nichts mehr von Hand: ihre Verknuepfung ruft launch.ps1 auf, das
-    die neue Fassung beim Start abholt und dann startet. Veroeffentlichen =
-    dieses Skript laufen lassen, mehr nicht.
+    Der Launcher (launch.ps1 / einrichten.ps1 / Einrichten.cmd) wird mit
+    veroeffentlicht und liegt neben den Tool-Ordnern. Die Kollegen kopieren
+    nichts von Hand: ihre Verknuepfung ruft launch.ps1 auf, das die neue
+    Fassung beim Start abholt und dann startet. Veroeffentlichen = dieses
+    Skript laufen lassen, mehr nicht.
+
+    FRUEHER lag der Master auf \\C019\d\VR-Tools und jedes Tool wurde zweimal
+    uebertragen (einmal neben das Repo, einmal auf C019). Beides faellt weg:
+    Master ist der NAS. Verknuepfungen, die noch auf C019 zeigen, bekommen
+    KEINE Aktualisierungen mehr - dort muss einmal Einrichten.cmd vom NAS
+    laufen.
 
     Uebertragen werden dabei nur die PROGRAMMTEILE (.exe, _internal\,
     Anleitung.txt, Beigaben) - nicht die Nutzdaten daneben (config.json,
@@ -67,18 +76,31 @@ param(
 $ErrorActionPreference = 'Stop'
 
 # --- Pfade bestimmen --------------------------------------------------------
-$RepoRoot  = Split-Path -Parent $PSScriptRoot   # ...\VR-Tools\repo
-$OutRoot   = Split-Path -Parent $RepoRoot       # ...\VR-Tools  (Ziel der Tools)
-$ShareRoot = '\\C019\d\VR-Tools'                # Master: von hier holt der
-                                                # Launcher die neue Fassung
-$ShareBereit = Test-Path $ShareRoot
+$RepoRoot = Split-Path -Parent $PSScriptRoot    # ...\VR-Tools\repo
 
-Write-Host "Repo:    $RepoRoot" -ForegroundColor Cyan
-Write-Host "Ausgabe: $OutRoot"  -ForegroundColor Cyan
-if ($ShareBereit) {
-    Write-Host "Share:   $ShareRoot" -ForegroundColor Cyan
-} else {
-    Write-Warning "Share $ShareRoot nicht erreichbar - es wird nur lokal gebaut."
+# Wohin veroeffentlicht wird. FEST verdrahtet und bewusst NICHT aus $RepoRoot
+# abgeleitet: es liegen mehrere Klone herum (u. a. noch einer auf C019), und
+# ein Lauf aus dem falschen Klon wuerde sonst neben DIESEN Klon legen - die
+# Kollegen holten weiter die alte Fassung ab. Muss mit SHARE_VORLAGEN in
+# cover_previews/core.py und buchdurchgang/core.py uebereinstimmen; dort steht
+# derselbe Pfad fest im Code.
+$MasterRoot = '\\VR-Archiv\VR-Austausch\VR-Tools'
+
+Write-Host "Repo:   $RepoRoot"   -ForegroundColor Cyan
+Write-Host "Master: $MasterRoot" -ForegroundColor Cyan
+
+if (-not (Test-Path $MasterRoot)) {
+    throw ("Der Master-Ordner $MasterRoot ist nicht erreichbar. " +
+           "Ohne ihn hat das Veroeffentlichen keinen Zweck - bitte erst mit " +
+           "dem Netzlaufwerk verbinden.")
+}
+
+# Gebaut wird immer der Stand DIESES Repos. Wer aus einem anderen Klon baut,
+# soll das wenigstens sehen.
+$RepoErwartet = Join-Path $MasterRoot 'repo'
+if ($RepoRoot.TrimEnd('\') -ne $RepoErwartet.TrimEnd('\')) {
+    Write-Warning "Gebaut wird aus $RepoRoot, veroeffentlicht nach $MasterRoot."
+    Write-Warning "Das ist nicht der Klon neben dem Master ($RepoErwartet)."
 }
 
 # --- 1) Neueste Aenderungen holen ------------------------------------------
@@ -119,7 +141,7 @@ if (-not (Test-Path $VenvPython)) {
 #   * _internal\  = reine PyInstaller-Ausgabe  -> spiegeln (/MIR)
 #   * *.exe       = das Programm selbst        -> ueberschreiben
 # Alles andere (die Nutzdaten des Anwenders) bleibt auf dem Share unangetastet.
-Write-Host "`n[3/4] Tools bauen (lokal) und nach $OutRoot spiegeln ..." -ForegroundColor Cyan
+Write-Host "`n[3/4] Tools bauen (lokal) und nach $MasterRoot spiegeln ..." -ForegroundColor Cyan
 Set-Location $BuildHome
 $StageDir = Join-Path $BuildHome 'dist'
 $Specs = Get-ChildItem -Path $RepoRoot -Recurse -Filter *.spec |
@@ -159,12 +181,11 @@ function Get-GeaenderteDateien([string]$Von, [string]$Bis) {
 
 # Entscheidet (und begruendet), ob ein Tool gebaut werden muss.
 function Get-BauGrund {
-    param([string]$PkgName, [string]$OutLocal, [string]$OutShare, [string]$Stempel)
+    param([string]$PkgName, [string]$OutDir, [string]$Stempel)
 
-    if ($Force)                     { return 'erzwungen (-Force)' }
-    if (-not (Test-Path $OutLocal)) { return 'kein lokaler Build' }
-    if ($ShareBereit -and -not (Test-Path $OutShare)) { return 'fehlt auf dem Share' }
-    if (-not $Stempel)              { return 'kein Baustempel' }
+    if ($Force)                   { return 'erzwungen (-Force)' }
+    if (-not (Test-Path $OutDir)) { return 'noch nicht veroeffentlicht' }
+    if (-not $Stempel)            { return 'kein Baustempel' }
 
     $diff = Get-GeaenderteDateien $Stempel $NachPull
     if ($null -eq $diff)            { return 'Baustempel unbekannt' }
@@ -187,11 +208,12 @@ function Get-BauGrund {
 # Kopie jedes Anwenders. CoverPreviews und Buchdurchgang kennen diesen Pfad
 # fest im Code (SHARE_VORLAGEN); ueber die config.json ginge es nicht, die
 # wird bewusst nicht gespiegelt und gaelte nur auf einem Rechner.
-# Bewusst NICHT von $ShareRoot abgeleitet: die Vorlagen liegen auf dem NAS
-# (VR-Austausch ist erreichbar und beschreibbar), nicht auf C019. Muss mit
-# SHARE_VORLAGEN in cover_previews/core.py und buchdurchgang/core.py
-# uebereinstimmen - dort steht derselbe Pfad fest im Code.
-$VorlagenWurzel  = '\\VR-Archiv\VR-Austausch\VR-Tools'
+# Seit der Master der NAS ist, ist das derselbe Ordner - frueher zeigte
+# $ShareRoot auf C019, und die Vorlagen mussten getrennt verdrahtet werden.
+# Muss weiterhin mit SHARE_VORLAGEN in cover_previews/core.py und
+# buchdurchgang/core.py uebereinstimmen: dort steht derselbe Pfad fest im
+# Code, und der wird NICHT von hier abgeleitet.
+$VorlagenWurzel  = $MasterRoot
 $VorlagenZiel    = Join-Path $VorlagenWurzel '_NEU_Vorlage'
 $VorlagenQuellen = @(
     '\\C019\d\Online\Webseite\Artikeldaten\_NEU_Vorlage',       # Original
@@ -225,13 +247,11 @@ $Uebersprungen = @()
 foreach ($Spec in $Specs) {
     $Name    = $Spec.BaseName                    # == COLLECT-Name in der .spec
     $PkgName = $Spec.Directory.Name              # Paket-Ordner, wie in Git-Pfaden
-    $OutLocal  = Join-Path $OutRoot   $Name
-    $OutShare  = Join-Path $ShareRoot $Name
+    $OutDir    = Join-Path $MasterRoot $Name
     $StampFile = Join-Path $StampDir "$Name.sha"
     $Stempel   = if (Test-Path $StampFile) { (Get-Content $StampFile -Raw).Trim() } else { '' }
 
-    $Grund = Get-BauGrund -PkgName $PkgName -OutLocal $OutLocal `
-                          -OutShare $OutShare -Stempel $Stempel
+    $Grund = Get-BauGrund -PkgName $PkgName -OutDir $OutDir -Stempel $Stempel
     if (-not $Grund) {
         Write-Host "  = $($Spec.Name) unveraendert - uebersprungen" -ForegroundColor DarkGray
         $Uebersprungen += $Name
@@ -246,12 +266,9 @@ foreach ($Spec in $Specs) {
     $Src       = Join-Path $StageDir $Name
     $Anleitung = Join-Path $Spec.Directory 'Anleitung.txt'
 
-    Copy-Programmteile -Src $Src -Dst $OutLocal -Anleitung $Anleitung
-
-    # Und auf den Share - von dort holt der Launcher die neue Fassung ab.
-    if ($ShareBereit) {
-        Copy-Programmteile -Src $Src -Dst $OutShare -Anleitung $Anleitung
-    }
+    # Einmal uebertragen, nicht zweimal: Master und Ablageort sind derselbe
+    # Ordner. Von hier holt der Launcher die neue Fassung ab.
+    Copy-Programmteile -Src $Src -Dst $OutDir -Anleitung $Anleitung
 
     # Erst nach erfolgreichem Build + Kopieren stempeln: bricht etwas vorher ab,
     # bleibt der alte Stempel stehen und der naechste Lauf versucht es erneut.
@@ -286,11 +303,9 @@ if (Test-Path $VorlagenWurzel) {
 # dort einmalig die Verknuepfungen an. Beide muessen NEBEN den Tool-Ordnern auf
 # dem Share liegen: launch.ps1 leitet den Master-Pfad aus dem eigenen Ort ab
 # ($PSScriptRoot), damit der Servername nirgends fest verdrahtet ist.
-if ($ShareBereit) {
-    Write-Host "  -> Launcher (launch.ps1, Einrichten.cmd)" -ForegroundColor Yellow
-    foreach ($Datei in @('launch.ps1', 'einrichten.ps1', 'Einrichten.cmd')) {
-        Copy-Item (Join-Path $PSScriptRoot $Datei) $ShareRoot -Force
-    }
+Write-Host "  -> Launcher (launch.ps1, Einrichten.cmd)" -ForegroundColor Yellow
+foreach ($Datei in @('launch.ps1', 'einrichten.ps1', 'Einrichten.cmd')) {
+    Copy-Item (Join-Path $PSScriptRoot $Datei) $MasterRoot -Force
 }
 
 # --- 4) Ergebnis ------------------------------------------------------------
@@ -301,14 +316,16 @@ if ($Gebaut) {
 if ($Uebersprungen) {
     Write-Host "  Unveraendert: $($Uebersprungen -join ', ')" -ForegroundColor DarkGray
 }
-if ($Gebaut -and $ShareBereit) {
-    Write-Host "`nVeroeffentlicht auf $ShareRoot :" -ForegroundColor Green
+if ($Gebaut) {
+    Write-Host "`nVeroeffentlicht auf $MasterRoot :" -ForegroundColor Green
     foreach ($Name in $Gebaut) {
-        $ToolDir = Join-Path $ShareRoot $Name
+        $ToolDir = Join-Path $MasterRoot $Name
         if (Test-Path $ToolDir) { Write-Host "  $ToolDir" }
     }
-    Write-Host "`nDie Kollegen bekommen das beim naechsten Start automatisch." -ForegroundColor Green
-    Write-Host "Neuer PC: einmal $ShareRoot\Einrichten.cmd doppelklicken."     -ForegroundColor Green
+    Write-Host "`nDie Kollegen bekommen das beim naechsten Start automatisch," -ForegroundColor Green
+    Write-Host "SOFERN ihre Verknuepfung auf $MasterRoot zeigt." -ForegroundColor Green
+    Write-Host "Neuer PC (und jeder, dessen Verknuepfung noch auf C019 zeigt):" -ForegroundColor Green
+    Write-Host "  einmal $MasterRoot\Einrichten.cmd doppelklicken."            -ForegroundColor Green
 }
 
 Write-Host "`nHinweis: Die Tools legen config.json & Co. direkt neben der .exe an"  -ForegroundColor DarkGray
