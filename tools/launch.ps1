@@ -52,6 +52,77 @@ $Exe    = Join-Path $Lokal "$Tool.exe"
 $ProgrammOrdner  = @('_internal', '_NEU_Vorlage')
 $ProgrammDateien = @('*.exe', 'Anleitung.txt')
 
+function Get-RepoKopf([string]$RepoDir) {
+    <#
+        Den HEAD eines Repos lesen, OHNE git aufzurufen: die Kollegen haben
+        es nicht installiert. Es sind blosse Dateien - .git\HEAD zeigt auf ein
+        Ref, das Ref enthaelt die SHA.
+
+        Im Zweifel $null: lieber kein Hinweis als ein falscher.
+    #>
+    try {
+        $HeadDatei = Join-Path $RepoDir '.git\HEAD'
+        if (-not (Test-Path -LiteralPath $HeadDatei)) { return $null }
+        $Inhalt = (Get-Content -LiteralPath $HeadDatei -Raw).Trim()
+        if ($Inhalt -notmatch '^ref:\s*(\S+)$') { return $Inhalt }   # detached
+        $Ref  = $Matches[1]
+        $Lose = Join-Path $RepoDir ('.git\' + $Ref.Replace('/', '\'))
+        if (Test-Path -LiteralPath $Lose) {
+            return (Get-Content -LiteralPath $Lose -Raw).Trim()
+        }
+        # Nach einem "git gc" liegt das Ref gepackt in packed-refs.
+        $Packed = Join-Path $RepoDir '.git\packed-refs'
+        if (Test-Path -LiteralPath $Packed) {
+            foreach ($Zeile in Get-Content -LiteralPath $Packed) {
+                $Teile = $Zeile -split '\s+', 2
+                if ($Teile.Count -eq 2 -and $Teile[1].Trim() -eq $Ref) {
+                    return $Teile[0].Trim()
+                }
+            }
+        }
+        return $null
+    } catch {
+        return $null
+    }
+}
+
+function Show-StandHinweis {
+    <#
+        Hinweis, wenn im Repo mehr steht als veroeffentlicht wurde. Laeuft auf
+        JEDEM Rechner - beides sind nur Dateien auf dem Master.
+
+        Bewusst kein Fenster, sondern eine Warnung in der Konsole: bis der
+        naechste Bau laeuft, erschiene es sonst bei JEDEM Start, und niemand
+        ausser dem Bauenden koennte etwas dagegen tun.
+    #>
+    # Alles in try/catch: der Hinweis laeuft INNERHALB des try-Blocks von
+    # launch.ps1, und $ErrorActionPreference steht auf 'Stop'. Ein Fehler hier
+    # - fehlendes $PSScriptRoot, unlesbare Datei, Share weg - wuerde sonst als
+    # Startfehler durchschlagen und das Tool gar nicht erst oeffnen. Ein
+    # Hinweis darf nie der Grund sein, dass jemand nicht arbeiten kann.
+    try {
+        if (-not $PSScriptRoot) { return }
+        $StandDatei = Join-Path $PSScriptRoot '.veroeffentlicht'
+        if (-not (Test-Path -LiteralPath $StandDatei)) { return }
+        $RepoKopf = Get-RepoKopf (Join-Path $PSScriptRoot 'repo')
+        if (-not $RepoKopf) { return }
+        $Stand = (Get-Content -LiteralPath $StandDatei -Raw)
+        if (-not $Stand) { return }
+        $Stand = $Stand.Trim()
+        if (-not $Stand -or $Stand -eq $RepoKopf) { return }
+
+        $Kurz = {
+            param($Sha)
+            if ($Sha.Length -ge 7) { $Sha.Substring(0, 7) } else { $Sha }
+        }
+        Write-Warning "Im Repo stehen neuere Aenderungen als in der veroeffentlichten Fassung."
+        Write-Warning ("  veroeffentlicht: $(& $Kurz $Stand)   Quellcode: $(& $Kurz $RepoKopf)")
+        Write-Warning "  Das Tool startet trotzdem - bitte Luis Bescheid geben."
+    } catch {
+        return
+    }
+}
+
 function Show-Fehler([string]$Text) {
     Write-Host ""
     Write-Host $Text -ForegroundColor Red
@@ -156,6 +227,7 @@ try {
                "verbinden und es noch einmal versuchen.")
     }
 
+    Show-StandHinweis
     Start-Process -FilePath $Exe -WorkingDirectory $Lokal
 } catch {
     Show-Fehler $_.Exception.Message

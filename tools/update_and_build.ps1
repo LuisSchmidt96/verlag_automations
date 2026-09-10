@@ -308,6 +308,23 @@ foreach ($Datei in @('launch.ps1', 'einrichten.ps1', 'Einrichten.cmd')) {
     Copy-Item (Join-Path $PSScriptRoot $Datei) $MasterRoot -Force
 }
 
+# --- 3c) Veroeffentlichten Stand festhalten --------------------------------
+# launch.ps1 vergleicht das auf JEDEM Rechner mit dem HEAD des Repos und weist
+# hin, wenn jemand committet, aber nicht veroeffentlicht hat. Ohne diese Datei
+# faellt so etwas erst auf, wenn sich jemand ueber eine fehlende Aenderung
+# wundert.
+#
+# Bewusst EIN Eintrag fuer den ganzen Lauf und keiner je Tool: die Baustempel
+# ueberspringen unveraenderte Werkzeuge, deren Stempel bleibt also absichtlich
+# alt. Ein Vergleich je Tool schluege deshalb dauerhaft an, auch wenn alles
+# veroeffentlicht ist. Dieser Eintrag heisst nur: "bis hierher wurde alles
+# betrachtet".
+#
+# Geschrieben wird erst hier, nach Bauen und Kopieren: bricht vorher etwas ab,
+# bleibt der alte Stand stehen und der Hinweis erscheint weiter - richtig so.
+Set-Content -Path (Join-Path $MasterRoot '.veroeffentlicht') `
+            -Value $NachPull -Encoding ASCII
+
 # --- 4) Ergebnis ------------------------------------------------------------
 Write-Host "`n[4/4] Ergebnis:" -ForegroundColor Green
 if ($Gebaut) {
