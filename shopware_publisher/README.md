@@ -77,10 +77,88 @@ Klartext** auf der Platte:
   Chiffretext; das Passwort steht nirgends (auch kein Hash davon wird gebraucht —
   AES-GCM ist authentifiziert und scheitert bei falschem Schlüssel von selbst).
 
-> **Least Privilege:** Die Integration braucht keine *Administrator*-Rolle. Eine
-> eigene Rolle mit Schreibrechten auf **Produkte + Medien** und Leserechten auf
-> Steuer/Währung/Kategorie reicht — dann kann ein geleaktes Secret keine Kunden-
-> und Bestelldaten lesen.
+> **Least Privilege:** Die Integration braucht keine *Administrator*-Rolle, und
+> mit ihr steht ein geleaktes Secret sofort an den Kunden- und Bestelldaten. Es
+> reicht eine eigene Rolle mit
+>
+> * **Schreibrechten** auf `product`, `category` und `media`,
+> * **Leserechten** auf `tax`, `currency`, `sales_channel`,
+>   `product_manufacturer` und `media_folder`.
+>
+> **Kategorie braucht Schreibrechte**, nicht nur Leserechte: `kategorie_anlegen`
+> legt fehlende Autoren-/Herausgeberkategorien an (im Buchdurchgang nach
+> Rückfrage). Hier stand früher „Leserechte auf Steuer/Währung/Kategorie" — das
+> war zu eng, seit das Werkzeug Kategorien anlegen kann.
+>
+> Die Rolle zuerst am **Dev-Store** ausprobieren und ein Buch als Dry-Run
+> durchschieben: fehlt ein Recht, nennt der 403 die Entität, und man weitet
+> genau diese.
+
+### Zugangsdatei auf dem Share
+
+Zugangsdaten werden **nicht mehr im Werkzeug eingetragen**. Sie stehen in einer
+Datei auf dem Share:
+
+```
+\\VR-Archiv\VR-Austausch\VR-Tools\zugang.txt
+```
+
+Eine Zeile je Abschnitt, mit Strichpunkt getrennt. Leerzeilen und Zeilen ab `#`
+werden übersprungen:
+
+```
+# VR-Tools Zugang. Ohne Master-Passwort nutzlos.
+prod;SWIAOHHLC09YWFIWDFEZCG10SW;<blob>
+dev;SWIAR3RLUMTLM2PVZGK1T2R2BW;<blob>
+sftp;sftpuser;<blob>
+```
+
+| Spalte | Inhalt |
+|---|---|
+| 1 | Abschnitt: `dev` / `prod` (Umgebungsname) oder `sftp` |
+| 2 | Kennung: Zugriffsschlüssel-ID bzw. SFTP-Benutzer — ein Benutzername, kein Geheimnis |
+| 3 | Blob: `base64(salt + nonce + ciphertext)` |
+
+**Das Salt steckt im Blob**, weil scrypt beim Entschlüsseln genau dasselbe Salt
+braucht wie beim Verschlüsseln. Ein Chiffretext ohne Salt lässt sich nicht
+öffnen. Statt einer vierten Spalte, die beim Weiterreichen verlorengeht, steht
+alles in einem Feld: 16 Byte Salt, 12 Byte Nonce, Rest Chiffretext.
+
+**Eine Zeile bauen** (aus der Repo-Wurzel, einmal je Abschnitt):
+
+```
+python -m shopware_publisher.zugang_zeile
+```
+
+Das Skript fragt Abschnitt, Kennung, Geheimnis und Master-Passwort ab, macht
+die fertige Zeile zur Gegenprobe noch einmal auf und gibt sie aus. Für alle
+Abschnitte **dasselbe** Master-Passwort nehmen — sonst muss man es je Schritt
+neu eingeben.
+
+**In der Datei steht nur, WOMIT man sich anmeldet — nie, WOHIN.** Die
+Shop-Adressen stehen fest im Code. Das ist kein Schönheitsfehler: stünde
+`shop_url` dort, könnte jeder, der die Datei beschreiben darf, sie auf einen
+eigenen Server zeigen lassen und bekäme beim nächsten Verbinden die
+Schlüssel-ID und das **entschlüsselte** Secret zugeschickt — der Token-Aufruf
+geht an `shop_url`.
+
+Weiteres Verhalten:
+
+- **Gelesen, nicht gespiegelt.** Eine örtliche Kopie überlebt jede Änderung an
+  der Freigabe. So verliert den Zugang, wer den Share nicht mehr lesen darf,
+  und ein gewechseltes Secret gilt sofort für alle.
+- **Fließt nicht zurück.** Beim Speichern wird alles wieder entfernt, was
+  unverändert von dort kam — es landet nie in einer örtlichen `config.json`.
+- **Kein Share, kein Problem.** Fehlt die Datei, startet das Werkzeug normal;
+  nur der Shop- und der Presse-Schritt fehlen. Im Shop-Panel steht dann, was
+  gefunden wurde und was nicht.
+- **Krumme Zeilen werden überlesen**, nicht gemeldet — deshalb steht im Panel
+  ein Bericht, welche Abschnitte gelesen wurden.
+
+> **Die Zugriffsrechte auf dieser Datei sind der eigentliche Schutz**, nicht die
+> Verschlüsselung — die ist die zweite Linie. Und das Master-Passwort gehört
+> **nicht** auf denselben Share: sonst liegen Schloss und Schlüssel im selben
+> Fach.
 
 ## Dev-Store hinter Caddy (Basic-Auth + TLS)
 

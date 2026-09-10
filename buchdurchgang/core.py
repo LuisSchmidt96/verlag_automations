@@ -117,10 +117,28 @@ def lade_config() -> dict:
     if not shop.get("umgebungen"):
         grund = json.loads(json.dumps(sw.DEFAULT_CONFIG))
         grund.update(shop)
-        grund["umgebungen"] = {"dev": dict(sw.DEFAULT_UMGEBUNG),
-                               "prod": dict(sw.DEFAULT_UMGEBUNG)}
+        # Aus der Publisher-Vorgabe kopieren statt aus DEFAULT_UMGEBUNG: dort
+        # steht keine Shop-Adresse, und der Durchgang soll dieselbe je Umgebung
+        # mitbekommen wie der Publisher. Tiefe Kopie, damit dev und prod nicht
+        # an derselben Zuordnungstabelle hängen.
+        grund["umgebungen"] = json.loads(
+            json.dumps(sw.DEFAULT_CONFIG["umgebungen"]))
         grund["aktive_umgebung"] = "dev"
         shop = grund
+    # Shop-Adresse nachtragen, wo noch keine steht. Der Durchgang lässt
+    # `_migriere` des Publishers bewusst nicht über seinen Shop-Abschnitt
+    # laufen (das ist dessen Konfiguration, nicht diese) — die Adresse muss er
+    # deshalb selbst nachziehen, sonst bleibt das Feld in einer gewachsenen
+    # config.json für immer leer. Nur FÜLLEN, nie überschreiben.
+    for name, umg in (shop.get("umgebungen") or {}).items():
+        if not (umg.get("shop_url") or "").strip():
+            vorgabe = sw.DEFAULT_CONFIG["umgebungen"].get(name) or {}
+            if vorgabe.get("shop_url"):
+                umg["shop_url"] = vorgabe["shop_url"]
+    # Geteilter Zugang vom Share: füllt nur, was hier leer ist. Das
+    # Master-Passwort wandert nicht mit — es wird weiterhin erst abgefragt,
+    # wenn der Shop-Schritt läuft.
+    sw.uebernimm_zugang(shop)
     cfg["shopware_publisher"] = shop
 
     # Version 2: die SFTP-Basispfade waren aus den URL-Pfaden abgeleitet
@@ -138,11 +156,23 @@ def lade_config() -> dict:
         if not (z.get("benutzer") or "").strip():
             z["benutzer"] = DEFAULT_CONFIG["sftp"]["benutzer"]
         cfg["config_version"] = 3
+
+    # Dasselbe für das SFTP-Passwort. Erst hier, weil der Abschnitt oben noch
+    # nachgezogen wird.
+    sw.uebernimm_sftp_zugang(sftp_zugang(cfg))
     return cfg
 
 
 def speichere_config(cfg: dict) -> None:
-    CONFIG_PFAD.write_text(json.dumps(cfg, indent=2, ensure_ascii=False),
+    # Was vom Share kam, gehört nicht in die örtliche Datei — sonst hätte
+    # jeder Anwender nach dem ersten „Verbinden“ seine eigene Kopie des
+    # Zugangs, und ein gewechseltes Secret erreichte ihn nie wieder.
+    hinaus = json.loads(json.dumps(cfg))
+    shop = hinaus.get("shopware_publisher") or {}
+    for name, umg in (shop.get("umgebungen") or {}).items():
+        sw.entferne_share_felder(umg, f"umgebung:{name}")
+    sw.entferne_share_felder(hinaus.get("sftp") or {}, "sftp")
+    CONFIG_PFAD.write_text(json.dumps(hinaus, indent=2, ensure_ascii=False),
                            encoding="utf-8")
 
 

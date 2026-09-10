@@ -213,6 +213,17 @@ Das Master-Passwort wandert dabei **nicht** mit und wird nirgends gespeichert �
 es entsperrt das übernommene Secret hinterher genauso wie im Publisher, weil
 Chiffretext und Salt selbsttragend sind.
 
+**Eingetragen wird nichts mehr.** Zugriffsschlüssel, Shop-Secret und das
+SFTP-Passwort stehen verschlüsselt in der Zugangsdatei auf dem Share; der
+Durchgang liest sie beim Start. Es gibt deshalb kein Schlüsselfeld und keinen
+„Secret setzen…"-Knopf mehr — nur die Anzeige, ob die Datei gefunden wurde, und
+den Knopf **„Zugangsdatei…"** für den Fall, dass der Share umgezogen ist.
+
+Abgefragt wird nur noch das **Master-Passwort**, und das erst, wenn der Shop-
+oder der Presse-Schritt wirklich läuft. Aufbau der Datei, das Skript zum Bauen
+einer Zeile und die Rechte-Frage stehen im
+[README des ShopwarePublishers](../shopware_publisher/README.md).
+
 Gesucht wird in `..\ShopwarePublisher\config.json` (so liegen die Werkzeuge
 unter `VR-Tools\` nebeneinander) und im Quellbaum daneben.
 
