@@ -609,16 +609,27 @@ def schritt_cover(paar: dict, titel: str, cfg: dict, *, mit_2d=True,
 
 
 def schritt_pibi(paar: dict, ordner, cfg: dict, log=print) -> list[Path]:
-    """Schritt 2 — ruft pi_bi_generator, mit dem Cover aus Schritt 1."""
+    """Schritt 2 — ruft pi_bi_generator, mit dem Cover aus Schritt 1.
+
+    Ins .docx gehört das 3D-Mockup — dasselbe Bild wie auf der Produktseite —,
+    nicht die flache 2D-Vorderseite. Fehlt das 3D-Cover (der 3D-Haken war in
+    Schritt 1 aus), fällt es auf die 2D-Vorderseite zurück, bevor am Ende das
+    Platzhalter-Cover der Vorlage stehen bliebe.
+    """
     buch = Path(ordner)
     ccfg = cfg_cover(cfg)
-    muster = ccfg.get("muster_2d", cp.DEFAULT_CONFIG["muster_2d"])
+    muster = [ccfg.get("muster_3d", cp.DEFAULT_CONFIG["muster_3d"]),
+              ccfg.get("muster_2d", cp.DEFAULT_CONFIG["muster_2d"])]
+    dpis = (int(ccfg.get("dpi_print", 300)), int(ccfg.get("dpi_web", 72)))
     daten, suffix = None, ".jpg"
-    for dpi in (int(ccfg.get("dpi_print", 300)), int(ccfg.get("dpi_web", 72))):
-        p = cover_ordner(buch, cfg) / muster.format(dpi=dpi, sc=paar["sc"])
-        if p.exists():
-            daten, suffix = pb.lade_cover_datei(p), p.suffix
-            log(f"Cover aus Schritt 1: {p.name}")
+    for m in muster:
+        for dpi in dpis:
+            p = cover_ordner(buch, cfg) / m.format(dpi=dpi, sc=paar["sc"])
+            if p.exists():
+                daten, suffix = pb.lade_cover_datei(p), p.suffix
+                log(f"Cover aus Schritt 1: {p.name}")
+                break
+        if daten is not None:
             break
     if daten is None:
         log("⚠ Kein Cover aus Schritt 1 gefunden — die .docx behalten das "
