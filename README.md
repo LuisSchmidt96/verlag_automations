@@ -31,6 +31,11 @@ verlag_automations/
 │   └── beispiele/              ← ONIX-XML in beiden Fassungen (Kurz + Referenz)
 ├── buchdurchgang/              ← die drei obigen in EINEM Zug, je Buch ein Ordner
 │   └── core.py, app.py, main.py, Buchdurchgang.spec, README.md
+├── honorar_abrechner/          ← Autorenhonorare abrechnen (Briefe, Zahlungs- und KSK-Liste)
+│   ├── core.py, app.py, main.py, HonorarAbrechner.spec, README.md
+│   ├── vorlagen/               ← Briefvorlage (in die .exe gebündelt)
+│   └── beispiele/              ← Altmappe + Musterbriefe (personenbezogen, nicht eingecheckt)
+│                                 Bestand (Honorarbestand.xlsx) liegt neben der .exe
 ├── tools/
 │   ├── update_and_build.ps1    ← zieht Git-Änderungen & baut alle Tools neu
 │   ├── launch.ps1              ← startet ein Tool und aktualisiert es dabei

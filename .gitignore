@@ -21,6 +21,7 @@ pi_bi_output/
 cover_cache/
 cover_output/
 mailing_output/
+honorar_output/
 
 # mailing_list_updater: Kundendaten aus Access und Lexware — personenbezogen,
 # gehören nicht ins Repo. Der Ordner ist die Arbeitsablage vor Ort.
@@ -29,6 +30,11 @@ mailing_list_updater/*.xlsx
 # Runtime state (app-mutated)
 config.json
 paketnr.txt
+# honorar_abrechner: der Bestand ist eine Excel-Mappe neben der .exe — mit
+# Adressen und Bankverbindungen der Autoren. Gehört nicht ins Repo.
+Honorarbestand.xlsx
+Honorarbestand.bak.xlsx
+honorarbestand.sperre
 # Gegenprobe der Gewichtsschätzung: Bestandsdaten aus dem Shop
 shopware_publisher/gewichte_pruefung.csv
 
@@ -46,6 +52,10 @@ cover_previews/*.tif
 cover_previews/mockups/*.psd
 # 3D-Mockup-Vorlagen (~480 MB PSDs) — per config referenziert, nicht eingecheckt
 cover_previews/_NEU_Vorlage/
+
+# honorar_abrechner: die Altmappe und die Musterbriefe enthalten die
+# Adressen und IBANs von rund 280 Autoren — personenbezogen, nur lokal.
+honorar_abrechner/beispiele/
 
 # LibreOffice / Office lock files
 .~lock.*#
