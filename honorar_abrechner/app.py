@@ -510,6 +510,9 @@ class App(Tk):
                                           doppelklick=self._zeige_rechenweg)
         self.baum_durchlauf.tag_configure("kein_brief", foreground="#777777")
         self.baum_durchlauf.tag_configure("problem", foreground="#a4262c")
+        self.zurueck = StringVar(value="")
+        ttk.Label(seite, textvariable=self.zurueck, foreground="#8a5a00",
+                  wraplength=1300, justify="left").pack(anchor="w", padx=12)
         # Legende: Farben ohne Erklärung sind keine Auskunft.
         legende = ttk.Frame(seite)
         legende.pack(fill="x", padx=12)
@@ -1093,6 +1096,18 @@ class App(Tk):
             f"Künstlersozialkasse zu melden: "
             f"{core.euro(sum(a.ksk_netto for a in meldbar))} "
             f"({len(meldbar)} Autoren)")
+        # Was wegen einer offenen Entscheidung NICHT ausgezahlt wird, gehört
+        # bei jedem Durchlauf vor Augen — nicht nur einmal ins Importprotokoll.
+        anzahl, betrag = core.zurueckgehalten(self.bestand, self.jahr.get(),
+                                              self.cfg)
+        if anzahl:
+            self.zurueck.set(
+                f"⚠ {anzahl} Empfänger bekommen zusammen "
+                f"{core.euro(betrag)} NICHT — ihre Verträge stehen auf "
+                f"„gesondert abrechnen“ und warten auf eine Entscheidung "
+                f"des Verlags.")
+        else:
+            self.zurueck.set("")
         self.status.set("Fertig gerechnet.")
         self._male_schrittleiste()
 

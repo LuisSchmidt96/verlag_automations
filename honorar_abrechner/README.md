@@ -161,6 +161,11 @@ Empfängern ohne Steuerpflicht.
 > Word-Vorlage des Verlags noch nicht vorliegt. Sobald sie da ist, wird sie an
 > dieselbe Stelle gelegt — die Platzhalter müssen dann nur gleich heißen.
 > `core.baue_briefvorlage()` erzeugt den Nachbau neu, falls er verlorengeht.
+>
+> Der Nachbau trägt eine Kennzeichnung in den Dokumenteigenschaften. Solange
+> sie da ist, schreibt das Werkzeug bei jedem Brieflauf einen Hinweis ins
+> Protokoll; mit der echten Vorlage verschwindet er von selbst, ohne dass
+> jemand daran denken muss.
 
 ## Eigenheiten des Altbestands
 
@@ -281,12 +286,14 @@ einen einzigen Brief; das Werkzeug weist das bei ihnen aus.
 
 ## Offene Punkte für den Verlag
 
-1. **Die Verträge aus „Zahlung ab XX Ex." (68 Bücher).** Sie sind als
+1. **Die Verträge aus „Zahlung ab XX Ex." (68 Bücher, 741,67 €).** Sie sind als
    „Gesondert abrechnen" übernommen und lösen derzeit **keine** Zahlung aus —
    die sichere Annahme, weil die Altmappe dort nur einen Stand führt und fast
    niemand davon in der Zahlungsliste auftaucht. Wie diese Verträge wirklich
    abgerechnet werden, muss der Verlag sagen; danach den Haken in der Spalte
-   „Gesondert abrechnen" entfernen.
+   „Gesondert abrechnen" entfernen. **Das Werkzeug weist den Betrag bei
+   jedem Durchlauf aus** („20 Empfänger bekommen zusammen 741,67 € NICHT"),
+   damit die offene Entscheidung nicht in einem Protokoll versandet.
 2. **Staffel — ein Satz oder tranchenweise?** Wird beim Überschreiten der
    Grenze der höhere Satz nur auf die darüberliegenden Exemplare angewandt
    oder auf die ganze Jahresmenge? Umgesetzt ist derzeit „ein Satz je Jahr“.

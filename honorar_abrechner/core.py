@@ -2544,6 +2544,28 @@ def rechne_alle(bestand: Bestand, jahr: int,
     return [rechne_empfaenger(e, jahr, cfg) for e in bestand.empfaenger]
 
 
+def zurueckgehalten(bestand: Bestand, jahr: int,
+                    cfg: dict | None = None) -> tuple[int, float]:
+    """Wie viel wegen „Gesondert abrechnen“ NICHT ausgezahlt wird.
+
+    Diese Verträge warten auf eine Entscheidung des Verlags. Solange sie
+    aussteht, fließt kein Geld — und genau das darf nicht in einem
+    Protokoll versanden, das einmal beim Import gelesen wird. Die Zahl
+    gehört bei jedem Durchlauf vor Augen.
+    """
+    cfg = cfg or {}
+    empfaenger, summe = set(), 0.0
+    for e, b in bestand.buecher():
+        if not b.gesondert or b.stillgelegt:
+            continue
+        posten = betrag_zeile(b, jahr, cfg)
+        if posten is None or posten.netto <= 0:
+            continue
+        empfaenger.add(e.kennung)
+        summe = runde(summe + posten.brutto)
+    return len(empfaenger), summe
+
+
 # ---------------------------------------------------------------------
 # Gegenprobe an der Altmappe
 # ---------------------------------------------------------------------
@@ -3071,6 +3093,19 @@ def _blatt_protokoll(wb, abrechnungen: list[Abrechnung], jahr: int):
 
 TOKEN_TABELLE = "{{POSTEN}}"
 
+# Steht in den Dokumenteigenschaften der selbstgebauten Briefvorlage. Die
+# echte Vorlage des Verlags trägt sie nicht — daran erkennt das Werkzeug,
+# ob es noch mit dem Nachbau arbeitet.
+NACHBAU_KENNUNG = "Nachbau aus den Muster-PDFs — Honorar-Abrechner"
+
+
+def vorlage_ist_nachbau(vorlage: Path) -> bool:
+    """Ob die Briefvorlage noch der Nachbau ist und nicht die echte."""
+    try:
+        return Document(str(vorlage)).core_properties.comments == NACHBAU_KENNUNG
+    except Exception:
+        return False
+
 BRIEFKOPF_SPALTEN = [
     ["Verlag Regionalkultur GmbH & Co. KG", "Bahnhofstr. 2 • 76698 Ubstadt-Weiher",
      "Sitz der Gesellschaft Ubstadt-Weiher",
@@ -3293,6 +3328,11 @@ def baue_briefvorlage(ziel: Path) -> Path:
     _absatz(doc, "", abstand_nach=18)
     _absatz(doc, "verlag regionalkultur", groesse=10, schrift="Verdana")
 
+    # Die Vorlage als Nachbau kennzeichnen. Sobald der Verlag die echte
+    # Word-Vorlage an dieselbe Stelle legt, fehlt diese Markierung und der
+    # Hinweis verschwindet von selbst — niemand muss daran denken.
+    doc.core_properties.comments = NACHBAU_KENNUNG
+
     ziel = Path(ziel)
     ziel.parent.mkdir(parents=True, exist_ok=True)
     doc.save(str(ziel))
@@ -3502,6 +3542,11 @@ def generiere_brief(vorlage: Path, ab: Abrechnung, cfg: dict,
         "{{MWSTSATZ}}": f"{mwst_satz:g} %",
     })
 
+    # Die Vorlage als Nachbau kennzeichnen. Sobald der Verlag die echte
+    # Word-Vorlage an dieselbe Stelle legt, fehlt diese Markierung und der
+    # Hinweis verschwindet von selbst — niemand muss daran denken.
+    doc.core_properties.comments = NACHBAU_KENNUNG
+
     ziel = Path(ziel)
     ziel.parent.mkdir(parents=True, exist_ok=True)
     doc.save(str(ziel))
@@ -3520,6 +3565,12 @@ def erzeuge_briefe(abrechnungen: list[Abrechnung], cfg: dict, ordner: Path,
         raise ValueError(
             f"Die Briefvorlage fehlt:\n{vorlage}\n"
             f"Ohne sie lassen sich keine Briefe erzeugen.")
+
+    if vorlage_ist_nachbau(vorlage):
+        melde("Hinweis: Die Briefe entstehen noch aus der nachgebauten "
+              "Vorlage, nicht aus der echten des Verlags. Schriften und "
+              "Abstände können abweichen — bitte einen Brief ansehen, bevor "
+              "alle verschickt werden.")
 
     ordner = Path(ordner)
     ordner.mkdir(parents=True, exist_ok=True)
