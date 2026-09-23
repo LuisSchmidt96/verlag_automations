@@ -36,6 +36,20 @@ Buch …"). Das Detailfenster eines Autors — Doppelklick auf seine Zeile —
 zeigt seine Bücher als Liste; Doppelklick auf ein Buch ändert dessen
 Angaben, „Angaben ändern …" die Anschrift.
 
+**Ein Titel, der nicht mehr abgerechnet wird**, gehört *stillgelegt*, nicht
+gelöscht: im Buchdialog der Haken „Wird nicht mehr abgerechnet" plus ein
+Grund („Titel vergriffen", „verstorben"). Das Buch verschwindet dann aus
+Reiter 2 und aus jeder Berechnung, aber die erfassten Jahre bleiben — in
+fünf Jahren lässt sich noch nachsehen, was 2025 gezahlt wurde. Der zweite
+Haken, „Wird gesondert abgerechnet", ist für die Verträge aus
+`Zahlung ab XX Ex.`: sie zählen für Staffel und Freimenge mit, lösen aber
+keine Auszahlung aus und erscheinen im Blatt `Offene Sonderfälle`.
+
+**Wirklich entfernen** — „Autor entfernen …" auf Reiter 1, „Buch entfernen …"
+im Detailfenster — ist nur für das, was versehentlich angelegt wurde. Die
+Rückfrage zählt auf, wie viele Jahre dabei verloren gehen, und nennt das
+Stilllegen als Alternative.
+
 Der Buchdialog ist nach der Frage gebaut, die tatsächlich zu beantworten
 ist — **was bekommt der Autor je Exemplar?** — und nicht als Feldliste:
 

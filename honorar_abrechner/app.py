@@ -364,8 +364,7 @@ class App(Tk):
         self.status.set(f"„{buch.titel}“ angelegt — noch nicht gespeichert.")
 
     def _aendere_buch(self, e, buch):
-        """Ein bestehendes Buch ändern — sonst waere ein Vertippen nur durch
-        Neuanlegen zu beheben, und Loeschen gibt es nicht."""
+        """Ein bestehendes Buch ändern."""
         if not self._buchfenster(f"Buch ändern — {buch.titel}", buch):
             return
         self.geaendert = True
@@ -373,6 +372,77 @@ class App(Tk):
         self._zeige_stammdaten()
         self._zeige_erfassung()
         self.status.set(f"„{buch.titel}“ geändert — noch nicht gespeichert.")
+
+    # --- Entfernen ----------------------------------------------------
+    # Loeschen ist hier fast nie das Richtige: ein Titel, der nicht mehr
+    # abgerechnet wird, gehoert stillgelegt — dann bleibt die Historie
+    # erhalten und man sieht in fuenf Jahren noch, was 2025 gezahlt wurde.
+    # Entfernt wird nur, was versehentlich angelegt wurde. Deshalb nennt
+    # die Rueckfrage beides und zaehlt auf, was verloren geht.
+
+    def _entferne_buch(self, e, buch, danach=None) -> bool:
+        jahre = sorted(j for j, w in buch.jahre.items() if w.erfasst)
+        if jahre:
+            verlust = (f"\n\nDamit gehen die erfassten Zahlen aus "
+                       f"{len(jahre)} Jahren ({jahre[0]}–{jahre[-1]}) "
+                       f"unwiderruflich verloren.\n\nSoll der Titel nur "
+                       f"nicht mehr abgerechnet werden, ist „Buch ändern“ → "
+                       f"„Wird nicht mehr abgerechnet“ der richtige Weg — "
+                       f"dann bleibt die Historie erhalten.")
+        else:
+            verlust = "\n\nFür dieses Buch sind keine Zahlen erfasst."
+        if not messagebox.askokcancel(
+                "Buch entfernen",
+                f"„{buch.titel}“ von {e.anzeigename} wirklich entfernen?"
+                + verlust, icon="warning", default="cancel"):
+            return False
+        e.buecher.remove(buch)
+        self.geaendert = True
+        self._rechnung_veraltet = bool(self.abrechnungen)
+        self._zeige_stammdaten()
+        self._zeige_erfassung()
+        self._male_schrittleiste()
+        if danach is not None:
+            danach()
+        self.status.set(f"„{buch.titel}“ entfernt — noch nicht gespeichert.")
+        return True
+
+    def _entferne_empfaenger(self, e) -> bool:
+        n = len(e.buecher)
+        jahre = sorted({j for b in e.buecher for j, w in b.jahre.items()
+                        if w.erfasst})
+        teile = []
+        if n:
+            teile.append(f"{n} " + ("Buch" if n == 1 else "Bücher"))
+        if jahre:
+            teile.append(f"die Zahlen aus {len(jahre)} Jahren "
+                         f"({jahre[0]}–{jahre[-1]})")
+        if teile:
+            verlust = ("\n\nDamit gehen " + " und ".join(teile)
+                       + " unwiderruflich verloren.\n\nSoll nur nicht mehr "
+                         "abgerechnet werden, lassen sich die Bücher einzeln "
+                         "stilllegen — dann bleibt die Historie erhalten.")
+        else:
+            verlust = "\n\nZu diesem Autor sind keine Bücher erfasst."
+        if not messagebox.askokcancel(
+                "Autor entfernen",
+                f"„{e.anzeigename}“ wirklich aus dem Bestand entfernen?"
+                + verlust, icon="warning", default="cancel"):
+            return False
+        self.bestand.empfaenger.remove(e)
+        self.geaendert = True
+        self._rechnung_veraltet = bool(self.abrechnungen)
+        self._zeige_stammdaten()
+        self._zeige_erfassung()
+        self._male_schrittleiste()
+        self.status.set(f"„{e.anzeigename}“ entfernt — noch nicht "
+                        f"gespeichert.")
+        return True
+
+    def _entferne_gewaehlten_empfaenger(self):
+        e = self._gewaehlter_empfaenger()
+        if e is not None:
+            self._entferne_empfaenger(e)
 
     def _buchfenster(self, titel: str, buch) -> bool:
         """Buchangaben erfassen. True, wenn übernommen wurde."""
@@ -515,6 +585,33 @@ class App(Tk):
         feld(frei, 0, "Freimenge: die ersten … Exemplare ohne Honorar",
              v_frei, 10)
 
+        # Ein Buch aus der Abrechnung nehmen, ohne es zu verlieren. Das ist
+        # der haeufigste Grund, warum ein Titel verschwindet — vergriffen,
+        # Autor verstorben, unbekannt verzogen —, und bisher ging es nur von
+        # Hand in der Excel.
+        v_still = BooleanVar(value=buch.stillgelegt)
+        v_grund = StringVar(value=buch.stillgelegt_grund)
+        v_gesondert = BooleanVar(value=buch.gesondert)
+        ttk.Separator(sonder, orient="horizontal").grid(
+            row=3, column=0, sticky="ew", padx=8, pady=(8, 4))
+        ttk.Checkbutton(
+            sonder, text="Wird nicht mehr abgerechnet (vergriffen, "
+                         "verstorben, kein Honorar mehr)",
+            variable=v_still, command=lambda: grund_umschalten()).grid(
+                row=4, column=0, sticky="w", padx=8, pady=2)
+        grundrahmen = ttk.Frame(sonder)
+        grundrahmen.grid(row=5, column=0, sticky="w", padx=32, pady=2)
+        w_grund = feld(grundrahmen, 0, "Grund", v_grund, 40)
+        ttk.Checkbutton(
+            sonder, text="Wird gesondert abgerechnet — zählt für Staffel und "
+                         "Freimenge, löst aber keine Auszahlung aus",
+            variable=v_gesondert).grid(row=6, column=0, sticky="w",
+                                       padx=8, pady=2)
+
+        def grund_umschalten():
+            w_grund.configure(state="normal" if v_still.get() else "disabled")
+        grund_umschalten()
+
         # --- Vorschau ----------------------------------------------------
         ergebnis = StringVar()
         ttk.Label(fenster, textvariable=ergebnis, font=("Segoe UI", 10, "bold"),
@@ -651,6 +748,10 @@ class App(Tk):
             buch.verguetungsart = v_art.get() or "Honorar"
             buch.notizen = v_notiz.get().strip()
             buch.mwst_pflichtig = v_mwstpflicht.get()
+            buch.stillgelegt = v_still.get()
+            buch.stillgelegt_grund = (v_grund.get().strip()
+                                      if v_still.get() else "")
+            buch.gesondert = v_gesondert.get()
             buch.kondition = kond
             fertig["ok"] = True
             fenster.destroy()
@@ -739,6 +840,9 @@ class App(Tk):
                    command=self._neuer_empfaenger).pack(side="left", padx=(16, 4))
         ttk.Button(oben, text="Neues Buch …",
                    command=self._neues_buch_zur_auswahl).pack(side="left")
+        ttk.Button(oben, text="Autor entfernen …",
+                   command=self._entferne_gewaehlten_empfaenger).pack(
+                       side="left", padx=(12, 0))
 
         self.baum_stamm = self._liste(seite, SPALTEN_STAMM,
                                       doppelklick=self._zeige_empfaenger)
@@ -1177,6 +1281,9 @@ class App(Tk):
         ttk.Button(knoepfe, text="Neues Buch …",
                    command=lambda: (fenster.destroy(),
                                     self._neues_buch(e))).pack(side="left", padx=6)
+        ttk.Button(knoepfe, text="Autor entfernen …",
+                   command=lambda: (self._entferne_empfaenger(e)
+                                    and fenster.destroy())).pack(side="left")
 
         unten = ttk.LabelFrame(
             fenster, text="Bücher — und wie das Honorar berechnet wird")
@@ -1236,6 +1343,14 @@ class App(Tk):
             buchknoepfe, text="Neues Buch …",
             command=lambda: (self._neues_buch(e), fuelle())).pack(side="left",
                                                                  padx=6)
+
+        def entfernen():
+            b = gewaehltes_buch()
+            if b is not None:
+                self._entferne_buch(e, b, danach=fuelle)
+
+        ttk.Button(buchknoepfe, text="Buch entfernen …",
+                   command=entfernen).pack(side="left", padx=(12, 0))
 
     # -----------------------------------------------------------------
     # Reiter 2: Jahreserfassung
