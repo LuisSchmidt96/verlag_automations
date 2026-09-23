@@ -36,18 +36,34 @@ Buch …"). Das Detailfenster eines Autors — Doppelklick auf seine Zeile —
 zeigt seine Bücher als Liste; Doppelklick auf ein Buch ändert dessen
 Angaben, „Angaben ändern …" die Anschrift.
 
-**Eine Staffel wird eingetippt, wie sie im Vertrag steht:**
+Der Buchdialog ist nach der Frage gebaut, die tatsächlich zu beantworten
+ist — **was bekommt der Autor je Exemplar?** — und nicht als Feldliste:
 
 ```
-bis 2500 Ex. 12 %, ab 2501 Ex. 13 %
+Was der Autor je Exemplar bekommt
+  ( ) Ein fester Betrag je Exemplar        [      ] €
+  (•) Ein Anteil am Verlagsabgabepreis     Ladenpreis [ 16,90 ] €
+                                           darin MwSt [ 7 % ]
+                                           Verlagsrabatt [ 40 ] %
+Honorarsatz — gleichbleibend oder nach Menge gestaffelt
+  ( ) Immer derselbe Satz                  [ 12 ] %
+  (•) Gestaffelt                    bis [ 1500 ] Ex.  [ 12 ] %
+                                    bis [ 2500 ] Ex.  [ 13 ] %
+                                    bis [      ] Ex.  [ 14 ] %   ← nach oben offen
+Ergibt je Exemplar — 1–1500: 1,14 €, 1501–2500: 1,23 €, ab 2501: 1,33 €
 ```
 
-Gelesen wird das mit demselben Verfahren, das beim Import die Notizen der
-Altmappe ausgewertet hat — niemand muss eine künstliche Schreibweise lernen.
-Das Werkzeug zeigt danach, was es verstanden hat, und lässt bestätigen; eine
-stillschweigend falsch gelesene Staffel wäre schlimmer als gar keine. Auch
-„ab dem 201. von uns verkauften Exemplar" wird erkannt und als Freimenge 200
-übernommen.
+**Die Staffel ist kein eigenes Feld, sondern der Honorarsatz selbst** — einer,
+der sich mit der Menge ändert. Deshalb stehen beide an derselben Stelle und
+schließen einander aus.
+
+Die Zeile darunter rechnet bei jeder Eingabe mit und zeigt **Eurobeträge, nicht
+Prozente**. Das ist der eigentliche Prüfstein: ob 12 % vom Nettoabgabepreis
+richtig ist, sieht niemand — ob 1,14 € je Exemplar stimmt, schon.
+
+Beim Import bleibt das Deuten des Vertragstextes („bis 2500 Ex. 12 %, ab 2501
+Ex. 13 %") natürlich, denn dort *existiert* der Text bereits. Beim Eingeben
+wird nichts geraten.
 
 ## Was gerechnet wird
 

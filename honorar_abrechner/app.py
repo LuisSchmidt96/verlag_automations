@@ -272,30 +272,6 @@ class App(Tk):
         ("email", "E-Mail", "text"),
     ]
 
-    FELDER_BUCH = [
-        ("titel", "Buchtitel", "text"),
-        ("isbn", "ISBN (Kurzform, z. B. 05-300)", "text"),
-        ("verguetungsart", "Art der Zahlung", list(core.VERGUETUNGSARTEN)),
-        ("betrag_je_ex", "Fester Betrag je Exemplar (€)", "zahl"),
-        ("ladenpreis", "oder: Ladenpreis (€)", "zahl"),
-        ("mwst_im_preis", "davon MwSt herausrechnen (7 / 19, sonst leer)", "zahl"),
-        ("verlagsrabatt", "Verlagsrabatt in % (meist 40)", "zahl"),
-        ("satz", "Honorarsatz in %", "zahl"),
-        ("teiler", "geteilt durch (Mitautoren)", "zahl"),
-        ("mwst_pflichtig", "Autor ist mehrwertsteuerpflichtig",
-         ["Nein", "Ja"]),
-        ("schwelle_zehn", "Kein Honorar unter zehn Exemplaren",
-         ["Nein", "Ja"]),
-        ("freimenge", "Freimenge (erste N Exemplare ohne Honorar)", "zahl"),
-        # Die Staffel wird so eingetippt, wie sie im Vertrag steht. Gelesen
-        # wird sie mit demselben Verfahren, das beim Import die Notizen der
-        # Altmappe ausgewertet hat — was dort funktioniert, funktioniert auch
-        # hier, und niemand muss eine künstliche Schreibweise lernen.
-        ("staffel", "Staffel — wie im Vertrag, z. B.\n"
-                    "„bis 2500 Ex. 12 %, ab 2501 Ex. 13 %“", "text"),
-        ("notizen", "Notizen", "text"),
-    ]
-
     def _neuer_empfaenger(self):
         werte = self._formular("Neuen Autor anlegen",
                                self.FELDER_EMPFAENGER, {})
@@ -332,53 +308,32 @@ class App(Tk):
         self._zeige_erfassung()
         self.status.set("Geändert — noch nicht gespeichert.")
 
+    # --- Buchdialog ---------------------------------------------------
+    # Eigenes Fenster statt eines Feldrasters: was der Autor je Exemplar
+    # bekommt, ist keine Liste von vierzehn Feldern, sondern eine
+    # Entscheidung mit zwei Wegen — fester Betrag oder Anteil am
+    # Verlagsabgabepreis. Und die Staffel ist kein eigenes Feld, sondern der
+    # Honorarsatz selbst, nur mengenabhängig. Frei eingetippter Vertragstext,
+    # den das Werkzeug deuten muss, hat hier nichts zu suchen: beim Import
+    # war Deuten alternativlos, beim Eingeben ist es die schlechteste
+    # Loesung.
+
     def _neues_buch(self, e):
-        werte = self._formular(f"Neues Buch für {e.anzeigename}",
-                               self.FELDER_BUCH,
-                               {"verlagsrabatt": 40, "teiler": 1,
-                                "verguetungsart": "Honorar",
-                                "mwst_pflichtig": "Nein",
-                                "schwelle_zehn": "Nein"})
-        if werte is None:
-            return
-        if not werte["titel"]:
-            messagebox.showwarning("Titel fehlt",
-                                   "Ohne Buchtitel geht es nicht.")
-            return
         buch = core.Buch(kennung=self.bestand.naechste_kennung("B"))
-        self._uebertrage_buch(buch, werte)
-        if not self._staffel_bestaetigt(buch, werte.get("staffel", "")):
+        if not self._buchfenster(f"Neues Buch für {e.anzeigename}", buch):
             return
         e.buecher.append(buch)
         self.geaendert = True
+        self._rechnung_veraltet = bool(self.abrechnungen)
         self._zeige_stammdaten()
         self._zeige_erfassung()
         self._male_schrittleiste()
         self.status.set(f"„{buch.titel}“ angelegt — noch nicht gespeichert.")
 
     def _aendere_buch(self, e, buch):
-        """Ein bestehendes Buch ändern — sonst wäre ein Tippfehler in der
-        Staffel nur durch Neuanlegen zu beheben."""
-        k = buch.kondition
-        werte = self._formular(
-            f"Buch ändern — {buch.titel}", self.FELDER_BUCH,
-            {"titel": buch.titel, "isbn": buch.isbn,
-             "verguetungsart": buch.verguetungsart,
-             "betrag_je_ex": k.betrag_je_ex, "ladenpreis": k.ladenpreis,
-             "mwst_im_preis": k.mwst_im_preis,
-             "verlagsrabatt": k.verlagsrabatt if k.rabatt_anwenden else "",
-             "satz": k.satz, "teiler": k.teiler,
-             "mwst_pflichtig": "Ja" if buch.mwst_pflichtig else "Nein",
-             "schwelle_zehn": "Ja" if k.schwelle_zehn else "Nein",
-             "freimenge": k.freimenge or "",
-             "staffel": core.staffel_als_text(k.staffel),
-             "notizen": buch.notizen})
-        if werte is None:
-            return
-        vorher = list(k.staffel)
-        self._uebertrage_buch(buch, werte)
-        if not self._staffel_bestaetigt(buch, werte.get("staffel", "")):
-            k.staffel = vorher
+        """Ein bestehendes Buch ändern — sonst waere ein Vertippen nur durch
+        Neuanlegen zu beheben, und Loeschen gibt es nicht."""
+        if not self._buchfenster(f"Buch ändern — {buch.titel}", buch):
             return
         self.geaendert = True
         self._rechnung_veraltet = bool(self.abrechnungen)
@@ -386,52 +341,296 @@ class App(Tk):
         self._zeige_erfassung()
         self.status.set(f"„{buch.titel}“ geändert — noch nicht gespeichert.")
 
-    def _staffel_bestaetigt(self, buch, text: str) -> bool:
-        """Zeigen, was aus dem Vertragstext gelesen wurde — und bestätigen
-        lassen. Eine stillschweigend falsch verstandene Staffel wäre
-        schlimmer als gar keine."""
-        text = (text or "").strip()
-        if not text:
-            return True
-        if not buch.kondition.staffel:
-            messagebox.showwarning(
-                "Staffel nicht verstanden",
-                f"Aus „{text}“ konnte ich keine Staffel lesen.\n\n"
-                f"Bitte so schreiben, wie es im Vertrag steht, zum Beispiel:\n"
-                f"   bis 2500 Ex. 12 %, ab 2501 Ex. 13 %\n\n"
-                f"Das Buch wird ohne Staffel angelegt, wenn Sie fortfahren.")
-            return True
-        return messagebox.askokcancel(
-            "Stimmt die Staffel so?",
-            "So habe ich den Text gelesen:\n\n"
-            + core.staffel_als_text(buch.kondition.staffel)
-            + ("\n\nFreimenge: die ersten "
-               f"{buch.kondition.freimenge} Exemplare ohne Honorar."
-               if buch.kondition.freimenge else "")
-            + "\n\nÜbernehmen?")
-
-    @staticmethod
-    def _uebertrage_buch(buch, werte: dict):
-        """Die Formularwerte in das Buch schreiben."""
-        buch.titel = werte["titel"]
-        buch.isbn = werte["isbn"]
-        buch.verguetungsart = werte["verguetungsart"] or "Honorar"
-        buch.mwst_pflichtig = werte["mwst_pflichtig"] == "Ja"
-        buch.notizen = werte["notizen"]
+    def _buchfenster(self, titel: str, buch) -> bool:
+        """Buchangaben erfassen. True, wenn übernommen wurde."""
         k = buch.kondition
-        k.betrag_je_ex = werte["betrag_je_ex"] or None
-        k.ladenpreis = werte["ladenpreis"] or None
-        k.mwst_im_preis = werte["mwst_im_preis"] or None
-        k.verlagsrabatt = werte["verlagsrabatt"] or 40.0
-        k.rabatt_anwenden = bool(werte["verlagsrabatt"])
-        k.satz = werte["satz"] or None
-        k.teiler = int(werte["teiler"] or 1)
-        k.freimenge = int(werte["freimenge"] or 0)
-        k.schwelle_zehn = werte["schwelle_zehn"] == "Ja"
-        stufen, _, _, frei = core.zerlege_staffel(werte.get("staffel", ""))
-        k.staffel = stufen
-        if frei and not k.freimenge:
-            k.freimenge = frei
+        fenster = Toplevel(self)
+        fenster.title(titel)
+        fenster.transient(self)
+        fenster.grab_set()
+
+        def feld(eltern, zeile, beschriftung, var, breite=26, werte=None):
+            ttk.Label(eltern, text=beschriftung).grid(
+                row=zeile, column=0, sticky="e", padx=(0, 8), pady=3)
+            if werte:
+                w = ttk.Combobox(eltern, textvariable=var, width=breite - 2,
+                                 values=werte, state="readonly")
+            else:
+                w = ttk.Entry(eltern, textvariable=var, width=breite)
+            w.grid(row=zeile, column=1, sticky="w", pady=3)
+            return w
+
+        # --- Das Buch ---------------------------------------------------
+        oben = ttk.LabelFrame(fenster, text="Das Buch")
+        oben.pack(fill="x", **PAD)
+        v_titel = StringVar(value=buch.titel)
+        v_isbn = StringVar(value=buch.isbn)
+        v_art = StringVar(value=buch.verguetungsart or "Honorar")
+        v_notiz = StringVar(value=buch.notizen)
+        feld(oben, 0, "Buchtitel", v_titel, 46).focus_set()
+        feld(oben, 1, "ISBN (Kurzform, z. B. 05-300)", v_isbn, 20)
+        feld(oben, 2, "Art der Zahlung", v_art, 24,
+             werte=list(core.VERGUETUNGSARTEN))
+        feld(oben, 3, "Notizen", v_notiz, 46)
+
+        # --- Was je Exemplar gezahlt wird -------------------------------
+        geld = ttk.LabelFrame(fenster, text="Was der Autor je Exemplar bekommt")
+        geld.pack(fill="x", **PAD)
+        v_weg = StringVar(value="fest" if k.betrag_je_ex is not None
+                          else "anteil")
+
+        fest = ttk.Frame(geld)
+        ttk.Radiobutton(geld, text="Ein fester Betrag je Exemplar",
+                        variable=v_weg, value="fest",
+                        command=lambda: umschalten()).grid(
+                            row=0, column=0, sticky="w", padx=8, pady=(6, 0))
+        fest.grid(row=1, column=0, sticky="w", padx=32)
+        v_fest = StringVar(value="" if k.betrag_je_ex is None
+                           else f"{k.betrag_je_ex:g}")
+        feld(fest, 0, "Betrag in €", v_fest, 12)
+
+        ttk.Radiobutton(geld, text="Ein Anteil am Verlagsabgabepreis",
+                        variable=v_weg, value="anteil",
+                        command=lambda: umschalten()).grid(
+                            row=2, column=0, sticky="w", padx=8, pady=(10, 0))
+        anteil = ttk.Frame(geld)
+        anteil.grid(row=3, column=0, sticky="w", padx=32)
+        v_preis = StringVar(value="" if k.ladenpreis is None
+                            else f"{k.ladenpreis:g}")
+        v_mwst = StringVar(value="keine" if not k.mwst_im_preis
+                           else f"{k.mwst_im_preis:g} %")
+        v_rabatt = StringVar(value=f"{k.verlagsrabatt:g}"
+                             if k.rabatt_anwenden else "")
+        v_teiler = StringVar(value=str(k.teiler or 1))
+        feld(anteil, 0, "Ladenpreis in €", v_preis, 12)
+        feld(anteil, 1, "darin enthaltene MwSt", v_mwst, 12,
+             werte=["keine", "7 %", "19 %"])
+        feld(anteil, 2, "Verlagsrabatt in % (meist 40)", v_rabatt, 12)
+        feld(anteil, 3, "geteilt durch (Mitautoren)", v_teiler, 12)
+
+        # --- Der Honorarsatz, gleich ob fest oder gestaffelt ------------
+        satzrahmen = ttk.LabelFrame(
+            fenster, text="Honorarsatz — gleichbleibend oder nach Menge gestaffelt")
+        satzrahmen.pack(fill="x", **PAD)
+        v_satzart = StringVar(value="staffel" if k.staffel else "fest")
+        ttk.Radiobutton(satzrahmen, text="Immer derselbe Satz",
+                        variable=v_satzart, value="fest",
+                        command=lambda: umschalten()).grid(
+                            row=0, column=0, sticky="w", padx=8, pady=(6, 0))
+        einfach = ttk.Frame(satzrahmen)
+        einfach.grid(row=1, column=0, sticky="w", padx=32)
+        v_satz = StringVar(value="" if k.satz is None else f"{k.satz:g}")
+        feld(einfach, 0, "Satz in %", v_satz, 10)
+
+        ttk.Radiobutton(satzrahmen,
+                        text="Gestaffelt — der Satz steigt mit der Menge",
+                        variable=v_satzart, value="staffel",
+                        command=lambda: umschalten()).grid(
+                            row=2, column=0, sticky="w", padx=8, pady=(10, 0))
+        stufen = ttk.Frame(satzrahmen)
+        stufen.grid(row=3, column=0, sticky="w", padx=32)
+        ttk.Label(stufen, text="bis … Exemplare").grid(row=0, column=1)
+        ttk.Label(stufen, text="Satz in %").grid(row=0, column=2)
+
+        stufenzeilen: list[tuple] = []
+
+        def stufe_anlegen(grenze="", satz=""):
+            i = len(stufenzeilen)
+            if i >= 6:
+                return
+            ttk.Label(stufen, text=f"{i + 1}.").grid(row=i + 1, column=0,
+                                                     padx=(0, 6))
+            vg, vs = StringVar(value=grenze), StringVar(value=satz)
+            eg = ttk.Entry(stufen, textvariable=vg, width=12, justify="right")
+            es = ttk.Entry(stufen, textvariable=vs, width=8, justify="right")
+            eg.grid(row=i + 1, column=1, pady=2)
+            es.grid(row=i + 1, column=2, padx=(8, 0), pady=2)
+            for e_ in (eg, es):
+                e_.bind("<KeyRelease>", lambda _e: vorschau())
+            stufenzeilen.append((vg, vs))
+
+        vorhandene = list(k.staffel) or [(None, None)]
+        for grenze, satz in vorhandene:
+            stufe_anlegen("" if grenze is None else str(grenze),
+                          "" if satz is None else f"{satz:g}")
+        while len(stufenzeilen) < 2:
+            stufe_anlegen()
+        ttk.Button(stufen, text="+ Stufe",
+                   command=lambda: (stufe_anlegen(), vorschau())).grid(
+                       row=99, column=1, sticky="w", pady=(6, 0))
+        ttk.Label(satzrahmen, justify="left", foreground="#555555", text=(
+            "Die letzte Stufe ohne Mengenangabe gilt nach oben offen. Welche "
+            "Stufe in einem Jahr greift, entscheidet der Stand zu\n"
+            "Jahresbeginn (Spalte „Stand bis Vorjahr“).")
+        ).grid(row=4, column=0, sticky="w", padx=8, pady=(4, 8))
+
+        # --- Sonderregeln ------------------------------------------------
+        sonder = ttk.LabelFrame(fenster, text="Sonderregeln")
+        sonder.pack(fill="x", **PAD)
+        v_mwstpflicht = BooleanVar(value=buch.mwst_pflichtig)
+        v_schwelle = BooleanVar(value=k.schwelle_zehn)
+        v_frei = StringVar(value=str(k.freimenge) if k.freimenge else "")
+        ttk.Checkbutton(sonder, text="Autor ist mehrwertsteuerpflichtig",
+                        variable=v_mwstpflicht).grid(row=0, column=0,
+                                                     sticky="w", padx=8, pady=2)
+        ttk.Checkbutton(sonder,
+                        text="Kein Honorar unter zehn Exemplaren im Jahr",
+                        variable=v_schwelle).grid(row=1, column=0, sticky="w",
+                                                  padx=8, pady=2)
+        frei = ttk.Frame(sonder)
+        frei.grid(row=2, column=0, sticky="w", padx=8, pady=2)
+        feld(frei, 0, "Freimenge: die ersten … Exemplare ohne Honorar",
+             v_frei, 10)
+
+        # --- Vorschau ----------------------------------------------------
+        ergebnis = StringVar()
+        ttk.Label(fenster, textvariable=ergebnis, font=("Segoe UI", 10, "bold"),
+                  foreground="#1a5c1a", wraplength=620, justify="left"
+                  ).pack(anchor="w", padx=12, pady=(0, 4))
+
+        def lies() -> tuple:
+            """Die Eingaben in eine Kondition übersetzen. (Kondition, Fehler)"""
+            kond = core.Kondition()
+            fehler = []
+            if v_weg.get() == "fest":
+                betrag = core._komma(v_fest.get())
+                if betrag is None:
+                    fehler.append("Es fehlt der Betrag je Exemplar.")
+                kond.betrag_je_ex = betrag
+            else:
+                preis = core._komma(v_preis.get())
+                if preis is None:
+                    fehler.append("Es fehlt der Ladenpreis.")
+                kond.ladenpreis = preis
+                kond.mwst_im_preis = ({"7 %": 7.0, "19 %": 19.0}
+                                      .get(v_mwst.get()))
+                rabatt = core._komma(v_rabatt.get())
+                kond.rabatt_anwenden = rabatt is not None
+                kond.verlagsrabatt = rabatt if rabatt is not None else 40.0
+                kond.teiler = int(core._komma(v_teiler.get(), 1) or 1)
+                if v_satzart.get() == "fest":
+                    satz = core._komma(v_satz.get())
+                    if satz is None:
+                        fehler.append("Es fehlt der Honorarsatz.")
+                    kond.satz = satz
+                else:
+                    staffel, letzte = [], None
+                    for vg, vs in stufenzeilen:
+                        satz = core._komma(vs.get())
+                        if satz is None:
+                            continue
+                        grenze = core._ganzzahl(vg.get())
+                        staffel.append((grenze, satz))
+                    offen = [s for s in staffel if s[0] is None]
+                    begrenzt = sorted((s for s in staffel if s[0] is not None),
+                                      key=lambda s: s[0])
+                    if len(offen) > 1:
+                        fehler.append("Nur EINE Stufe darf ohne Mengenangabe "
+                                      "bleiben — sie gilt nach oben offen.")
+                    if not staffel:
+                        fehler.append("Es ist keine Stufe ausgefüllt.")
+                    elif not offen:
+                        fehler.append("Die oberste Stufe braucht keine "
+                                      "Mengenangabe — sie gilt für alles "
+                                      "darüber. Bitte dort die Menge leeren.")
+                    grenzen = [s[0] for s in begrenzt]
+                    if len(set(grenzen)) != len(grenzen):
+                        fehler.append("Zwei Stufen haben dieselbe Menge.")
+                    kond.staffel = begrenzt + offen[:1]
+                    # Welche Stufe gilt, entscheidet der kumulierte Stand.
+                    # Ist der unbekannt — bei den meisten Büchern der Fall —,
+                    # greift `satz` als Rückfall. Den darf das Formular NICHT
+                    # überschreiben: bei einem importierten Buch steht dort
+                    # der Satz, den der Verlag tatsächlich angewandt hat.
+                    # Auf die erste Stufe zu setzen machte aus 14 % 12 % und
+                    # damit aus 1,33 € 1,14 €.
+                    kond.satz = (k.satz if k.satz is not None
+                                 else (begrenzt or offen)[0][1]
+                                 if (begrenzt or offen) else None)
+            kond.schwelle_zehn = v_schwelle.get()
+            kond.freimenge = int(core._komma(v_frei.get(), 0) or 0)
+            return kond, fehler
+
+        def vorschau(*_):
+            kond, fehler = lies()
+            if fehler:
+                ergebnis.set("… " + fehler[0])
+                return
+            if kond.staffel:
+                teile = []
+                untere = 1
+                for grenze, satz in kond.staffel:
+                    kopie = core.Kondition(**{**kond.__dict__, "satz": satz,
+                                              "staffel": []})
+                    betrag = core.satz_aus_kondition(kopie)
+                    if grenze is None:
+                        teile.append(f"ab {untere}: {core.euro(betrag)}")
+                    else:
+                        teile.append(f"{untere}–{grenze}: {core.euro(betrag)}")
+                        untere = grenze + 1
+                ergebnis.set("Ergibt je Exemplar — " + ", ".join(teile))
+            else:
+                ergebnis.set("Ergibt "
+                             + core.euro(core.satz_aus_kondition(kond))
+                             + " je Exemplar.")
+
+        def umschalten():
+            anteilig = v_weg.get() == "anteil"
+            for w in fest.winfo_children():
+                w.configure(state="normal" if not anteilig else "disabled")
+            for rahmen in (anteil, einfach, stufen):
+                for w in rahmen.winfo_children():
+                    if w.winfo_class() in ("TEntry", "TCombobox", "TButton"):
+                        w.configure(state="disabled" if not anteilig else
+                                    ("readonly" if w.winfo_class() == "TCombobox"
+                                     else "normal"))
+            if anteilig:
+                gestaffelt = v_satzart.get() == "staffel"
+                for w in einfach.winfo_children():
+                    if w.winfo_class() in ("TEntry",):
+                        w.configure(state="disabled" if gestaffelt else "normal")
+                for w in stufen.winfo_children():
+                    if w.winfo_class() in ("TEntry", "TButton"):
+                        w.configure(state="normal" if gestaffelt else "disabled")
+            vorschau()
+
+        for var in (v_fest, v_preis, v_rabatt, v_satz, v_teiler, v_frei):
+            var.trace_add("write", lambda *_: vorschau())
+        v_mwst.trace_add("write", lambda *_: vorschau())
+        umschalten()
+
+        # --- Knöpfe ------------------------------------------------------
+        fertig = {"ok": False}
+
+        def uebernehmen():
+            if not v_titel.get().strip():
+                messagebox.showwarning("Titel fehlt",
+                                       "Ohne Buchtitel geht es nicht.",
+                                       parent=fenster)
+                return
+            kond, fehler = lies()
+            if fehler:
+                messagebox.showwarning("Bitte noch ergänzen",
+                                       "\n".join(fehler), parent=fenster)
+                return
+            buch.titel = v_titel.get().strip()
+            buch.isbn = v_isbn.get().strip()
+            buch.verguetungsart = v_art.get() or "Honorar"
+            buch.notizen = v_notiz.get().strip()
+            buch.mwst_pflichtig = v_mwstpflicht.get()
+            buch.kondition = kond
+            fertig["ok"] = True
+            fenster.destroy()
+
+        leiste = ttk.Frame(fenster)
+        leiste.pack(fill="x", padx=12, pady=(0, 12))
+        ttk.Button(leiste, text="Übernehmen",
+                   command=uebernehmen).pack(side="right")
+        ttk.Button(leiste, text="Abbrechen",
+                   command=fenster.destroy).pack(side="right", padx=6)
+        fenster.bind("<Escape>", lambda _e: fenster.destroy())
+        self.wait_window(fenster)
+        return fertig["ok"]
 
     def _anleitung(self, eltern, text: str):
         """Ein Satz oben auf jedem Reiter: was ist hier zu tun.
