@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import os
 import queue
+import re
 import subprocess
 import sys
 import threading
@@ -79,13 +80,31 @@ SCHRITTE = [
 ]
 
 
+# Beträge und Mengen stehen in den Listen als fertiger Text: „903,00 €“,
+# „1.483,14 €“, „265 Ex.“. Die Zahl steht vorn, dahinter kommt die Einheit.
+_RX_ZAHL_VORN = re.compile(r"^\s*([+-]?\d{1,3}(?:\.\d{3})+|[+-]?\d+)(,\d+)?")
+
+
 def _sortwert(wert):
-    """Zahlen numerisch, alles andere alphabetisch — Leeres immer zuletzt."""
+    """Zahlen numerisch, alles andere alphabetisch — Leeres immer zuletzt.
+
+    Die Einheit muss dabei abgeschnitten werden. Vorher scheiterte die
+    Umwandlung am Eurozeichen, und dann wurde alphabetisch sortiert: „903“
+    stand vor „92“, weil die Null vor der Zwei kommt. Bei einer Spalte, in
+    der man nach dem größten Betrag sucht, ist das genau verkehrt.
+    """
     text = str(wert if wert is not None else "").strip()
-    try:
-        return (0, float(text.replace(".", "").replace(",", ".")), "")
-    except ValueError:
-        return (1 if text else 2, 0.0, text.lower())
+    if not text:
+        return (2, 0.0, "")
+    treffer = _RX_ZAHL_VORN.match(text)
+    if treffer:
+        ganz = treffer.group(1).replace(".", "")
+        nachkomma = (treffer.group(2) or ",0").replace(",", ".")
+        try:
+            return (0, float(ganz + nachkomma), "")
+        except ValueError:
+            pass
+    return (1, 0.0, text.lower())
 
 
 class App(Tk):
@@ -684,7 +703,13 @@ class App(Tk):
         umgekehrt = bool(richtung and richtung[0] == spalte and not richtung[1])
         self._sortierung[id(baum)] = (spalte, umgekehrt)
         zeilen = [(baum.set(k, spalte), k) for k in baum.get_children("")]
-        zeilen.sort(key=lambda z: _sortwert(z[0]), reverse=umgekehrt)
+        # Zweimal sortieren, weil Pythons Sortierung stabil ist: erst nach
+        # Wert (auf Wunsch rückwärts), dann nach Gruppe. So bleiben leere
+        # Zellen in BEIDE Richtungen unten — sonst stünden sie beim
+        # Rückwärtssortieren ganz oben und verdeckten genau die größten
+        # Beträge, die man sucht.
+        zeilen.sort(key=lambda z: _sortwert(z[0])[1:], reverse=umgekehrt)
+        zeilen.sort(key=lambda z: _sortwert(z[0])[0])
         for i, (_, k) in enumerate(zeilen):
             baum.move(k, "", i)
 
