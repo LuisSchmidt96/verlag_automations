@@ -2557,6 +2557,27 @@ def betrag_zeile(buch: Buch, jahr: int, cfg: dict | None = None) -> Posten | Non
                   netto=netto, mwst=mwst)
 
 
+def staffel_ohne_stand(buch: Buch, jahr: int) -> str:
+    """Meldet, wenn eine Staffel mangels Stand nicht greifen kann.
+
+    Nur dann, wenn der Rueckfallsatz UNTER der untersten Vertragsstufe
+    liegt — sonst ist der gespeicherte Satz die von Hand getippte Stufe
+    und alles in Ordnung. Ein Cent Unterschied zaehlt nicht, der entsteht
+    schon durchs Runden.
+    """
+    kond = buch.kondition
+    if not kond.staffel or kumulierte_menge(buch, jahr) is not None:
+        return ""
+    unterste = min(satz_aus_kondition(kond, s) for _, s in kond.staffel)
+    gilt = satz_aus_kondition(kond)
+    if gilt >= unterste - 0.005:
+        return ""
+    return (f"„{buch.titel}“: Für dieses Buch ist eine Staffel vereinbart, "
+            f"aber der bis {jahr} verkaufte Gesamtstand ist nicht bekannt. "
+            f"Gerechnet wird mit {euro(gilt)} je Exemplar — die unterste "
+            f"Vertragsstufe wäre {euro(unterste)}. Bitte prüfen.")
+
+
 def rechne_empfaenger(e: Empfaenger, jahr: int,
                       cfg: dict | None = None) -> Abrechnung:
     """Alle Bücher eines Empfängers zu einer Abrechnung zusammenfassen."""
@@ -2582,6 +2603,17 @@ def rechne_empfaenger(e: Empfaenger, jahr: int,
                 ab.probleme.append(
                     f"„{buch.titel}“: Stückzahl {jahr} noch nicht erfasst.")
             continue
+        # Eine vereinbarte Staffel, deren Stand niemand kennt, faellt still
+        # auf den gespeicherten Satz zurueck. Meist ist das genau eine der
+        # Stufen — der Verlag hat sie von Hand getippt. Manchmal aber nicht:
+        # bei „D'accord mit de Welt" steht in der Altmappe
+        # =ROUND((17.9/1.07*0.05)/2,2), also 5 % UND nochmal halbiert,
+        # waehrend der Vertrag in den Notizen 10 % nennt. Herauskommen 0,42 €
+        # statt 0,84 € je Exemplar. Gerechnet wird weiter wie bisher — was
+        # richtig ist, entscheidet der Verlag —, aber gesagt wird es.
+        hinweis = staffel_ohne_stand(buch, jahr)
+        if hinweis:
+            ab.probleme.append(hinweis)
         ab.posten.append(posten)
         ab.netto = runde(ab.netto + posten.netto)
         ab.mwst = runde(ab.mwst + posten.mwst)

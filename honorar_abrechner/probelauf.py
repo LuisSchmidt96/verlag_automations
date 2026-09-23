@@ -46,6 +46,11 @@ SOLL = {
     # Drei Abweichungen bleiben, und sie sind EIN Sachverhalt: die
     # Summenkette AA245 der Altmappe fasst zwei Personen zusammen.
     "ohne_erklaerung": 3,
+    # „D'accord mit de Welt“, zwei Titel mal zwei Mitautorinnen. Die
+    # Altmappe rechnet =ROUND((17.9/1.07*0.05)/2,2), der Vertrag nennt
+    # 10 % — 0,42 € statt 0,84 €. Bis der Verlag entscheidet, bleibt der
+    # Betrag und die Meldung.
+    "staffel_ohne_stand": 2,
 }
 
 
@@ -118,6 +123,13 @@ def main() -> int:
         p.gleich("Buck Posten", len(buck.posten), SOLL["buck_posten"])
         p.wahr("kein Brief bei negativem Betrag",
                not any(a.brief and a.brutto < 0 for a in alle))
+        # Vier Bücher rechnen mit der Hälfte der untersten Vertragsstufe,
+        # weil die Altmappe „5 % und nochmal halbiert“ tippte. Der Betrag
+        # bleibt, wie er war — aber die Meldung darf nicht verschwinden.
+        gewarnt = {a.empfaenger.kennung for a in alle
+                   for x in a.probleme if "Staffel vereinbart" in x}
+        p.gleich("Warnung „Staffel ohne Stand“", len(gewarnt),
+                 SOLL["staffel_ohne_stand"])
 
         print("\n4. Gegenprobe gegen die Altmappe")
         abweichungen = core.pruefe_gegen_excel(geladen, ALTMAPPE, JAHR, cfg)

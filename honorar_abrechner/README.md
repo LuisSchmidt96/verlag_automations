@@ -376,10 +376,21 @@ einen einzigen Brief; das Werkzeug weist das bei ihnen aus.
    oder auf die ganze Jahresmenge? Umgesetzt ist derzeit „ein Satz je Jahr“.
 3. **Die kumulierten Stände.** In den Notizen steht „Stand 2023: 1460 Ex.“ —
    für 2024 und 2025 fehlt die Fortschreibung bei den Büchern, die nicht im
-   Historienblatt stehen.
-4. **Die echte Word-Vorlage** mit dem Briefkopf.
-5. **Die Summenkette `AA245`** fasst Schenk und Möller zusammen. Fehler?
-6. **Vertauschte Namen.** In der Altmappe steht bei „Mühlacker+“ der Nachname
+   Historienblatt stehen. Bei **16 der 24 Staffelbücher** ist der Stand
+   unbekannt; dort greift der gespeicherte Satz.
+4. **„D’accord mit de Welt“ — wird da die Hälfte gezahlt?** Bei drei der
+   vier Zeilen ist der gespeicherte Satz genau die von Hand getippte
+   Vertragsstufe, alles in Ordnung. Bei diesem Titel nicht: die Altmappe
+   rechnet `=ROUND((17.9/1.07*0.05)/2,2)` — also 5 % **und** nochmals
+   halbiert —, während der Vertrag in den Notizen „1–7000 Exemplare 10 %“
+   nennt. Bei zwei Mitautoren wären das 5 % je Person, nicht 2,5 %. Heraus
+   kommen 0,42 € statt 0,84 € je Exemplar, beim E-Book 0,35 € statt 0,70 €.
+   Das Werkzeug rechnet weiter wie die Altmappe — was richtig ist,
+   entscheidet der Verlag —, **meldet den Fall aber bei jedem Durchlauf**
+   als Problem beim Empfänger, mit beiden Beträgen im Klartext.
+5. **Die echte Word-Vorlage** mit dem Briefkopf.
+6. **Die Summenkette `AA245`** fasst Schenk und Möller zusammen. Fehler?
+7. **Vertauschte Namen.** In der Altmappe steht bei „Mühlacker+“ der Nachname
    im Vornamensfeld; der Brief heißt deshalb `Sandra, Schuster_…` statt
    `Schuster, Sandra_…`. Das Werkzeug übernimmt die Felder so, wie sie
    dastehen — wer sie tauscht, tut es im Bestand.
