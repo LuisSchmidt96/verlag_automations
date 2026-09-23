@@ -234,6 +234,21 @@ Stand nach diesen Korrekturen, für 2025:
 | KSK-Meldung | **69 von 72 Personen identisch** mit der KSK-Spalte der Altmappe |
 | unerklärte Abweichungen | **3** — und die sind ein einziger Sachverhalt (s. u.) |
 
+## Nach jeder Änderung: der Probelauf
+
+```
+python honorar_abrechner/probelauf.py
+```
+
+Fährt den ganzen Weg gegen die Beispieldaten und prüft 30 Werte gegen
+festgeschriebene Sollzahlen — Import, Rundlauf, Berechnung, Gegenprobe,
+Briefe, Listen und das Lesen eingetippter Zahlen. Weicht etwas ab, sagt das
+Skript was, und der Rückgabewert ist 1. Ohne die Beispieldaten
+(personenbezogen, nicht eingecheckt) überspringt es und sagt das.
+
+Das ist der Wächter: ohne ihn bricht die nächste Änderung eine der sechs
+mühsam gefundenen Regeln, ohne dass es jemand merkt.
+
 ## Gegenprobe
 
 *Durchlauf → Gegen die Altmappe prüfen* rechnet jede Zeile und jede

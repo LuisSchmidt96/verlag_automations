@@ -1939,7 +1939,8 @@ def _hauptblatt(bestand, register, wbf, wbv, blattname, jahr, prot):
         # ist das ein Fehler in der Altmappe — gemeldet, nicht geglättet.
         schluessel = {_schluessel(f["vorname"], f["name"], f["institution"])
                       for _, f in felder_je_zeile if f["name"] or f["institution"]}
-        if len(schluessel) > 1:
+        gemischt = len(schluessel) > 1
+        if gemischt:
             namen = " / ".join(sorted(
                 f["name"] or f["institution"] for _, f in felder_je_zeile))
             prot.warne(
@@ -1955,12 +1956,29 @@ def _hauptblatt(bestand, register, wbf, wbv, blattname, jahr, prot):
             prot.warne(
                 f"{blattname}, Zeile {r}: steht in keiner Summenkette "
                 f"({e.anzeigename}) — als eigener Empfänger übernommen.")
+            allein_hinweis = (
+                f"Diese Zeile stand in der Altmappe in keiner Summenkette; "
+                f"sie bekommt hier einen eigenen Brief. Bitte prüfen, ob das "
+                f"richtig ist.")
+        else:
+            allein_hinweis = ""
 
         for nr, zeile in saetze:
             zeile_f = tuple(c.value for c in ws_f[nr])
             buch = _lies_buch(bestand, zeile, zeile_f, idx, blattname, nr, prot)
             if buch is None:
                 continue
+            if allein_hinweis:
+                buch.nachpflege.append(allein_hinweis)
+            if gemischt:
+                # Sonst sieht der Bediener später nur einen Betrag und
+                # erfährt nie, dass die Altmappe ihn einem anderen gutschrieb.
+                # Genau dieser Fall braucht einen Blick.
+                buch.nachpflege.append(
+                    f"In der Altmappe wurde dieses Buch über die Summenkette "
+                    f"in {spalte_aus}{max(zeilennummern)} mit einer ANDEREN "
+                    f"Person zusammen abgerechnet ({namen}). Wem der Betrag "
+                    f"zusteht, muss der Verlag entscheiden.")
             _lies_jahre(buch, zeile, idx, jahresspalten, jahr)
             e.buecher.append(buch)
             prot.zeilen[-1]["Empfänger"] = e.anzeigename

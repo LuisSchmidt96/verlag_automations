@@ -25,7 +25,9 @@ a = Analysis(
     runtime_hooks=[],
     # windows_pruefung.py ist reine Entwicklungshilfe und gehört nicht in
     # die .exe — sie wird auf dem Windows-Rechner von Hand gestartet.
-    excludes=['honorar_abrechner.windows_pruefung'],
+    # Entwicklungshilfen, nicht Teil der .exe.
+    excludes=['honorar_abrechner.windows_pruefung',
+              'honorar_abrechner.probelauf'],
     noarchive=False,
     optimize=0,
 )
