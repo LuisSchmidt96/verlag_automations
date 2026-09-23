@@ -487,8 +487,8 @@ SPALTEN_HISTORIE = [
 ]
 
 SPALTEN_REGELN = [
-    "Buch-Kennung", "Autor / Einrichtung", "Buchtitel", "Was gilt hier",
-    "Im Klartext",
+    "Art", "Autor / Einrichtung", "Buchtitel", "Was gilt hier",
+    "Im Klartext", "Buch-Kennung",
 ]
 
 SPALTEN_STAFFELN = ["Buch-Kennung", "Stufe", "bis Menge", "Satz"]
@@ -520,7 +520,7 @@ BREITEN = {
     "Quelle": 14,
     "Jahr": 8, "verkauft": 10, "Eigenkauf": 11, "Korrektur": 11,
     "Vortrag": 10, "Stufe": 8, "bis Menge": 11,
-    "Autor / Einrichtung": 34, "€ je Ex.": 11, "verkaufte Ex.": 13,
+    "Art": 15, "Autor / Einrichtung": 34, "€ je Ex.": 11, "verkaufte Ex.": 13,
     "Stand bis Vorjahr": 16, "Vergütungs-Ex.": 14, "Betrag netto": 13,
     "MwSt": 10, "Besonderheit": 30, "Was gilt hier": 22, "Im Klartext": 90,
 }
@@ -951,46 +951,93 @@ def offener_zwischenstand() -> str:
 
 
 def besonderheit(buch: "Buch") -> str:
-    """Ein kurzes Wort für das, was an diesem Buch nicht gewöhnlich ist."""
+    """Ein kurzes Wort für das, was an diesem Buch nicht gewöhnlich ist.
+
+    Dieselbe Quelle wie das Blatt „Regeln“ — was hier steht, ist dort
+    ausführlich erklärt.
+    """
     teile = []
-    if buch.stillgelegt:
-        teile.append("stillgelegt")
-    if buch.gesondert:
-        teile.append("gesondert abrechnen")
-    if buch.kondition.staffel:
-        teile.append("Staffel")
-    if buch.kondition.freimenge:
-        teile.append(f"Freimenge {buch.kondition.freimenge}")
-    if buch.vorauszahlung:
-        teile.append("Vorauszahlung offen")
-    if buch.kondition.schwelle_zehn:
-        teile.append("erst ab 10 Ex.")
-    if buch.kondition.teiler != 1:
-        teile.append(f"geteilt durch {buch.kondition.teiler}")
-    if buch.nachpflege:
-        teile.append("bitte prüfen")
+    for art in regelarten(buch):
+        if art == "Freimenge":
+            teile.append(f"Freimenge {buch.kondition.freimenge}")
+        elif art == "Mitautoren":
+            teile.append(f"geteilt durch {buch.kondition.teiler}")
+        elif art == "Schwelle":
+            teile.append("erst ab 10 Ex.")
+        elif art == "Gesondert":
+            teile.append("gesondert abrechnen")
+        elif art == "Stillgelegt":
+            teile.append("stillgelegt")
+        elif art == "Vorauszahlung":
+            teile.append("Vorauszahlung offen")
+        elif art == "Bitte prüfen":
+            teile.append("bitte prüfen")
+        else:
+            teile.append(art)
     return ", ".join(teile)
+
+
+# Die Sonderregeln, nach Tragweite geordnet. Wer das Blatt öffnet, soll
+# oben das finden, was eine Abrechnung wirklich verändert — und nicht erst
+# durch hundert stillgelegte Titel scrollen.
+REGELARTEN = [
+    ("Vorauszahlung", "Vorauszahlung offen"),
+    ("Staffel", "Gestaffelter Satz"),
+    ("Freimenge", "Freimenge"),
+    ("Gesondert", "Gesondert abrechnen"),
+    ("Schwelle", "Erst ab zehn Exemplaren"),
+    ("Mitautoren", "Auf mehrere Autoren geteilt"),
+    ("Bitte prüfen", "Beim Einlesen aufgefallen"),
+    ("Stillgelegt", "Wird nicht mehr abgerechnet"),
+]
+
+
+def regelarten(buch: "Buch") -> list[str]:
+    """Welche Sonderregeln an diesem Buch hängen — leer heißt: keine."""
+    k = buch.kondition
+    arten = []
+    if buch.vorauszahlung:
+        arten.append("Vorauszahlung")
+    if k.staffel:
+        arten.append("Staffel")
+    if k.freimenge:
+        arten.append("Freimenge")
+    if buch.gesondert:
+        arten.append("Gesondert")
+    if k.schwelle_zehn:
+        arten.append("Schwelle")
+    if k.teiler != 1:
+        arten.append("Mitautoren")
+    if buch.nachpflege:
+        arten.append("Bitte prüfen")
+    if buch.stillgelegt:
+        arten.append("Stillgelegt")
+    return arten
 
 
 def regelzeilen(bestand: Bestand) -> list[dict]:
     """Die besonderen Abmachungen in ganzen Sätzen, je Buch eine Zeile.
 
-    Alles, was die Rechnung vom Gewöhnlichen abweichen lässt, steht hier
-    zusammen — sonst müsste man es aus den Konditionsspalten zusammenklauben,
-    und genau das will niemand einmal im Jahr tun.
+    NUR Bücher mit einer Besonderheit. Die gewöhnliche Rechnung — Ladenpreis,
+    Rabatt, Satz — gehört nicht hierher: sie steht im Blatt „Bücher“ und im
+    Werkzeug hinter dem Doppelklick. Stünde sie auch hier, wären es 412 statt
+    193 Zeilen, und die 24 Staffeln, um die es geht, lägen darin begraben.
+
+    Geordnet nach Tragweite: was die Auszahlung am stärksten verändert,
+    steht oben; stillgelegte Titel stehen zuletzt.
     """
+    rang = {name: i for i, (name, _) in enumerate(REGELARTEN)}
     zeilen = []
     for e, b in bestand.buecher():
+        arten = regelarten(b)
+        if not arten:
+            continue
         k = b.kondition
         saetze = []
-        if b.stillgelegt:
-            saetze.append(f"Wird nicht mehr abgerechnet"
-                          + (f" — {b.stillgelegt_grund}." if b.stillgelegt_grund else "."))
-        if b.gesondert:
+        if b.vorauszahlung:
             saetze.append(
-                "Wird auf einem eigenen Weg abgerechnet und löst hier keine "
-                "Auszahlung aus. Die Zahlen laufen trotzdem mit, damit "
-                "Staffel und Freimenge stimmen.")
+                f"Es ist noch eine Vorauszahlung von {euro(b.vorauszahlung)} "
+                f"offen. Sie wird vom Honorar abgezogen, bis sie getilgt ist.")
         if k.staffel:
             stufen, untere = [], 1
             for grenze, satz in k.staffel:
@@ -1001,43 +1048,42 @@ def regelzeilen(bestand: Bestand) -> list[dict]:
                     untere = grenze + 1
             saetze.append("Gestaffelter Satz: " + ", ".join(stufen)
                           + ". Welche Stufe gilt, entscheidet der Stand zu "
-                            "Jahresbeginn.")
+                            "Jahresbeginn (Spalte „Stand bis Vorjahr“).")
         if k.freimenge:
             saetze.append(
                 f"Die ersten {k.freimenge} Exemplare werden nicht vergütet. "
                 f"Solange der Stand darunter liegt, wird nichts gezahlt — "
                 f"und auch nichts zurückgefordert.")
-        if b.vorauszahlung:
+        if b.gesondert:
             saetze.append(
-                f"Es ist noch eine Vorauszahlung von {euro(b.vorauszahlung)} "
-                f"offen. Sie wird vom Honorar abgezogen, bis sie getilgt ist.")
+                "Wird auf einem eigenen Weg abgerechnet und löst hier keine "
+                "Auszahlung aus. Die Zahlen laufen mit, damit Staffel und "
+                "Freimenge stimmen.")
         if k.schwelle_zehn:
             saetze.append(
                 "Unter zehn Vergütungsexemplaren im Jahr entfällt das "
                 "Honorar. Bei genau zehn wird gezahlt.")
         if k.teiler != 1:
             saetze.append(f"Das Honorar teilen sich {k.teiler} Autoren.")
-        if k.betrag_je_ex is None and k.ladenpreis is not None:
-            weg = [f"Ladenpreis {euro(k.ladenpreis)}"]
-            if k.mwst_im_preis:
-                weg.append(("zuzüglich" if k.mwst_aufschlagen else "abzüglich")
-                           + f" {k.mwst_im_preis:g} % MwSt")
-            if k.rabatt_anwenden:
-                weg.append(f"minus {k.verlagsrabatt:g} % Verlagsrabatt")
-            if k.satz is not None:
-                weg.append(f"davon {k.satz:g} %")
-            saetze.append("Gerechnet wird: " + ", ".join(weg) + ".")
+        if b.stillgelegt:
+            saetze.append("Wird nicht mehr abgerechnet"
+                          + (f" — {b.stillgelegt_grund}." if b.stillgelegt_grund
+                             else "."))
         for hinweis in b.nachpflege:
             saetze.append("Beim Einlesen aufgefallen: " + hinweis)
-        if not saetze:
-            continue
+
         zeilen.append({
+            "_rang": min(rang[a] for a in arten),
+            "Art": arten[0],
             "Buch-Kennung": b.kennung,
             "Autor / Einrichtung": e.anzeigename,
             "Buchtitel": b.titel,
-            "Was gilt hier": besonderheit(b) or "—",
+            "Was gilt hier": ", ".join(arten),
             "Im Klartext": " ".join(saetze),
         })
+    zeilen.sort(key=lambda z: (z["_rang"], z["Autor / Einrichtung"].lower()))
+    for z in zeilen:
+        z.pop("_rang")
     return zeilen
 
 

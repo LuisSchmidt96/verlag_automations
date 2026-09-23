@@ -87,7 +87,7 @@ geändert werden. Sieben Blätter, jedes mit genau einer Aufgabe:
 | `Hinweise` | die Regeln im Klartext — steht absichtlich an erster Stelle |
 | **`Abrechnung <Jahr>`** | **das Arbeitsblatt**: eine Zeile je Buch, nach Autor sortiert. Links wer und was, in der Mitte die drei **gelb hinterlegten** Spalten zum Ausfüllen, rechts das Ergebnis der letzten Berechnung und eine Spalte `Besonderheit` |
 | `Historie` | alle Jahre davor — vollständig, aber aus dem Weg |
-| `Regeln` | was an einem Buch besonders ist, in ganzen Sätzen: Staffel, Freimenge, Vorauszahlung, Schwelle, Aufteilung |
+| `Regeln` | **nur** die Bücher mit einer Besonderheit, nach Tragweite geordnet: erst Vorauszahlung und Staffel, zuletzt die stillgelegten. Je Zeile ein Satz, der erklärt, was gilt |
 | `Empfänger` | Anschrift, IBAN, Aktenzeichen, E-Mail |
 | `Bücher` | die technischen Konditionsfelder — hier rechnet das Werkzeug, hier muss man normalerweise nichts tun |
 | `Staffeln` | die Stufen der Staffelverträge |
@@ -102,6 +102,11 @@ Die Spalte **`Stand bis Vorjahr`** nimmt einem das Nachschlagen ab: sie zeigt,
 wie viele Vergütungsexemplare bis zum Vorjahr aufgelaufen sind. Daran hängen
 Staffel und Freimenge. Gerechnet wird der Wert aus dem Blatt `Historie`; man
 muss ihn nicht pflegen.
+
+Im Blatt `Regeln` steht bewusst **nicht**, wie gewöhnlich gerechnet wird —
+Ladenpreis, Rabatt, Satz stehen im Blatt `Bücher` und im Werkzeug hinter dem
+Doppelklick. Stünden sie auch dort, wären es 412 statt 275 Zeilen, und die 24
+Staffelverträge lägen darin begraben.
 
 Stillgelegte Bücher stehen **nicht** im Arbeitsblatt — sonst wäre es um ein
 Fünftel länger, ohne dass je etwas einzutragen wäre. Ihre Zahlen liegen
