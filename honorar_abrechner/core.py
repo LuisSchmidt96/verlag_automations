@@ -2972,6 +2972,7 @@ def gesonderte_posten(bestand: Bestand, jahr: int,
         if posten is None or posten.netto <= 0:
             continue
         zeilen.append({
+            "_kennung": b.kennung,
             "Empfänger": e.anzeigename,
             "Buchtitel": b.titel,
             "ISBN": b.isbn,
@@ -2997,6 +2998,7 @@ def _blatt_gesondert(wb, bestand: Bestand, jahr: int, cfg: dict):
         return None
     spalten = ["Empfänger", "Buchtitel", "ISBN", "Vergütungsart",
                "Vergütungs-Ex.", "Betrag", "Bankverbindung", "in der Altmappe"]
+    # „_kennung“ ist nur für die Oberfläche da und gehört nicht ins Blatt.
     ws = wb.create_sheet(f"Offene Sonderfälle {jahr}")
     ws.append(["Diese Beträge werden NICHT ausgezahlt, solange die Verträge "
                "auf „gesondert abrechnen“ stehen."])

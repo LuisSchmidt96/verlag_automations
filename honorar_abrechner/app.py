@@ -42,15 +42,29 @@ SPALTEN_STAMM = [("name", "Empfänger", 300), ("ort", "PLZ / Ort", 170),
                  ("iban", "Bankverbindung", 230), ("buecher", "Bücher", 70),
                  ("hinweis", "Hinweis", 240)]
 
-SPALTEN_ERFASSUNG = [("isbn", "ISBN", 90), ("titel", "Buchtitel", 320),
-                     ("empf", "Empfänger", 220), ("art", "Vergütungsart", 130),
-                     ("verkauft", "verk. Ex.", 90), ("eigenkauf", "Eigenkauf", 90),
-                     ("stand", "Stand", 110)]
+SPALTEN_ERFASSUNG = [("isbn", "ISBN", 90), ("titel", "Buchtitel", 300),
+                     ("empf", "Empfänger", 200), ("art", "Vergütungsart", 120),
+                     ("verkauft", "verkaufte Ex. ✎", 110),
+                     ("eigenkauf", "Eigenkauf ✎", 100),
+                     ("stand", "Stand bis Vorjahr", 120),
+                     # Ohne diese Spalte tippt man Zahlen für ein Buch ein,
+                     # das gar nicht ausgezahlt wird, und erfährt es nie.
+                     ("bes", "Besonderheit", 230)]
 
 SPALTEN_DURCHLAUF = [("name", "Empfänger", 280), ("art", "Vergütungsart", 120),
                      ("posten", "Bücher", 70), ("netto", "Netto", 95),
                      ("mwst", "MwSt", 85), ("brutto", "Auszahlung", 105),
                      ("brief", "Brief", 60), ("hinweis", "Grund / Hinweis", 340)]
+
+# Im Sonderfall-Modus zeigt dieselbe Liste etwas anderes: nicht Empfänger mit
+# ihrer Auszahlung, sondern die einzelnen Bücher mit dem Betrag, der wegen
+# der offenen Entscheidung NICHT fließt. Sonst stünden dort neunzehn Zeilen
+# mit lauter Nullen — die Empfänger haben ja gerade keine normale Auszahlung.
+SPALTEN_SONDERFAELLE = [("name", "Empfänger", 260), ("titel", "Buchtitel", 300),
+                        ("isbn", "ISBN", 80), ("ex", "Vergütungs-Ex.", 110),
+                        ("betrag", "wird NICHT ausgezahlt", 160),
+                        ("iban", "Bankverbindung", 210),
+                        ("quelle", "in der Altmappe", 170)]
 
 
 # Die vier Schritte in der Reihenfolge, in der gearbeitet wird. Die
@@ -734,6 +748,7 @@ class App(Tk):
                   font=("Segoe UI", 10, "bold")).pack(side="right")
 
         self.baum_erfassung = self._liste(seite, SPALTEN_ERFASSUNG)
+        self.baum_erfassung.tag_configure("gesondert", foreground="#8a5a00")
         self.baum_erfassung.bind("<Double-1>", self._bearbeite_zelle)
         self.baum_erfassung.bind("<Return>", self._bearbeite_zelle)
         # Der Unterschied zwischen einer leeren Zelle und einer 0 entscheidet
@@ -741,13 +756,20 @@ class App(Tk):
         hinweis = ttk.Frame(seite)
         hinweis.pack(fill="x", padx=12, pady=(0, 8))
         ttk.Label(hinweis, justify="left", text=(
-            "Doppelklick auf eine Zahl öffnet das Feld. Die Eingabetaste "
-            "übernimmt und springt eine Zeile tiefer, Esc verwirft.")
+            "Beschreibbar sind nur die beiden Spalten mit dem Stift (✎). "
+            "Doppelklick öffnet das Feld, die Eingabetaste übernimmt und "
+            "springt eine Zeile tiefer, Tabulator wechselt zum Eigenkauf, "
+            "Esc verwirft.")
         ).pack(anchor="w")
         ttk.Label(hinweis, justify="left", foreground="#8a5a00", text=(
             "Wichtig: Ein leeres Feld heißt „habe ich noch nicht eingetragen“. "
             "Hat sich ein Buch im ganzen Jahr nicht verkauft, tragen Sie dort "
             "bitte eine 0 ein — sonst fehlt das Buch in der Abrechnung.")
+        ).pack(anchor="w")
+        ttk.Label(hinweis, justify="left", foreground="#8a5a00", text=(
+            "Braune Zeilen werden gesondert abgerechnet: ihre Zahlen laufen "
+            "für Staffel und Freimenge mit, lösen aber keine Auszahlung aus. "
+            "Was an einem Buch sonst besonders ist, steht rechts.")
         ).pack(anchor="w")
         self._weiter(seite, 2, "Weiter zu Schritt 3: Nachrechnen  ▸")
 
@@ -790,7 +812,7 @@ class App(Tk):
                   foreground="#777777").pack(side="left", padx=(0, 20))
         ttk.Label(legende, text="rot = bitte ansehen, bevor der Brief hinausgeht",
                   foreground="#a4262c").pack(side="left", padx=(0, 20))
-        ttk.Label(legende, text="braun = offener Sonderfall",
+        ttk.Label(legende, text="braun = wartet auf eine Entscheidung",
                   foreground="#8a5a00").pack(side="left")
         ttk.Label(legende, text="  ·  Doppelklick auf eine Zeile zeigt, wie der "
                                 "Betrag zustande kommt").pack(side="left")
@@ -1063,12 +1085,26 @@ class App(Tk):
             if suche and suche not in (
                     e.anzeigename + " " + e.ort + " " + e.iban).lower():
                 continue
-            offen = [b for b in e.buecher if b.nachpflege]
-            hinweis = ""
-            if not e.iban:
-                hinweis = "keine Bankverbindung"
-            elif offen:
-                hinweis = f"{len(offen)} Buch/Bücher zur Nachpflege"
+            hinweise = []
+            # Eine fehlende Bankverbindung nur dort melden, wo sie gebraucht
+            # wird: 126 der 250 Empfänger haben keine, aber die meisten sind
+            # stillgelegt oder warten auf eine Entscheidung. Ein Hinweis, der
+            # bei der Hälfte steht, wird überlesen.
+            aktiv = any(not b.stillgelegt and not b.gesondert
+                        for b in e.buecher)
+            if not e.iban and aktiv:
+                hinweise.append("keine Bankverbindung")
+            gesondert = sum(1 for b in e.buecher
+                            if b.gesondert and not b.stillgelegt)
+            if gesondert:
+                hinweise.append(f"{gesondert} wartet auf Entscheidung"
+                                if gesondert == 1 else
+                                f"{gesondert} warten auf Entscheidung")
+            offen = sum(1 for b in e.buecher if b.nachpflege)
+            if offen:
+                hinweise.append("1 Buch bitte prüfen" if offen == 1
+                                else f"{offen} Bücher bitte prüfen")
+            hinweis = " · ".join(hinweise)
             baum.insert("", "end", iid=e.kennung, values=(
                 e.anzeigename, f"{e.plz} {e.ort}".strip(), e.iban,
                 len(e.buecher), hinweis))
@@ -1206,7 +1242,9 @@ class App(Tk):
                 b.isbn, b.titel, e.anzeigename, b.verguetungsart,
                 "" if jw is None or jw.verkauft is None else jw.verkauft,
                 "" if jw is None else jw.eigenkauf,
-                "" if stand is None else stand))
+                "" if stand is None else stand,
+                core.besonderheit(b)),
+                tags=("gesondert",) if b.gesondert else ())
         self._zeige_fortschritt()
 
     def _bearbeite_zelle(self, ereignis):
@@ -1381,18 +1419,6 @@ class App(Tk):
         self.abrechnungen = abrechnungen
         self._rechnung_veraltet = False
         self._male_durchlauf()
-        mit = [a for a in abrechnungen if a.brief]
-        # Nur positive Honorare werden gemeldet. Würde man alle aufsummieren,
-        # kürzten sich die negativen (Autoren mit mehr Rückgaben als
-        # Verkäufen) heraus und der angezeigte Meldebetrag wäre zu niedrig —
-        # er stünde in keiner Beziehung zu dem, was in der Liste landet.
-        meldbar = [a for a in abrechnungen if a.ksk_netto > 0]
-        self.summe.set(
-            f"{len(mit)} Briefe · Auszahlung "
-            f"{core.euro(sum(a.brutto for a in mit))} · an die "
-            f"Künstlersozialkasse zu melden: "
-            f"{core.euro(sum(a.ksk_netto for a in meldbar))} "
-            f"({len(meldbar)} Autoren)")
         # Was wegen einer offenen Entscheidung NICHT ausgezahlt wird, gehört
         # bei jedem Durchlauf vor Augen — nicht nur einmal ins Importprotokoll.
         anzahl, betrag = core.zurueckgehalten(self.bestand, self.jahr.get(),
@@ -1438,28 +1464,48 @@ class App(Tk):
             if unerklaert else "Gegenprobe: alles stimmt überein.")
 
     def _male_durchlauf(self):
-        """Die Liste füllen — wahlweise alle oder nur die offenen Sonderfälle.
+        """Die Liste füllen — in einem von zwei Modi.
 
-        Neunzehn der zwanzig Empfänger mit einem offenen Sonderfall bekommen
-        gar keinen Brief. Sie stehen deshalb grau zwischen zweihundertfünfzig
-        anderen Zeilen und sind nicht zu finden. Das Häkchen holt genau sie
-        nach vorn.
+        „Alle“ zeigt Empfänger mit ihrer Auszahlung. „Nur die offenen
+        Sonderfälle“ zeigt stattdessen die BÜCHER mit dem Betrag, der wegen
+        der offenen Entscheidung nicht fließt: neunzehn der zwanzig
+        Empfänger haben gar keine normale Auszahlung, ihre Zeilen wären in
+        der gewöhnlichen Ansicht durchweg null.
         """
         baum = self.baum_durchlauf
         for k in baum.get_children(""):
             baum.delete(k)
         if not self.abrechnungen:
             return
+
+        if self.nur_sonderfaelle.get():
+            self._setze_spalten(SPALTEN_SONDERFAELLE)
+            zeilen = core.gesonderte_posten(self.bestand, self.jahr.get(),
+                                            self.cfg)
+            self._sonderzeilen = zeilen
+            for i, z in enumerate(zeilen):
+                baum.insert("", "end", iid=f"s{i}", values=(
+                    z["Empfänger"], z["Buchtitel"], z["ISBN"],
+                    f"{z['Vergütungs-Ex.']} Ex.", core.euro(z["Betrag"]),
+                    z["Bankverbindung"] or "— fehlt —",
+                    (z["in der Altmappe"] or "").replace("!", ", Zeile ")),
+                    tags=("sonderfall",))
+            summe = core.runde(sum(z["Betrag"] for z in zeilen))
+            empfaenger = len({z["Empfänger"] for z in zeilen})
+            self.summe.set(
+                f"{len(zeilen)} Bücher von {empfaenger} Autoren · "
+                f"zusammen {core.euro(summe)}, die NICHT ausgezahlt werden")
+            self.status.set(
+                "Häkchen wegnehmen zeigt wieder alle Empfänger.")
+            return
+
+        self._setze_spalten(SPALTEN_DURCHLAUF)
         offen = {z["Empfänger"] for z in core.gesonderte_posten(
             self.bestand, self.jahr.get(), self.cfg)}
-        gezeigt = 0
         for ab in sorted(self.abrechnungen, key=lambda a: -a.brutto):
-            betrifft = ab.empfaenger.anzeigename in offen
-            if self.nur_sonderfaelle.get() and not betrifft:
-                continue
             hinweise = list(ab.gruende) + list(ab.probleme)
             marken = []
-            if betrifft:
+            if ab.empfaenger.anzeigename in offen:
                 marken.append("sonderfall")
             elif not ab.brief:
                 marken.append("kein_brief")
@@ -1470,10 +1516,62 @@ class App(Tk):
                 core.euro(ab.netto), core.euro(ab.mwst), core.euro(ab.brutto),
                 "Ja" if ab.brief else "—", " | ".join(hinweise)),
                 tags=marken)
-            gezeigt += 1
-        if self.nur_sonderfaelle.get():
-            self.status.set(f"{gezeigt} Empfänger mit einem offenen "
-                            f"Sonderfall. Häkchen wegnehmen zeigt wieder alle.")
+        mit = [a for a in self.abrechnungen if a.brief]
+        meldbar = [a for a in self.abrechnungen if a.ksk_netto > 0]
+        self.summe.set(
+            f"{len(mit)} Briefe · Auszahlung "
+            f"{core.euro(sum(a.brutto for a in mit))} · an die "
+            f"Künstlersozialkasse zu melden: "
+            f"{core.euro(sum(a.ksk_netto for a in meldbar))} "
+            f"({len(meldbar)} Autoren)")
+
+    def _zeige_sonderfall(self, nummer: int):
+        """Wie der einbehaltene Betrag zustande kommt — und warum er bleibt."""
+        zeilen = getattr(self, "_sonderzeilen", [])
+        if nummer >= len(zeilen):
+            return
+        z = zeilen[nummer]
+        buch = next((b for _, b in self.bestand.buecher()
+                     if b.kennung == z.get("_kennung")), None)
+        fenster = Toplevel(self)
+        fenster.title(f"Offener Sonderfall — {z['Buchtitel']}")
+        fenster.geometry("860x520")
+        feld = Text(fenster, wrap="word", font=("Segoe UI", 10))
+        feld.pack(fill="both", expand=True, **PAD)
+        feld.insert(END, f"{z['Empfänger']}\n{z['Buchtitel']}\n\n")
+        if buch is not None:
+            posten = core.betrag_zeile(buch, self.jahr.get(), self.cfg)
+            if posten is not None:
+                for zeile in core.rechenweg(posten):
+                    feld.insert(END, zeile + "\n")
+                feld.insert(END, "\n")
+        feld.insert(END, "─" * 68 + "\n")
+        feld.insert(END,
+                    f"Dieser Betrag von {core.euro(z['Betrag'])} wird "
+                    f"NICHT ausgezahlt.\n\n"
+                    f"Das Buch steht auf „gesondert abrechnen“. In der alten "
+                    f"Excel-Tabelle stand es im Blatt „Zahlung ab XX Ex.“ "
+                    f"({z['in der Altmappe']}), das dort nur einen Stand "
+                    f"führte und keine Auszahlungen auslöste — die Summe "
+                    f"jener Spalte war negativ, und fast niemand daraus kam "
+                    f"in der Zahlungsliste vor.\n\n"
+                    f"Soll der Betrag doch fließen, nimmt man im Bestand im "
+                    f"Blatt „Bücher“ den Haken in der Spalte „Gesondert "
+                    f"abrechnen“ weg. Das ist eine Entscheidung des "
+                    f"Verlags.\n")
+        feld.configure(state=DISABLED)
+
+    def _setze_spalten(self, spalten):
+        """Die Spalten der Durchlauf-Liste umschalten."""
+        baum = self.baum_durchlauf
+        if getattr(self, "_spalten_jetzt", None) == spalten:
+            return
+        self._spalten_jetzt = spalten
+        baum.configure(columns=[s[0] for s in spalten])
+        for schluessel, titel, breite in spalten:
+            baum.heading(schluessel, text=titel,
+                         command=lambda s=schluessel: self._sortiere(baum, s))
+            baum.column(schluessel, width=breite, stretch=(breite > 200))
 
     def _zeige_rechenweg(self, ereignis=None):
         """„Wie dieser Betrag zustande kommt“ — in ganzen Sätzen.
@@ -1484,6 +1582,10 @@ class App(Tk):
         """
         auswahl = self.baum_durchlauf.selection()
         if not auswahl:
+            return
+        if auswahl[0].startswith("s"):
+            # Im Sonderfall-Modus steht in der Zeile ein Buch, kein Empfänger.
+            self._zeige_sonderfall(int(auswahl[0][1:]))
             return
         ab = next((a for a in self.abrechnungen
                    if a.empfaenger.kennung == auswahl[0]), None)
