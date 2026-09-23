@@ -180,6 +180,7 @@ derselbe Arbeitsgang — und stehen deshalb als drei Blätter in **einer** Datei
 | `Zahlungsliste <Jahr>` | für die Überweisungen, Aufbau wie bisher |
 | `Künstlersozialkasse <Jahr>` | Buchungsformat, drei Abschnitte (19 % / 7 % / ohne) |
 | `Protokoll <Jahr>` | wer bekommt einen Brief, wer nicht, und warum |
+| `Offene Sonderfälle <Jahr>` | die Beträge, die auf eine Entscheidung warten — mit Buch, Betrag, Bankverbindung und der Herkunftszeile in der Altmappe |
 
 Für die KSK zählen **nur** Zeilen mit Vergütungsart „Honorar“ — Rückflüsse,
 Erlösanteile und Darlehensrückzahlungen sind keine Honorare im Sinne der KSK.
@@ -321,7 +322,13 @@ einen einzigen Brief; das Werkzeug weist das bei ihnen aus.
 
 ## Offene Punkte für den Verlag
 
-1. **Die Verträge aus „Zahlung ab XX Ex." (68 Bücher, 741,67 €).** Sie sind als
+1. **Die Verträge aus „Zahlung ab XX Ex." (68 Bücher, 741,67 € an 20
+   Empfänger).** Zu finden sind sie an drei Stellen: im Reiter *3.
+   Nachrechnen* über das Häkchen **„nur die offenen Sonderfälle"** (braun
+   markiert), im Blatt `Offene Sonderfälle <Jahr>` der Listendatei — dort
+   mit Buch, Betrag, Bankverbindung und Herkunftszeile — und im Blatt
+   `Regeln` des Bestands. Das ist nötig, weil **19 der 20 gar keinen Brief
+   bekommen** und sonst zwischen 250 grauen Zeilen verschwänden. Sie sind als
    „Gesondert abrechnen" übernommen und lösen derzeit **keine** Zahlung aus —
    die sichere Annahme, weil die Altmappe dort nur einen Stand führt und fast
    niemand davon in der Zahlungsliste auftaucht. Wie diese Verträge wirklich

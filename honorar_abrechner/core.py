@@ -2955,8 +2955,83 @@ def _sicherer_dateiname(text: str) -> str:
     return " ".join(text.split()).strip(". ")
 
 
+def gesonderte_posten(bestand: Bestand, jahr: int,
+                      cfg: dict | None = None) -> list[dict]:
+    """Die Bücher, die auf eine Entscheidung des Verlags warten.
+
+    Je Buch eine Zeile — mit Betrag und Herkunft aus der Altmappe, damit
+    jemand die Sache zu Ende bringen kann, ohne sie erst wieder suchen zu
+    müssen.
+    """
+    cfg = cfg or {}
+    zeilen = []
+    for e, b in bestand.buecher():
+        if not b.gesondert or b.stillgelegt:
+            continue
+        posten = betrag_zeile(b, jahr, cfg)
+        if posten is None or posten.netto <= 0:
+            continue
+        zeilen.append({
+            "Empfänger": e.anzeigename,
+            "Buchtitel": b.titel,
+            "ISBN": b.isbn,
+            "Vergütungsart": b.verguetungsart,
+            "Vergütungs-Ex.": posten.verguetungs_ex,
+            "Betrag": posten.brutto,
+            "Bankverbindung": e.iban,
+            "in der Altmappe": b.quelle,
+        })
+    zeilen.sort(key=lambda z: -z["Betrag"])
+    return zeilen
+
+
+def _blatt_gesondert(wb, bestand: Bestand, jahr: int, cfg: dict):
+    """Ein eigenes Blatt für die offenen Sonderfälle.
+
+    Ohne das stehen sie nur grau in einer Liste von 250 Zeilen — und
+    neunzehn der zwanzig Empfänger bekommen gar keinen Brief, tauchen also
+    nirgends auf, wo man sie bearbeiten würde.
+    """
+    zeilen = gesonderte_posten(bestand, jahr, cfg)
+    if not zeilen:
+        return None
+    spalten = ["Empfänger", "Buchtitel", "ISBN", "Vergütungsart",
+               "Vergütungs-Ex.", "Betrag", "Bankverbindung", "in der Altmappe"]
+    ws = wb.create_sheet(f"Offene Sonderfälle {jahr}")
+    ws.append(["Diese Beträge werden NICHT ausgezahlt, solange die Verträge "
+               "auf „gesondert abrechnen“ stehen."])
+    ws.cell(row=1, column=1).font = Font(bold=True, size=12)
+    ws.append(["Sie stammen alle aus dem Blatt „Zahlung ab XX Ex.“ der "
+               "Altmappe, das dort nur einen Stand führte und keine "
+               "Auszahlungen auslöste."])
+    ws.append([])
+    ws.append(spalten)
+    for z in ws[ws.max_row]:
+        z.font = Font(bold=True)
+    erste = ws.max_row + 1
+    for zeile in zeilen:
+        ws.append([zeile.get(s) for s in spalten])
+    ws.append([None, None, None, "Summe", None,
+               f"=SUM(F{erste}:F{ws.max_row})"])
+    ws.cell(row=ws.max_row, column=4).font = Font(bold=True)
+    ws.freeze_panes = f"A{erste}"
+    for i, s in enumerate(spalten, start=1):
+        b = ws.cell(row=4, column=i).column_letter
+        ws.column_dimensions[b].width = {
+            "Empfänger": 34, "Buchtitel": 40, "ISBN": 10,
+            "Vergütungsart": 16, "Vergütungs-Ex.": 14, "Betrag": 12,
+            "Bankverbindung": 28, "in der Altmappe": 24}.get(s, 14)
+        if s == "Betrag":
+            for zelle in ws[b][3:]:
+                zelle.number_format = GELDFORMAT
+        if s in ("ISBN", "Bankverbindung", "in der Altmappe"):
+            for zelle in ws[b][3:]:
+                zelle.number_format = "@"
+    return ws
+
+
 def schreibe_listen(abrechnungen: list[Abrechnung], jahr: int, ziel: Path,
-                    cfg: dict) -> Path:
+                    cfg: dict, bestand: Bestand | None = None) -> Path:
     """Zahlungsliste, KSK-Meldung und Protokoll in EINER Mappe.
 
     Drei Dateien für drei Listen waren drei Gelegenheiten, die falsche zu
@@ -2973,6 +3048,8 @@ def schreibe_listen(abrechnungen: list[Abrechnung], jahr: int, ziel: Path,
     _blatt_zahlungsliste(wb, abrechnungen, jahr)
     _blatt_ksk(wb, abrechnungen, jahr, cfg)
     _blatt_protokoll(wb, abrechnungen, jahr)
+    if bestand is not None:
+        _blatt_gesondert(wb, bestand, jahr, cfg)
     ziel = Path(ziel)
     ziel.parent.mkdir(parents=True, exist_ok=True)
     wb.save(ziel)

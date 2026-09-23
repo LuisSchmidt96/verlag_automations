@@ -767,6 +767,10 @@ class App(Tk):
                    command=self._rechnen).pack(side="left")
         ttk.Button(oben, text="Mit der alten Excel-Tabelle vergleichen …",
                    command=self._gegenprobe).pack(side="left", padx=8)
+        self.nur_sonderfaelle = BooleanVar(value=False)
+        ttk.Checkbutton(oben, text="nur die offenen Sonderfälle",
+                        variable=self.nur_sonderfaelle,
+                        command=self._male_durchlauf).pack(side="left", padx=12)
         self.summe = StringVar(value="")
         ttk.Label(oben, textvariable=self.summe,
                   font=("Segoe UI", 10, "bold")).pack(side="right")
@@ -775,6 +779,7 @@ class App(Tk):
                                           doppelklick=self._zeige_rechenweg)
         self.baum_durchlauf.tag_configure("kein_brief", foreground="#777777")
         self.baum_durchlauf.tag_configure("problem", foreground="#a4262c")
+        self.baum_durchlauf.tag_configure("sonderfall", foreground="#8a5a00")
         self.zurueck = StringVar(value="")
         ttk.Label(seite, textvariable=self.zurueck, foreground="#8a5a00",
                   wraplength=1300, justify="left").pack(anchor="w", padx=12)
@@ -784,7 +789,9 @@ class App(Tk):
         ttk.Label(legende, text="grau = bekommt keinen Brief",
                   foreground="#777777").pack(side="left", padx=(0, 20))
         ttk.Label(legende, text="rot = bitte ansehen, bevor der Brief hinausgeht",
-                  foreground="#a4262c").pack(side="left")
+                  foreground="#a4262c").pack(side="left", padx=(0, 20))
+        ttk.Label(legende, text="braun = offener Sonderfall",
+                  foreground="#8a5a00").pack(side="left")
         ttk.Label(legende, text="  ·  Doppelklick auf eine Zeile zeigt, wie der "
                                 "Betrag zustande kommt").pack(side="left")
         self._weiter(seite, 3, "Weiter zu Schritt 4: Briefe und Listen  ▸")
@@ -1373,21 +1380,7 @@ class App(Tk):
             return self._fehler(fehler, "Beim Rechnen ist etwas schiefgegangen")
         self.abrechnungen = abrechnungen
         self._rechnung_veraltet = False
-        baum = self.baum_durchlauf
-        for k in baum.get_children(""):
-            baum.delete(k)
-        for ab in sorted(abrechnungen, key=lambda a: -a.brutto):
-            hinweise = list(ab.gruende) + list(ab.probleme)
-            marken = []
-            if not ab.brief:
-                marken.append("kein_brief")
-            elif ab.probleme:
-                marken.append("problem")
-            baum.insert("", "end", iid=ab.empfaenger.kennung, values=(
-                ab.empfaenger.anzeigename, ab.verguetungsart, len(ab.posten),
-                core.euro(ab.netto), core.euro(ab.mwst), core.euro(ab.brutto),
-                "Ja" if ab.brief else "—", " | ".join(hinweise)),
-                tags=marken)
+        self._male_durchlauf()
         mit = [a for a in abrechnungen if a.brief]
         # Nur positive Honorare werden gemeldet. Würde man alle aufsummieren,
         # kürzten sich die negativen (Autoren mit mehr Rückgaben als
@@ -1443,6 +1436,44 @@ class App(Tk):
         self.status.set(
             f"Gegenprobe: {len(unerklaert)} ungeklärte Abweichungen."
             if unerklaert else "Gegenprobe: alles stimmt überein.")
+
+    def _male_durchlauf(self):
+        """Die Liste füllen — wahlweise alle oder nur die offenen Sonderfälle.
+
+        Neunzehn der zwanzig Empfänger mit einem offenen Sonderfall bekommen
+        gar keinen Brief. Sie stehen deshalb grau zwischen zweihundertfünfzig
+        anderen Zeilen und sind nicht zu finden. Das Häkchen holt genau sie
+        nach vorn.
+        """
+        baum = self.baum_durchlauf
+        for k in baum.get_children(""):
+            baum.delete(k)
+        if not self.abrechnungen:
+            return
+        offen = {z["Empfänger"] for z in core.gesonderte_posten(
+            self.bestand, self.jahr.get(), self.cfg)}
+        gezeigt = 0
+        for ab in sorted(self.abrechnungen, key=lambda a: -a.brutto):
+            betrifft = ab.empfaenger.anzeigename in offen
+            if self.nur_sonderfaelle.get() and not betrifft:
+                continue
+            hinweise = list(ab.gruende) + list(ab.probleme)
+            marken = []
+            if betrifft:
+                marken.append("sonderfall")
+            elif not ab.brief:
+                marken.append("kein_brief")
+            elif ab.probleme:
+                marken.append("problem")
+            baum.insert("", "end", iid=ab.empfaenger.kennung, values=(
+                ab.empfaenger.anzeigename, ab.verguetungsart, len(ab.posten),
+                core.euro(ab.netto), core.euro(ab.mwst), core.euro(ab.brutto),
+                "Ja" if ab.brief else "—", " | ".join(hinweise)),
+                tags=marken)
+            gezeigt += 1
+        if self.nur_sonderfaelle.get():
+            self.status.set(f"{gezeigt} Empfänger mit einem offenen "
+                            f"Sonderfall. Häkchen wegnehmen zeigt wieder alle.")
 
     def _zeige_rechenweg(self, ereignis=None):
         """„Wie dieser Betrag zustande kommt“ — in ganzen Sätzen.
@@ -1560,7 +1591,8 @@ class App(Tk):
         def arbeit():
             return [core.schreibe_listen(
                 self.abrechnungen, jahr,
-                ordner / f"Zahlungsliste_{jahr}.xlsx", self.cfg)]
+                ordner / f"Zahlungsliste_{jahr}.xlsx", self.cfg,
+                bestand=self.bestand)]
 
         self.status.set("Schreibe Listen …")
         self._starte("listen", arbeit)
