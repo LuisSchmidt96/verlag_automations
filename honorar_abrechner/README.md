@@ -17,12 +17,18 @@ das Werkzeug zu sagen hat.
    holen* — liest `Honorare_2025.xlsx` mit allen Blättern ein, inklusive der
    Jahreshistorie ab 2003. Danach ist die Altmappe Archiv.
 2. **Jeden Januar:**
-   1. *2. Zahlen eintragen* — verkaufte Exemplare und Eigenkauf je Buch.
-      Wer lieber in Excel tippt, nimmt das Blatt `Abrechnung <Jahr>` im
-      Bestand; das Werkzeug liest die Zahlen beim Laden von dort.
-      Doppelklick öffnet das Feld, die Eingabetaste übernimmt und öffnet
-      sofort die nächste Zeile, Tabulator springt zum Eigenkauf, Esc
-      verwirft. „Zur ersten Zeile ohne Zahl" findet die Stelle wieder.
+   1. *2. Zahlen eintragen* — verkaufte Exemplare, Eigenkauf und Korrektur
+      je Buch. Wer lieber in Excel tippt, nimmt das Blatt
+      `Abrechnung <Jahr>` im Bestand; das Werkzeug liest die Zahlen beim
+      Laden von dort. Doppelklick öffnet das Feld, die Eingabetaste
+      übernimmt und öffnet sofort die nächste Zeile, Tabulator geht die
+      drei Zahlenspalten der Reihe nach durch, Esc verwirft. „Zur ersten
+      Zeile ohne Zahl" findet die Stelle wieder.
+
+      **Korrektur** ist die Spalte für das, was aus dem Vorjahr offen ist:
+      ein Fehlbetrag aus mehr Rückgaben als Verkäufen (dann negativ), oder
+      eine Menge, die schon abgerechnet wurde. Sie geht direkt in die
+      Vergütungsexemplare ein und darf negativ sein.
    2. *3. Nachrechnen → Beträge berechnen* — zeigt je Empfänger den Betrag.
       Grau = kein Brief, rot = bitte ansehen. **Doppelklick auf eine Zeile
       zeigt in ganzen Sätzen, wie der Betrag zustande kommt.**
@@ -87,6 +93,12 @@ Betrag netto        = Vergütungsexemplare × Betrag je Exemplar
 MwSt                = 7 % (vereinzelt 19 %), nur bei MwSt-pflichtigen
 Auszahlung          = netto + MwSt − offene Vorauszahlung
 ```
+
+Die **Vorauszahlung** steht je Buch im Buchdialog und schmilzt *nicht* von
+selbst ab: das Werkzeug verrechnet sie beim Rechnen und schreibt in den
+Hinweis, was danach noch offen ist — den neuen Restbetrag trägt man dort
+von Hand ein. Das ist Absicht. Automatisch zurückzuschreiben wäre bequemer
+und falsch, weil zweimal Rechnen die Vorauszahlung dann zweimal abzöge.
 
 Der **Betrag je Exemplar** ergibt sich entweder aus einem festen Wert oder
 aus den Bestandteilen des Vertrags:
@@ -235,6 +247,15 @@ Dinge, die man kennen sollte:
   die von Hand gebaute Summenkette `=X108+Z108+X109+…`. Eine davon fasst zwei
   verschiedene Personen zusammen — der Import meldet es und übernimmt es so,
   wie die Mappe es tat.
+* **66 Archivzeilen sind um eine Spalte verrutscht.** Im Blatt
+  `keine Zahlung mehr` sitzt ab `BUCHTITEL` eine namenlose Leerspalte, die
+  die Kopfzeile nicht kennt — vermutlich ein `Land`, das im Hauptblatt an
+  dieser Stelle steht und hier nie beschriftet wurde. 66 der 105 Zeilen sind
+  dadurch verschoben: der Buchtitel landete in der ISBN-Spalte, die
+  Vergütungsart wurde zu `m`, der Honorarsatz zu 0 — und die ganze
+  Jahreshistorie lag um ein Jahr daneben. Der Import zieht diese Zeilen
+  gerade und vermerkt es in den Warnungen. Geld kostet es nichts, weil alle
+  66 stillgelegt sind; die Daten waren trotzdem falsch.
 * **Einzelne Zellen sind kaputt.** Bei „Landau in der Pfalz“ ist die
   Vergütungsexemplar-Zelle leer, obwohl −6 Exemplare dastehen; Excel rechnet
   deshalb 0, das Werkzeug −10,02 €. Solche Fälle stehen im Protokoll.

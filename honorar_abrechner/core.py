@@ -1768,6 +1768,33 @@ def _hole_empfaenger(bestand: Bestand, register: dict, felder: dict
     return e
 
 
+def _richte_zeile_aus(zeile: tuple, idx: dict) -> tuple | None:
+    """Eine um eine Spalte verrutschte Zeile geradeziehen.
+
+    Im Blatt „keine Zahlung mehr“ sind 66 der 105 Zeilen ab BUCHTITEL um
+    eine Spalte nach rechts verschoben: dort steckt eine namenlose
+    Leerspalte, die die Kopfzeile nicht kennt (vermutlich ein „Land“, das
+    im Hauptblatt an dieser Stelle steht und hier nie beschriftet wurde).
+    Der Adressteil davor sitzt richtig, alles ab dem Buchtitel nicht — und
+    damit auch sämtliche Jahresspalten. Ungeprüft übernommen ergäbe das
+    Bücher ohne Titel, einen Honorarsatz, der keiner ist, und eine
+    Historie, die um ein Jahr danebenliegt.
+
+    Rückgabe: die berichtigte Zeile, oder None, wenn nichts zu tun war.
+    """
+    i = finde_spalte(idx, "BUCHTITEL")
+    if i is None or i + 2 >= len(zeile):
+        return None
+    if _zelle(zeile, i) is not None:
+        return None
+    rechts = _zelle(zeile, i + 1)
+    if not (isinstance(rechts, str) and rechts.strip()):
+        return None
+    # Nur wenn die Zelle wirklich LEER ist, darf sie herausfallen —
+    # sonst ginge ein Wert verloren statt einer Lücke.
+    return zeile[:i] + zeile[i + 1:]
+
+
 def _lies_buch(bestand: Bestand, zeile: tuple, zeile_f: tuple, idx: dict,
                blatt: str, nr: int, prot: ImportProtokoll) -> Buch | None:
     """Ein Buch samt Kondition aus einer Altzeile."""
@@ -1921,6 +1948,7 @@ def _blatt_zeilenweise(bestand, register, wbf, wbv, blattname, prot,
     i_voraus = finde_spalte(idx, "Restbetrag", "Vorauszahlung")
 
     anzahl = 0
+    verrutscht: list[int] = []
     for r in range(kopf_i + 2, ws_v.max_row + 1):
         zeile = tuple(c.value for c in ws_v[r])
         if not any(w is not None for w in zeile):
@@ -1937,6 +1965,11 @@ def _blatt_zeilenweise(bestand, register, wbf, wbv, blattname, prot,
         if not (felder["vorname"] or felder["name"] or felder["institution"]):
             continue
         zeile_f = tuple(c.value for c in ws_f[r])
+        gerade = _richte_zeile_aus(zeile, idx)
+        if gerade is not None:
+            zeile = gerade
+            zeile_f = _richte_zeile_aus(zeile_f, idx) or zeile_f
+            verrutscht.append(r)
         buch = _lies_buch(bestand, zeile, zeile_f, idx, blattname, r, prot)
         if buch is None:
             continue
@@ -1951,6 +1984,13 @@ def _blatt_zeilenweise(bestand, register, wbf, wbv, blattname, prot,
         e.buecher.append(buch)
         prot.zeilen[-1]["Empfänger"] = e.anzeigename
         anzahl += 1
+    if verrutscht:
+        prot.warne(
+            f"Blatt „{blattname}“: {len(verrutscht)} Zeilen sind ab der "
+            f"Spalte BUCHTITEL um eine Spalte verschoben (Zeilen "
+            f"{verrutscht[0]}–{verrutscht[-1]}). Sie wurden beim Lesen "
+            f"geradegezogen; ohne das hätten diese Bücher keinen Titel und "
+            f"eine um ein Jahr verschobene Historie.")
     return anzahl
 
 

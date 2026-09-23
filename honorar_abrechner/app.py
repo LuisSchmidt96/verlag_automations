@@ -47,6 +47,12 @@ SPALTEN_ERFASSUNG = [("isbn", "ISBN", 90), ("titel", "Buchtitel", 300),
                      ("empf", "Empfänger", 200), ("art", "Vergütungsart", 120),
                      ("verkauft", "verkaufte Ex. ✎", 110),
                      ("eigenkauf", "Eigenkauf ✎", 100),
+                     # Hier landet, was das Vorjahr schuldig geblieben ist:
+                     # ein Fehlbetrag aus Rückgaben, oder eine Menge, die
+                     # schon abgerechnet wurde. Ohne diese Spalte ist der
+                     # Hinweis „im nächsten Jahr unter Korrektur eintragen“
+                     # eine Anweisung, die man nicht befolgen kann.
+                     ("korrektur", "Korrektur ✎", 95),
                      ("stand", "Stand bis Vorjahr", 120),
                      # Ohne diese Spalte tippt man Zahlen für ein Buch ein,
                      # das gar nicht ausgezahlt wird, und erfährt es nie.
@@ -592,20 +598,32 @@ class App(Tk):
         v_still = BooleanVar(value=buch.stillgelegt)
         v_grund = StringVar(value=buch.stillgelegt_grund)
         v_gesondert = BooleanVar(value=buch.gesondert)
+        # Eine Vorauszahlung schmilzt nicht von selbst ab: das Werkzeug
+        # verrechnet sie beim Rechnen und schreibt in den Hinweis, was
+        # danach noch offen ist — eingetragen wird der neue Restbetrag hier
+        # von Hand. Automatisch zurueckschreiben waere bequemer und falsch:
+        # zweimal rechnen wuerde die Vorauszahlung zweimal abziehen.
+        v_voraus = StringVar(value=f"{buch.vorauszahlung:g}"
+                             if buch.vorauszahlung else "")
+        vor = ttk.Frame(sonder)
+        vor.grid(row=3, column=0, sticky="w", padx=8, pady=2)
+        feld(vor, 0, "noch offene Vorauszahlung (€) — wird verrechnet, "
+                     "bevor ausgezahlt wird", v_voraus, 10)
+
         ttk.Separator(sonder, orient="horizontal").grid(
-            row=3, column=0, sticky="ew", padx=8, pady=(8, 4))
+            row=4, column=0, sticky="ew", padx=8, pady=(8, 4))
         ttk.Checkbutton(
             sonder, text="Wird nicht mehr abgerechnet (vergriffen, "
                          "verstorben, kein Honorar mehr)",
             variable=v_still, command=lambda: grund_umschalten()).grid(
-                row=4, column=0, sticky="w", padx=8, pady=2)
+                row=5, column=0, sticky="w", padx=8, pady=2)
         grundrahmen = ttk.Frame(sonder)
-        grundrahmen.grid(row=5, column=0, sticky="w", padx=32, pady=2)
+        grundrahmen.grid(row=6, column=0, sticky="w", padx=32, pady=2)
         w_grund = feld(grundrahmen, 0, "Grund", v_grund, 40)
         ttk.Checkbutton(
             sonder, text="Wird gesondert abgerechnet — zählt für Staffel und "
                          "Freimenge, löst aber keine Auszahlung aus",
-            variable=v_gesondert).grid(row=6, column=0, sticky="w",
+            variable=v_gesondert).grid(row=7, column=0, sticky="w",
                                        padx=8, pady=2)
 
         def grund_umschalten():
@@ -619,9 +637,28 @@ class App(Tk):
                   ).pack(anchor="w", padx=12, pady=(0, 4))
 
         def lies() -> tuple:
-            """Die Eingaben in eine Kondition übersetzen. (Kondition, Fehler)"""
+            """Die Eingaben übersetzen. (Kondition, Vorauszahlung, Fehler)"""
             kond = core.Kondition()
             fehler = []
+
+            def zahl(var, feldname, vorgabe=None):
+                """Leer heißt Vorgabe — unlesbar heißt Fehler.
+
+                Beides in einen Topf zu werfen ist hier teuer: ein vertipptes
+                „4o“ im Verlagsrabatt hiesse „gar kein Rabatt“, und der Autor
+                bekaeme auf einen Schlag zwei Drittel mehr. Ohne Meldung.
+                """
+                text = var.get().strip()
+                if not text:
+                    return vorgabe
+                wert = core._komma(text)
+                if wert is None:
+                    fehler.append(f"„{text}“ kann ich bei {feldname} nicht "
+                                  f"als Zahl lesen. Bitte nur Ziffern, "
+                                  f"Komma erlaubt.")
+                    return vorgabe
+                return wert
+
             if v_weg.get() == "fest":
                 betrag = core._komma(v_fest.get())
                 if betrag is None:
@@ -634,10 +671,10 @@ class App(Tk):
                 kond.ladenpreis = preis
                 kond.mwst_im_preis = ({"7 %": 7.0, "19 %": 19.0}
                                       .get(v_mwst.get()))
-                rabatt = core._komma(v_rabatt.get())
+                rabatt = zahl(v_rabatt, "Verlagsrabatt")
                 kond.rabatt_anwenden = rabatt is not None
                 kond.verlagsrabatt = rabatt if rabatt is not None else 40.0
-                kond.teiler = int(core._komma(v_teiler.get(), 1) or 1)
+                kond.teiler = int(zahl(v_teiler, "Mitautoren-Teiler", 1) or 1)
                 if v_satzart.get() == "fest":
                     satz = core._komma(v_satz.get())
                     if satz is None:
@@ -678,11 +715,14 @@ class App(Tk):
                                  else (begrenzt or offen)[0][1]
                                  if (begrenzt or offen) else None)
             kond.schwelle_zehn = v_schwelle.get()
-            kond.freimenge = int(core._komma(v_frei.get(), 0) or 0)
-            return kond, fehler
+            kond.freimenge = int(zahl(v_frei, "Freimenge", 0) or 0)
+            voraus = zahl(v_voraus, "Vorauszahlung", 0.0) or 0.0
+            if voraus < 0:
+                fehler.append("Eine Vorauszahlung kann nicht negativ sein.")
+            return kond, voraus, fehler
 
         def vorschau(*_):
-            kond, fehler = lies()
+            kond, voraus, fehler = lies()
             if fehler:
                 ergebnis.set("… " + fehler[0])
                 return
@@ -738,7 +778,7 @@ class App(Tk):
                                        "Ohne Buchtitel geht es nicht.",
                                        parent=fenster)
                 return
-            kond, fehler = lies()
+            kond, voraus, fehler = lies()
             if fehler:
                 messagebox.showwarning("Bitte noch ergänzen",
                                        "\n".join(fehler), parent=fenster)
@@ -748,6 +788,7 @@ class App(Tk):
             buch.verguetungsart = v_art.get() or "Honorar"
             buch.notizen = v_notiz.get().strip()
             buch.mwst_pflichtig = v_mwstpflicht.get()
+            buch.vorauszahlung = voraus
             buch.stillgelegt = v_still.get()
             buch.stillgelegt_grund = (v_grund.get().strip()
                                       if v_still.get() else "")
@@ -1382,6 +1423,7 @@ class App(Tk):
                 b.isbn, b.titel, e.anzeigename, b.verguetungsart,
                 "" if jw is None or jw.verkauft is None else jw.verkauft,
                 "" if jw is None else jw.eigenkauf,
+                "" if jw is None or not jw.korrektur else jw.korrektur,
                 "" if stand is None else stand,
                 core.besonderheit(b)),
                 tags=("gesondert",) if b.gesondert else ())
@@ -1415,7 +1457,7 @@ class App(Tk):
           genau umgekehrt zur Erwartung.
         """
         baum = self.baum_erfassung
-        if not zeile or spalte not in ("#5", "#6"):
+        if not zeile or spalte not in ("#5", "#6", "#7"):
             return
         # Ohne see() liefert bbox für eine weggescrollte Zeile "" — das gäbe
         # einen Fehler, der im Fensterbau spurlos verschwände.
@@ -1424,7 +1466,8 @@ class App(Tk):
         if not kasten:
             return
         x, y, breite, hoehe = kasten
-        feldname = "verkauft" if spalte == "#5" else "eigenkauf"
+        feldname = {"#5": "verkauft", "#6": "eigenkauf",
+                    "#7": "korrektur"}[spalte]
         wert = StringVar(value=baum.set(zeile, feldname))
         eingabe = ttk.Entry(baum, textvariable=wert, justify="right")
         eingabe.place(x=x, y=y, width=breite, height=hoehe)
@@ -1461,10 +1504,16 @@ class App(Tk):
             jw = buch.jahr(self.jahr.get())
             if feldname == "verkauft":
                 jw.verkauft = zahl
-            else:
+            elif feldname == "eigenkauf":
                 jw.eigenkauf = zahl or 0
+            else:
+                jw.korrektur = zahl or 0
             if baum.exists(zeile):
-                baum.set(zeile, feldname, "" if zahl is None else zahl)
+                # Eine 0 in Eigenkauf oder Korrektur ist der Normalfall und
+                # soll die Spalte nicht zupflastern.
+                baum.set(zeile, feldname,
+                         "" if zahl is None
+                         or (not zahl and feldname != "verkauft") else zahl)
             self.geaendert = True
             # Ab jetzt stimmt das zuletzt gerechnete Ergebnis nicht mehr.
             # Ohne diesen Merker entstünden die Briefe aus den ALTEN Zahlen —
@@ -1491,7 +1540,8 @@ class App(Tk):
                     self.after(1, lambda: self._oeffne_eingabe(nachbar, spalte))
 
         def weiter_tab(_e=None):
-            uebernehmen(False, "#6" if spalte == "#5" else "#5")
+            # Tabulator geht die drei Zahlenspalten der Reihe nach durch.
+            uebernehmen(False, {"#5": "#6", "#6": "#7", "#7": "#5"}[spalte])
             return "break"
 
         eingabe.bind("<Return>", lambda e: uebernehmen(True))
