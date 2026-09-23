@@ -287,6 +287,12 @@ class App(Tk):
         ("schwelle_zehn", "Kein Honorar unter zehn Exemplaren",
          ["Nein", "Ja"]),
         ("freimenge", "Freimenge (erste N Exemplare ohne Honorar)", "zahl"),
+        # Die Staffel wird so eingetippt, wie sie im Vertrag steht. Gelesen
+        # wird sie mit demselben Verfahren, das beim Import die Notizen der
+        # Altmappe ausgewertet hat — was dort funktioniert, funktioniert auch
+        # hier, und niemand muss eine künstliche Schreibweise lernen.
+        ("staffel", "Staffel — wie im Vertrag, z. B.\n"
+                    "„bis 2500 Ex. 12 %, ab 2501 Ex. 13 %“", "text"),
         ("notizen", "Notizen", "text"),
     ]
 
@@ -341,12 +347,68 @@ class App(Tk):
             return
         buch = core.Buch(kennung=self.bestand.naechste_kennung("B"))
         self._uebertrage_buch(buch, werte)
+        if not self._staffel_bestaetigt(buch, werte.get("staffel", "")):
+            return
         e.buecher.append(buch)
         self.geaendert = True
         self._zeige_stammdaten()
         self._zeige_erfassung()
         self._male_schrittleiste()
         self.status.set(f"„{buch.titel}“ angelegt — noch nicht gespeichert.")
+
+    def _aendere_buch(self, e, buch):
+        """Ein bestehendes Buch ändern — sonst wäre ein Tippfehler in der
+        Staffel nur durch Neuanlegen zu beheben."""
+        k = buch.kondition
+        werte = self._formular(
+            f"Buch ändern — {buch.titel}", self.FELDER_BUCH,
+            {"titel": buch.titel, "isbn": buch.isbn,
+             "verguetungsart": buch.verguetungsart,
+             "betrag_je_ex": k.betrag_je_ex, "ladenpreis": k.ladenpreis,
+             "mwst_im_preis": k.mwst_im_preis,
+             "verlagsrabatt": k.verlagsrabatt if k.rabatt_anwenden else "",
+             "satz": k.satz, "teiler": k.teiler,
+             "mwst_pflichtig": "Ja" if buch.mwst_pflichtig else "Nein",
+             "schwelle_zehn": "Ja" if k.schwelle_zehn else "Nein",
+             "freimenge": k.freimenge or "",
+             "staffel": core.staffel_als_text(k.staffel),
+             "notizen": buch.notizen})
+        if werte is None:
+            return
+        vorher = list(k.staffel)
+        self._uebertrage_buch(buch, werte)
+        if not self._staffel_bestaetigt(buch, werte.get("staffel", "")):
+            k.staffel = vorher
+            return
+        self.geaendert = True
+        self._rechnung_veraltet = bool(self.abrechnungen)
+        self._zeige_stammdaten()
+        self._zeige_erfassung()
+        self.status.set(f"„{buch.titel}“ geändert — noch nicht gespeichert.")
+
+    def _staffel_bestaetigt(self, buch, text: str) -> bool:
+        """Zeigen, was aus dem Vertragstext gelesen wurde — und bestätigen
+        lassen. Eine stillschweigend falsch verstandene Staffel wäre
+        schlimmer als gar keine."""
+        text = (text or "").strip()
+        if not text:
+            return True
+        if not buch.kondition.staffel:
+            messagebox.showwarning(
+                "Staffel nicht verstanden",
+                f"Aus „{text}“ konnte ich keine Staffel lesen.\n\n"
+                f"Bitte so schreiben, wie es im Vertrag steht, zum Beispiel:\n"
+                f"   bis 2500 Ex. 12 %, ab 2501 Ex. 13 %\n\n"
+                f"Das Buch wird ohne Staffel angelegt, wenn Sie fortfahren.")
+            return True
+        return messagebox.askokcancel(
+            "Stimmt die Staffel so?",
+            "So habe ich den Text gelesen:\n\n"
+            + core.staffel_als_text(buch.kondition.staffel)
+            + ("\n\nFreimenge: die ersten "
+               f"{buch.kondition.freimenge} Exemplare ohne Honorar."
+               if buch.kondition.freimenge else "")
+            + "\n\nÜbernehmen?")
 
     @staticmethod
     def _uebertrage_buch(buch, werte: dict):
@@ -366,6 +428,10 @@ class App(Tk):
         k.teiler = int(werte["teiler"] or 1)
         k.freimenge = int(werte["freimenge"] or 0)
         k.schwelle_zehn = werte["schwelle_zehn"] == "Ja"
+        stufen, _, _, frei = core.zerlege_staffel(werte.get("staffel", ""))
+        k.staffel = stufen
+        if frei and not k.freimenge:
+            k.freimenge = frei
 
     def _anleitung(self, eltern, text: str):
         """Ein Satz oben auf jedem Reiter: was ist hier zu tun.
@@ -845,25 +911,64 @@ class App(Tk):
                    command=lambda: (fenster.destroy(),
                                     self._neues_buch(e))).pack(side="left", padx=6)
 
-        unten = ttk.LabelFrame(fenster, text="Bücher — und wie das Honorar berechnet wird")
+        unten = ttk.LabelFrame(
+            fenster, text="Bücher — und wie das Honorar berechnet wird")
         unten.pack(fill="both", expand=True, **PAD)
-        feld = Text(unten, wrap="word")
-        feld.pack(fill="both", expand=True, **PAD)
-        for b in e.buecher:
-            feld.insert(END, f"{b.isbn or '—'}  {b.titel}\n")
-            feld.insert(END, f"     {b.verguetungsart} · "
-                             f"{core._kondition_text(b.kondition)}\n")
-            if b.mwst_pflichtig:
-                feld.insert(END, f"     mehrwertsteuerpflichtig "
-                                 f"({b.mwst_satz:g} %)\n")
-            if b.stillgelegt:
-                feld.insert(END, f"     STILLGELEGT: {b.stillgelegt_grund}\n")
-            for hinweis in b.nachpflege:
-                feld.insert(END, f"     ! {hinweis}\n")
-            if b.quelle:
-                feld.insert(END, f"     Herkunft: {b.quelle}\n")
-            feld.insert(END, "\n")
-        feld.configure(state=DISABLED)
+        spalten = [("isbn", "ISBN", 80), ("titel", "Buchtitel", 300),
+                   ("art", "Art der Zahlung", 130), ("satz", "€ je Ex.", 90),
+                   ("bes", "Besonderheit", 260)]
+        rahmen = ttk.Frame(unten)
+        rahmen.pack(fill="both", expand=True, **PAD)
+        baum = ttk.Treeview(rahmen, columns=[s[0] for s in spalten],
+                            show="headings", selectmode="browse")
+        for schluessel, titel, breite in spalten:
+            baum.heading(schluessel, text=titel)
+            baum.column(schluessel, width=breite, stretch=(breite > 200))
+        leiste = ttk.Scrollbar(rahmen, orient="vertical", command=baum.yview)
+        baum.configure(yscrollcommand=leiste.set)
+        baum.pack(side="left", fill="both", expand=True)
+        leiste.pack(side="right", fill="y")
+        baum.tag_configure("still", foreground="#888888")
+
+        def fuelle():
+            for kind in baum.get_children(""):
+                baum.delete(kind)
+            for b in e.buecher:
+                baum.insert("", "end", iid=b.kennung, values=(
+                    b.isbn, b.titel, b.verguetungsart,
+                    core.euro(core.satz_aus_kondition(b.kondition)),
+                    core.besonderheit(b)),
+                    tags=("still",) if b.stillgelegt else ())
+        fuelle()
+
+        def gewaehltes_buch():
+            auswahl = baum.selection()
+            if not auswahl:
+                messagebox.showinfo(
+                    "Erst ein Buch auswählen",
+                    "Bitte in der Liste die Zeile anklicken, um die es geht.",
+                    parent=fenster)
+                return None
+            return next((b for b in e.buecher if b.kennung == auswahl[0]), None)
+
+        def aendern(_ereignis=None):
+            b = gewaehltes_buch()
+            if b is not None:
+                self._aendere_buch(e, b)
+                fuelle()
+
+        baum.bind("<Double-1>", aendern)
+        ttk.Label(unten, text="Doppelklick auf ein Buch ändert seine Angaben."
+                  ).pack(anchor="w", padx=12)
+
+        buchknoepfe = ttk.Frame(fenster)
+        buchknoepfe.pack(fill="x", padx=12, pady=(0, 12))
+        ttk.Button(buchknoepfe, text="Buch ändern …",
+                   command=aendern).pack(side="left")
+        ttk.Button(
+            buchknoepfe, text="Neues Buch …",
+            command=lambda: (self._neues_buch(e), fuelle())).pack(side="left",
+                                                                 padx=6)
 
     # -----------------------------------------------------------------
     # Reiter 2: Jahreserfassung

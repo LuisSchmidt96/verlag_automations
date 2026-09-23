@@ -1501,6 +1501,25 @@ def _prozent(text: str) -> float:
     return float(text.replace(",", "."))
 
 
+def staffel_als_text(staffel: list) -> str:
+    """Die Staffel so schreiben, wie sie im Vertrag steht.
+
+    Gegenstück zu ``zerlege_staffel``: was das Werkzeug verstanden hat,
+    muss man zurücklesen können — sonst weiß niemand, ob der eingetippte
+    Vertragstext richtig angekommen ist.
+    """
+    if not staffel:
+        return ""
+    teile, untere = [], 1
+    for grenze, satz in staffel:
+        if grenze is None:
+            teile.append(f"ab {untere} Ex. {satz:g} %")
+        else:
+            teile.append(f"bis {grenze} Ex. {satz:g} %")
+            untere = grenze + 1
+    return ", ".join(teile)
+
+
 def zerlege_staffel(notiz: str) -> tuple[list, int | None, int | None, int]:
     """(Stufen, Stand-Jahr, Stand-Menge, Freimenge) aus dem Notizentext.
 

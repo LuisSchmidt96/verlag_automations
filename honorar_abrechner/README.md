@@ -32,8 +32,22 @@ das Werkzeug zu sagen hat.
       es vergessen wurde.
 
 Neue Autoren und Bücher legt man auf Reiter 1 an („Neuer Autor …", „Neues
-Buch …"); im Detailfenster eines Autors ändert „Angaben ändern …" Anschrift
-und Bankverbindung.
+Buch …"). Das Detailfenster eines Autors — Doppelklick auf seine Zeile —
+zeigt seine Bücher als Liste; Doppelklick auf ein Buch ändert dessen
+Angaben, „Angaben ändern …" die Anschrift.
+
+**Eine Staffel wird eingetippt, wie sie im Vertrag steht:**
+
+```
+bis 2500 Ex. 12 %, ab 2501 Ex. 13 %
+```
+
+Gelesen wird das mit demselben Verfahren, das beim Import die Notizen der
+Altmappe ausgewertet hat — niemand muss eine künstliche Schreibweise lernen.
+Das Werkzeug zeigt danach, was es verstanden hat, und lässt bestätigen; eine
+stillschweigend falsch gelesene Staffel wäre schlimmer als gar keine. Auch
+„ab dem 201. von uns verkauften Exemplar" wird erkannt und als Freimenge 200
+übernommen.
 
 ## Was gerechnet wird
 
