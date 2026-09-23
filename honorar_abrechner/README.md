@@ -8,17 +8,32 @@ bisher in von Hand getippten Zellformeln steckte.
 
 ## Ablauf
 
-1. **Einmalig:** *Stammdaten → Altmappe importieren* — liest die alte
-   `Honorare_2025.xlsx` mit allen Blättern ein, inklusive der Jahreshistorie
-   ab 2003. Danach ist die Altmappe Archiv.
+Die vier Reiter sind die vier Schritte, und ihre Beschriftung zeigt den
+Stand: ✓ fertig, ◐ angefangen, · noch nichts. Darunter steht immer **eine**
+Zeile „Als Nächstes: …". Ein fünfter Reiter *Meldungen* sammelt alles, was
+das Werkzeug zu sagen hat.
+
+1. **Einmalig:** *1. Autoren und Bücher → Daten aus der alten Excel-Tabelle
+   holen* — liest `Honorare_2025.xlsx` mit allen Blättern ein, inklusive der
+   Jahreshistorie ab 2003. Danach ist die Altmappe Archiv.
 2. **Jeden Januar:**
-   1. *Jahreserfassung* — `verk. Ex.` und `Eigenkauf` je Buch eintragen.
-      Doppelklick oder Eingabetaste öffnet das Feld, Eingabetaste übernimmt
-      und springt eine Zeile weiter.
-   2. *Durchlauf → Jetzt durchrechnen* — zeigt je Empfänger den Betrag.
-      Grau = kein Brief, rot = etwas nachzusehen.
-   3. *Ausgaben* — Briefe, dann (unter Windows) PDF, dann die Listen.
-   4. *Stammdaten → Bestand speichern.*
+   1. *2. Zahlen eintragen* — verkaufte Exemplare und Eigenkauf je Buch.
+      Wer lieber in Excel tippt, nimmt das Blatt `Abrechnung <Jahr>` im
+      Bestand; das Werkzeug liest die Zahlen beim Laden von dort.
+      Doppelklick öffnet das Feld, die Eingabetaste übernimmt und öffnet
+      sofort die nächste Zeile, Tabulator springt zum Eigenkauf, Esc
+      verwirft. „Zur ersten Zeile ohne Zahl" findet die Stelle wieder.
+   2. *3. Nachrechnen → Beträge berechnen* — zeigt je Empfänger den Betrag.
+      Grau = kein Brief, rot = bitte ansehen. **Doppelklick auf eine Zeile
+      zeigt in ganzen Sätzen, wie der Betrag zustande kommt.**
+   3. *4. Briefe und Listen* — Briefe, dann (unter Windows) PDF, dann die
+      beiden Listen.
+   4. *1. Autoren und Bücher → Speichern.* Beim Schließen wird gefragt, falls
+      es vergessen wurde.
+
+Neue Autoren und Bücher legt man auf Reiter 1 an („Neuer Autor …", „Neues
+Buch …"); im Detailfenster eines Autors ändert „Angaben ändern …" Anschrift
+und Bankverbindung.
 
 ## Was gerechnet wird
 
@@ -36,6 +51,13 @@ aus den Bestandteilen des Vertrags:
 Ladenpreis → MwSt herausrechnen → minus Verlagsrabatt (40 %)
            → mal Honorarsatz → geteilt durch Zahl der Mitautoren
 ```
+
+**Gerundet wird kaufmännisch**, also die Hälfte immer auf: aus 5,635 € wird
+5,64 €. Pythons eingebautes Runden würde 5,63 € ergeben (es rundet zur geraden
+Ziffer) — bei fünfhundert Posten und einer Excel zum Gegenrechnen ist das ein
+Cent, den man sucht. Wo im Altbestand ein `ROUND(...)` um die Satzformel steht,
+wird der Betrag je Exemplar vor der Multiplikation gerundet, sonst nicht; der
+Unterschied macht bei 20 Exemplaren acht Cent aus und wird je Buch mitgeführt.
 
 Dazu kommen drei Regeln, die die Altmappe kannte, aber nicht anwandte:
 
@@ -58,27 +80,51 @@ oder kein Buch erfasst wurde. Diese Empfänger stehen mit Begründung im
 ## Der Bestand ist eine Excel-Mappe
 
 `Honorarbestand.xlsx` liegt **neben der .exe** und darf von Hand geöffnet und
-geändert werden. Fünf Blätter:
+geändert werden. Sieben Blätter, jedes mit genau einer Aufgabe:
 
 | Blatt | Inhalt |
 |---|---|
 | `Hinweise` | die Regeln im Klartext — steht absichtlich an erster Stelle |
+| **`Abrechnung <Jahr>`** | **das Arbeitsblatt**: eine Zeile je Buch, nach Autor sortiert. Links wer und was, in der Mitte die drei **gelb hinterlegten** Spalten zum Ausfüllen, rechts das Ergebnis der letzten Berechnung und eine Spalte `Besonderheit` |
+| `Historie` | alle Jahre davor — vollständig, aber aus dem Weg |
+| `Regeln` | was an einem Buch besonders ist, in ganzen Sätzen: Staffel, Freimenge, Vorauszahlung, Schwelle, Aufteilung |
 | `Empfänger` | Anschrift, IBAN, Aktenzeichen, E-Mail |
-| `Bücher` | Titel, ISBN, Vergütungsart und die ganze Kondition |
-| `Jahreswerte` | eine Zeile je Buch **und Jahr** (Langformat, nicht eine Spalte je Jahr) |
+| `Bücher` | die technischen Konditionsfelder — hier rechnet das Werkzeug, hier muss man normalerweise nichts tun |
 | `Staffeln` | die Stufen der Staffelverträge |
+
+Im Arbeitsblatt wird **nur in drei Spalten** getippt: `verkaufte Ex.`,
+`Eigenkauf` und `Korrektur`. Sie sind gelb hinterlegt, alles andere ist
+Anzeige und wird beim nächsten Speichern neu berechnet. Getippt werden kann
+wahlweise dort oder in der Eingabemaske des Werkzeugs — beides landet an
+derselben Stelle.
+
+Die Spalte **`Stand bis Vorjahr`** nimmt einem das Nachschlagen ab: sie zeigt,
+wie viele Vergütungsexemplare bis zum Vorjahr aufgelaufen sind. Daran hängen
+Staffel und Freimenge. Gerechnet wird der Wert aus dem Blatt `Historie`; man
+muss ihn nicht pflegen.
+
+Stillgelegte Bücher stehen **nicht** im Arbeitsblatt — sonst wäre es um ein
+Fünftel länger, ohne dass je etwas einzutragen wäre. Ihre Zahlen liegen
+vollständig in der `Historie`, und warum sie stillgelegt sind, steht in
+`Regeln`.
 
 Verknüpft wird über die Kennungen (`E0042`, `B0137`). Die dürfen **nicht**
 geändert werden — sonst verliert ein Buch seinen Autor.
 
 Zwei Dinge, die man wissen muss:
 
-* **Leer ist nicht null.** In `Jahreswerte` heißt eine leere Zelle bei
-  `verkauft` „noch nicht erfasst“. Hat sich ein Buch wirklich nicht verkauft,
-  gehört dort eine `0` hinein.
+* **Leer ist nicht null.** Eine leere Zelle bei `verkaufte Ex.` heißt „noch
+  nicht eingetragen“. Hat sich ein Buch wirklich nicht verkauft, gehört dort
+  eine `0` hinein — sonst fehlt es in der Abrechnung.
 * **Die Datei schließen, bevor das Werkzeug speichert.** Solange sie in Excel
   offen ist, kann nicht geschrieben werden; das Werkzeug sagt das dann auch,
   statt abzustürzen. Vor jedem Speichern entsteht `Honorarbestand.bak.xlsx`.
+* **Die Arbeit geht nicht verloren.** Alle zwanzig eingetippten Zahlen
+  schreibt das Werkzeug still einen Zwischenstand nach
+  `Honorarbestand.wiederherstellung.xlsx`. Wurde das Programm zuletzt ohne
+  Speichern beendet, bietet es beim Start an, diese Eingaben zurückzuholen;
+  nach einem richtigen Speichern verschwindet die Datei. Beim Schließen wird
+  ohnehin gefragt.
 
 ## Ausgaben
 
@@ -88,10 +134,17 @@ Alles nach `honorar_output/<Jahr>/` neben der .exe:
 |---|---|
 | `briefe/<Name>_<Art>-<Jahr>.docx` | je Empfänger ein Brief, Seite 1 hoch, Seite 2 quer |
 | `briefe/….pdf` | dieselben Briefe als PDF — **nur unter Windows mit Word** |
-| `Zahlungsliste_<Jahr>.xlsx` | für die Überweisungen, Aufbau wie bisher |
-| `Kuenstlersozialkasse_<Jahr>.xlsx` | Buchungsformat, zwei Abschnitte (7 % / 19 %) |
-| `protokoll.xlsx` | wer bekommt einen Brief, wer nicht, und warum |
+| `Zahlungsliste_<Jahr>.xlsx` | **drei Blätter in einer Datei** (s. u.) |
 | `import_protokoll.xlsx` | nur beim Import: jede Zeile und jede Unklarheit |
+
+Die drei Listen gehören zusammen — dieselbe Abrechnung, dasselbe Jahr,
+derselbe Arbeitsgang — und stehen deshalb als drei Blätter in **einer** Datei:
+
+| Blatt | Inhalt |
+|---|---|
+| `Zahlungsliste <Jahr>` | für die Überweisungen, Aufbau wie bisher |
+| `Künstlersozialkasse <Jahr>` | Buchungsformat, drei Abschnitte (19 % / 7 % / ohne) |
+| `Protokoll <Jahr>` | wer bekommt einen Brief, wer nicht, und warum |
 
 Für die KSK zählen **nur** Zeilen mit Vergütungsart „Honorar“ — Rückflüsse,
 Erlösanteile und Darlehensrückzahlungen sind keine Honorare im Sinne der KSK.
@@ -131,6 +184,56 @@ Dinge, die man kennen sollte:
   Vergütungsexemplar-Zelle leer, obwohl −6 Exemplare dastehen; Excel rechnet
   deshalb 0, das Werkzeug −10,02 €. Solche Fälle stehen im Protokoll.
 
+## Was beim Abgleich mit der Altmappe herauskam
+
+Die Gegenprobe deckt drei Dinge ab: jede Zeile, jede Auszahlung **und beide
+Ausgabelisten**. Die letzten beiden kamen erst spät dazu — und genau dort
+steckten die Fehler, die eine reine Rechenprobe nie gefunden hätte:
+
+* **Der Empfänger des LUBW-Betrags hieß falsch.** Das LUBW-Blatt nennt nur
+  Titel und Beträge, nicht den Zahlungsempfänger. Der steht in der
+  Zahlungsliste: *Stiftung Naturschutzfond BW*, Vergütungsart *Spende*, mit
+  eigener Bankverbindung. Der Import holt ihn jetzt von dort.
+* **Die Anthologien hätten 15 Zahlungen doppelt ausgelöst.** Der Topf von
+  „Tödliche Häppchen" (44,02 €) wurde am 27.01.2022 ausgeschüttet. Ein Import,
+  der daraus Beträge für das laufende Jahr macht, verschickt dasselbe Geld ein
+  zweites Mal. Beteiligte und Bankverbindungen werden übernommen, der Anteil
+  aber **nicht** automatisch verteilt.
+* **Ein Autor verlor seine Auszahlung durch eine Freimenge.** Wenn die
+  Freimenge noch nicht erreicht ist, stand dort ein negativer Betrag — bei
+  einem Empfänger −1.045,28 €, was seine 6,69 € auffraß. Das ist falsch: man
+  schuldet dem Verlag nichts für Exemplare, die nie vergütet wurden. Der Saldo
+  wird vorgetragen, der Betrag ist null.
+* **Ein Brief ging an „verschiedene Autoren".** So heißen in der Altmappe die
+  Sammelzeilen der Anthologien. Solche Posten bekommen jetzt weder Brief noch
+  Überweisung; der Betrag steht mit Begründung im Protokoll und ist von Hand
+  zu verteilen.
+* **Das Blatt „Zahlung ab XX Ex." ist keine Zahlungsquelle.** Es ist ein
+  Laufzettel: ein Zähler läuft auf die vereinbarte Freimenge zu, und die
+  Betragsspalte zeigt den Stand mal Satz — bei einer Autorin 1540 Exemplare
+  × 1 € = 1.540 €, jedes Jahr aufs Neue. Die Summe der ganzen Spalte ist
+  **−9.954 €**, und nur vier der dort geführten 54 Personen stehen überhaupt
+  in der alten Zahlungsliste, mit anderen Beträgen. Der Import übernimmt
+  diese 68 Bücher deshalb mit dem Haken **„Gesondert abrechnen"**: sie zählen
+  für Historie und Staffel, lösen aber keine Überweisung aus.
+* **Der kumulierte Vortrag wurde gar nicht gelesen.** In jenem Blatt steht in
+  der Spalte „Vergütungsexemplare" nicht die Jahresmenge, sondern der
+  aufgelaufene Stand. Ohne ihn wurde aus einem Jahr mit Rückgaben („−69 Ex.")
+  ein negativer Saldo, obwohl 1540 Exemplare aufgelaufen waren.
+* **Der KSK-Meldung fehlte ein ganzes Konto.** Getrennt wird nicht nach der
+  Höhe des Steuersatzes, sondern danach, **ob** der Autor
+  mehrwertsteuerpflichtig ist. Wer es nicht ist, gehört auf Konto 4782
+  („Honorare", ohne Umsatzsteuer) — im Altbestand 54 der 74 Buchungen.
+
+Stand nach diesen Korrekturen, für 2025:
+
+| | |
+|---|---|
+| Zeilen und Auszahlungen | stimmen, bis auf eine kaputte Zelle in der Quelle |
+| Zahlungsliste | **88 von 91 Beträgen identisch** |
+| KSK-Meldung | **69 von 72 Personen identisch** mit der KSK-Spalte der Altmappe |
+| unerklärte Abweichungen | **3** — und die sind ein einziger Sachverhalt (s. u.) |
+
 ## Gegenprobe
 
 *Durchlauf → Gegen die Altmappe prüfen* rechnet jede Zeile und jede
@@ -141,32 +244,58 @@ bis auf den einen oben genannten Fall mit der kaputten Zelle.
 Prüfwerte zum Nachschlagen: Dieter Buck 2.368,98 € brutto / 2.214,01 € netto
 (entspricht dem Muster-PDF und dem KSK-Blatt).
 
-Die Gesamtsumme liegt mit 19.923,02 € um 911,52 € über der Altmappe. Das ist
-kein Rechenfehler: 738,82 € stammen aus dem Blatt „Zahlung ab XX Ex.“ und
-166,09 € aus LUBW und den Anthologien — Geld, das bisher auf getrennten
-Blättern stand und jetzt beim selben Empfänger im selben Brief landet. Sieben
-Empfänger sind davon betroffen; das Werkzeug weist es bei ihnen aus.
+**Drei Abweichungen bleiben, und sie gehen alle auf dieselbe Ursache zurück —
+ein Rechenfehler ist keine davon:**
+
+* **Möller / Schenk** (46,63 € verschoben) — die Summenkette `AA245` der
+  Altmappe fasst zwei verschiedene Personen zusammen. Welche der beiden das
+  Geld bekommen soll, muss der Verlag entscheiden.
+Der Fall **Stefan Schaupp** wird inzwischen automatisch erkannt und mit
+Begründung ausgewiesen, statt als offene Abweichung dazustehen: dort ist die
+**Altmappe falsch** —
+  gemeldet wurde sein Auszahlungsbetrag statt seiner Honorarsumme, also
+  36,92 € Rückfluss, die der Künstlersozialkasse nicht zu melden sind. Die
+  Excel selbst rechnet in ihrer eigenen KSK-Spalte 202,94 € — wie dieses
+  Werkzeug.
+
+Die Gesamtsumme liegt bei **19.142,18 € für 92 Briefe**. Der Unterschied zur
+alten Zahlungsliste sind im Wesentlichen die 128 € für die Stiftung
+Naturschutzfond BW, die vorher auf dem LUBW-Blatt standen. Empfänger, deren
+Bücher auf mehreren Blättern der Altmappe verteilt waren, bekommen jetzt
+einen einzigen Brief; das Werkzeug weist das bei ihnen aus.
 
 ## Offene Punkte für den Verlag
 
-1. **Staffel — ein Satz oder tranchenweise?** Wird beim Überschreiten der
+1. **Die Verträge aus „Zahlung ab XX Ex." (68 Bücher).** Sie sind als
+   „Gesondert abrechnen" übernommen und lösen derzeit **keine** Zahlung aus —
+   die sichere Annahme, weil die Altmappe dort nur einen Stand führt und fast
+   niemand davon in der Zahlungsliste auftaucht. Wie diese Verträge wirklich
+   abgerechnet werden, muss der Verlag sagen; danach den Haken in der Spalte
+   „Gesondert abrechnen" entfernen.
+2. **Staffel — ein Satz oder tranchenweise?** Wird beim Überschreiten der
    Grenze der höhere Satz nur auf die darüberliegenden Exemplare angewandt
    oder auf die ganze Jahresmenge? Umgesetzt ist derzeit „ein Satz je Jahr“.
-2. **Die kumulierten Stände.** In den Notizen steht „Stand 2023: 1460 Ex.“ —
+3. **Die kumulierten Stände.** In den Notizen steht „Stand 2023: 1460 Ex.“ —
    für 2024 und 2025 fehlt die Fortschreibung bei den Büchern, die nicht im
    Historienblatt stehen.
-3. **Die echte Word-Vorlage** mit dem Briefkopf.
-4. **Die Summenkette `AA245`** fasst Schenk und Möller zusammen. Fehler?
-5. **Vertauschte Namen.** In der Altmappe steht bei „Mühlacker+“ der Nachname
+4. **Die echte Word-Vorlage** mit dem Briefkopf.
+5. **Die Summenkette `AA245`** fasst Schenk und Möller zusammen. Fehler?
+6. **Vertauschte Namen.** In der Altmappe steht bei „Mühlacker+“ der Nachname
    im Vornamensfeld; der Brief heißt deshalb `Sandra, Schuster_…` statt
    `Schuster, Sandra_…`. Das Werkzeug übernimmt die Felder so, wie sie
    dastehen — wer sie tauscht, tut es im Bestand.
-6. **Zwei Empfänger ohne Bankverbindung**, zwei mit **mehreren
+7. **Zwei Empfänger ohne Bankverbindung**, zwei mit **mehreren
    Vergütungsarten** in einem Brief — wie soll damit umgegangen werden?
-7. **Unterzeichnerin.** Die Musterbriefe zeichnet Silke Freitag; im
+8. **Unterzeichnerin.** Die Musterbriefe zeichnet Silke Freitag; im
    `pi_bi_generator` wurde der Absender zwischenzeitlich geändert.
-8. **Lexware-Artikelexport.** Die Zahlen gibt es — nur noch nicht als Datei.
+9. **Lexware-Artikelexport.** Die Zahlen gibt es — nur noch nicht als Datei.
    Einzelheiten unter „Der Weg zu den Stückzahlen".
+10. **Die Anthologie-Töpfe.** Soll in diesem Jahr etwas ausgeschüttet werden?
+    Das Werkzeug verteilt nicht von selbst; die Beteiligten und ihre
+    Bankverbindungen liegen aber bereit.
+11. **Stefan Schaupp und die Künstlersozialkasse.** Für 2025 wurden 36,92 €
+    Rückfluss mitgemeldet, die dort nicht hingehören. Ob das zu berichtigen
+    ist, entscheidet der Verlag.
 
 ## Der Weg zu den Stückzahlen
 

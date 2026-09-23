@@ -34,7 +34,10 @@ paketnr.txt
 # Adressen und Bankverbindungen der Autoren. Gehört nicht ins Repo.
 Honorarbestand.xlsx
 Honorarbestand.bak.xlsx
+Honorarbestand.wiederherstellung.xlsx
 honorarbestand.sperre
+# Ablage des Windows-Prüfskripts (Probebriefe, Probemappen)
+honorar_abrechner/windows_pruefung/
 # Gegenprobe der Gewichtsschätzung: Bestandsdaten aus dem Shop
 shopware_publisher/gewichte_pruefung.csv
 

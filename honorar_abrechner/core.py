@@ -25,17 +25,23 @@ import shutil
 import socket
 import sys
 from copy import deepcopy
+from decimal import Decimal, ROUND_HALF_UP
+import unicodedata
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 import openpyxl
 from docx import Document
 from docx.enum.section import WD_ORIENT
-from docx.shared import Cm, Pt
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+from docx.enum.table import WD_ALIGN_VERTICAL, WD_TABLE_ALIGNMENT
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.shared import Cm, Emu, Pt
 from docx.table import _Row
 from docx.text.paragraph import Paragraph
-from openpyxl.styles import Alignment, Font
+from openpyxl.styles import Alignment, Font, PatternFill
 
 
 # ---------------------------------------------------------------------
@@ -58,6 +64,9 @@ CONFIG_PFAD = APP_DIR / "config.json"
 BESTAND_PFAD = APP_DIR / "Honorarbestand.xlsx"
 SICHERUNG_PFAD = APP_DIR / "Honorarbestand.bak.xlsx"
 SPERR_PFAD = APP_DIR / "honorarbestand.sperre"
+# Zwischenstand während der Erfassung. Wer einen Vormittag lang Zahlen
+# eintippt, soll einen Absturz oder einen Stromausfall überleben.
+WIEDERHERSTELLUNG_PFAD = APP_DIR / "Honorarbestand.wiederherstellung.xlsx"
 
 
 def _vorlagen_dir() -> Path:
@@ -87,8 +96,16 @@ DEFAULT_CONFIG = {
     # Gezahlt wird AB dieser Menge; darunter entfällt das Honorar.
     "schwelle_menge": 10,
     # Konten für die Künstlersozialkasse-Liste (SKR03, s. PLAN_Buchhaltung.md).
-    "ksk_konto_7": "4781",
+    # Entscheidend ist NICHT die Höhe des Steuersatzes, sondern ob der Autor
+    # überhaupt mehrwertsteuerpflichtig ist: wer es nicht ist, wird auf ein
+    # eigenes Konto „Honorare" ohne Umsatzsteuer gebucht. Im Altbestand sind
+    # das 54 der 74 Buchungen — der größere Teil.
     "ksk_konto_19": "4780",
+    "ksk_konto_7": "4781",
+    "ksk_konto_0": "4782",
+    "ksk_bezeichnung_19": "Fremdarbeiten (19%)",
+    "ksk_bezeichnung_7": "Fremdarbeiten (7%)",
+    "ksk_bezeichnung_0": "Honorare",
     "ksk_gegenkonto": "001610",
     "ksk_ust_konto_7": "001571",
     "ksk_ust_konto_19": "001576",
@@ -121,7 +138,7 @@ def speichere_config(cfg: dict) -> None:
 # Im Bestand vorgefunden. „Mittelrückfluss“ steht nur im Archivblatt, gehört
 # aber dazu, sonst fällt der Import darüber.
 VERGUETUNGSARTEN = ("Honorar", "Rückfluss", "Erlösanteil",
-                    "Darlehensrückzahlung", "Mittelrückfluss")
+                    "Darlehensrückzahlung", "Mittelrückfluss", "Spende")
 
 # Nur diese Art zählt für die Künstlersozialkasse — Rückflüsse und
 # Erlösanteile sind keine Honorare im Sinne der KSK.
@@ -203,6 +220,15 @@ class Buch:
     # Sonderfall Vorauszahlung: offener Restbetrag, der jedes Jahr um das
     # errechnete Honorar schrumpft. Erst wenn er null ist, wird ausgezahlt.
     vorauszahlung: float = 0.0
+    # Wird auf einem eigenen Weg abgerechnet und darf NICHT automatisch
+    # mitausgezahlt werden. Im Altbestand betrifft das die Verträge aus dem
+    # Blatt „Zahlung ab XX Ex.“: dort läuft ein Zähler auf die vereinbarte
+    # Freimenge zu, und die Betragsspalte zeigt den Stand, nicht eine
+    # fällige Zahlung — die Summe dieser Spalte ist −9.954 €. Nur vier der
+    # 54 Personen tauchen überhaupt in der Zahlungsliste auf, mit anderen
+    # Beträgen. Wer sie automatisch auszahlt, überweist Geld, das nie
+    # geflossen ist.
+    gesondert: bool = False
     stillgelegt: bool = False
     stillgelegt_grund: str = ""
     notizen: str = ""
@@ -236,6 +262,11 @@ class Empfaenger:
     iban: str = ""
     aktenzeichen: str = ""               # „Buchungszeichen …“, „Kontoinhaber: …“
     email: str = ""
+    # Kein Mensch, sondern ein Platzhalter für eine Gruppe — im Altbestand
+    # steht dort „verschiedene Autoren“. So ein Posten darf weder einen
+    # Brief noch eine Überweisung auslösen: der Betrag ist ein Topf, der
+    # erst auf die Beteiligten zu verteilen ist.
+    sammelposten: bool = False
     buecher: list[Buch] = field(default_factory=list)
     beruehrt: bool = False               # vom Bediener angefasst
 
@@ -405,14 +436,20 @@ def hole(zeile: tuple, idx: dict[str, int], spalte: str):
 
 BLATT_EMPFAENGER = "Empfänger"
 BLATT_BUECHER = "Bücher"
-BLATT_JAHRE = "Jahreswerte"
+BLATT_JAHRE = "Jahreswerte"        # alte Fassung, wird noch gelesen
 BLATT_STAFFELN = "Staffeln"
 BLATT_HINWEISE = "Hinweise"
+# Das Arbeitsblatt des laufenden Jahres. Es heißt „Abrechnung <Jahr>“, damit
+# auf den ersten Blick klar ist, worum es geht — und damit beim Jahreswechsel
+# nicht versehentlich in die Zahlen des Vorjahres getippt wird.
+BLATT_ABRECHNUNG = "Abrechnung"
+BLATT_HISTORIE = "Historie"
+BLATT_REGELN = "Regeln"
 
 SPALTEN_EMPFAENGER = [
     "Kennung", "lf. Nr.", "Autorenart", "Anrede", "Titel", "Vorname", "Name",
     "Institution", "Straße", "PLZ", "Ort", "Land", "IBAN",
-    "Aktenzeichen / Kontoinhaber", "E-Mail",
+    "Aktenzeichen / Kontoinhaber", "E-Mail", "Sammelposten",
 ]
 
 SPALTEN_BUECHER = [
@@ -421,12 +458,37 @@ SPALTEN_BUECHER = [
     "MwSt im Preis", "MwSt aufschlagen", "Verlagsrabatt", "Rabatt anwenden",
     "Satz", "Teiler", "Satz runden", "Freimenge", "Freimenge ab Jahr",
     "Schwelle 10",
-    "Vorauszahlung", "Stillgelegt", "Grund", "Notizen", "Nachpflege",
-    "Quelle",
+    "Vorauszahlung", "Gesondert abrechnen", "Stillgelegt", "Grund",
+    "Notizen", "Nachpflege", "Quelle",
 ]
 
 SPALTEN_JAHRE = [
     "Buch-Kennung", "Jahr", "verkauft", "Eigenkauf", "Korrektur", "Vortrag",
+]
+
+# Das Arbeitsblatt. Links steht, worum es geht, in der Mitte wird getippt,
+# rechts steht das Ergebnis der letzten Berechnung. Die Kennung muss mit —
+# über sie findet das Werkzeug die Zeile wieder —, steht aber ganz vorn und
+# schmal, damit sie nicht stört.
+SPALTEN_ABRECHNUNG = [
+    "Buch-Kennung", "Autor / Einrichtung", "Buchtitel", "ISBN",
+    "Vergütungsart", "€ je Ex.",
+    "verkaufte Ex.", "Eigenkauf", "Korrektur",
+    "Stand bis Vorjahr", "Vergütungs-Ex.", "Betrag netto", "MwSt",
+    "Besonderheit",
+]
+# Nur diese drei werden aus dem Blatt zurückgelesen. Alles andere ist
+# Anzeige und wird beim Speichern neu geschrieben.
+EINGABESPALTEN = ("verkaufte Ex.", "Eigenkauf", "Korrektur")
+
+SPALTEN_HISTORIE = [
+    "Buch-Kennung", "Buchtitel", "Jahr", "verkauft", "Eigenkauf",
+    "Korrektur", "Vortrag",
+]
+
+SPALTEN_REGELN = [
+    "Buch-Kennung", "Autor / Einrichtung", "Buchtitel", "Was gilt hier",
+    "Im Klartext",
 ]
 
 SPALTEN_STAFFELN = ["Buch-Kennung", "Stufe", "bis Menge", "Satz"]
@@ -436,6 +498,8 @@ SPALTEN_STAFFELN = ["Buch-Kennung", "Stufe", "bis Menge", "Satz"]
 PFLICHT_EMPFAENGER = {"Kennung", "Name", "Vorname", "Institution"}
 PFLICHT_BUECHER = {"Buch-Kennung", "Empfänger-Kennung", "Buchtitel", "ISBN"}
 PFLICHT_JAHRE = {"Buch-Kennung", "Jahr", "verkauft"}
+PFLICHT_ABRECHNUNG = {"Buch-Kennung", "verkaufte Ex.", "Eigenkauf"}
+PFLICHT_HISTORIE = {"Buch-Kennung", "Jahr", "verkauft"}
 PFLICHT_STAFFELN = {"Buch-Kennung", "bis Menge", "Satz"}
 
 # Spaltenbreiten, damit die Mappe ohne Nachjustieren lesbar ist.
@@ -444,26 +508,40 @@ BREITEN = {
     "Autorenart": 12, "Anrede": 18, "Titel": 10, "Vorname": 16, "Name": 22,
     "Institution": 34, "Straße": 26, "PLZ": 8, "Ort": 20, "Land": 14,
     "IBAN": 26, "Aktenzeichen / Kontoinhaber": 30, "E-Mail": 30,
+    "Sammelposten": 13,
     "Buchtitel": 42, "ISBN": 10, "Vergütungsart": 18, "MwSt-pflichtig": 14,
     "MwSt-Satz": 10, "Betrag je Ex.": 13, "Ladenpreis": 11,
     "MwSt im Preis": 13, "MwSt aufschlagen": 16, "Verlagsrabatt": 13,
     "Rabatt anwenden": 15, "Satz": 8, "Teiler": 8, "Satz runden": 12,
     "Freimenge": 10,
     "Freimenge ab Jahr": 16, "Schwelle 10": 12, "Vorauszahlung": 13,
+    "Gesondert abrechnen": 18,
     "Stillgelegt": 11, "Grund": 26, "Notizen": 60, "Nachpflege": 40,
     "Quelle": 14,
     "Jahr": 8, "verkauft": 10, "Eigenkauf": 11, "Korrektur": 11,
     "Vortrag": 10, "Stufe": 8, "bis Menge": 11,
+    "Autor / Einrichtung": 34, "€ je Ex.": 11, "verkaufte Ex.": 13,
+    "Stand bis Vorjahr": 16, "Vergütungs-Ex.": 14, "Betrag netto": 13,
+    "MwSt": 10, "Besonderheit": 30, "Was gilt hier": 22, "Im Klartext": 90,
 }
 
 # Zahlenformate. Ohne das „@“ bei PLZ und ISBN macht Excel beim nächsten
 # Öffnen wieder Zahlen daraus und frisst führende Nullen.
+# Bei den Geldbeträgen steht „[$-407]“ davor: das ist die Kennung für Deutsch
+# (Deutschland). Ohne sie entscheidet die Ländereinstellung des Rechners, ob
+# aus 3428.79 ein „3.428,79“ oder ein „3,428.79“ wird — und genau das Zweite
+# kam bisher heraus.
+GELDFORMAT = "[$-407]#,##0.00"
+PROZENTFORMAT = "[$-407]0.##"
+
 FORMATE = {
     "PLZ": "@", "ISBN": "@", "IBAN": "@", "lf. Nr.": "@", "Kennung": "@",
     "Buch-Kennung": "@", "Empfänger-Kennung": "@",
-    "Betrag je Ex.": "#,##0.00", "Ladenpreis": "#,##0.00",
-    "Vorauszahlung": "#,##0.00", "Satz": "0.####", "MwSt-Satz": "0.##",
-    "Verlagsrabatt": "0.##", "MwSt im Preis": "0.##",
+    "€ je Ex.": GELDFORMAT, "Betrag netto": GELDFORMAT, "MwSt": GELDFORMAT,
+    "Betrag je Ex.": GELDFORMAT, "Ladenpreis": GELDFORMAT,
+    "Vorauszahlung": GELDFORMAT, "Satz": "[$-407]0.####",
+    "MwSt-Satz": PROZENTFORMAT, "Verlagsrabatt": PROZENTFORMAT,
+    "MwSt im Preis": PROZENTFORMAT,
 }
 
 HINWEIS_TEXT = [
@@ -479,15 +557,24 @@ HINWEIS_TEXT = [
     ("2. Kennungen (E0001, B0001 …) nicht ändern. Sie verbinden die Blätter "
      "miteinander. Wird eine Kennung geändert, verliert das Buch seinen Autor "
      "und seine Jahreswerte.", False),
-    ("3. Im Blatt „Jahreswerte“ heißt eine LEERE Zelle bei „verkauft“ "
-     "„noch nicht erfasst“ — nicht „nichts verkauft“. Wenn ein Buch sich in "
-     "einem Jahr wirklich nicht verkauft hat, gehört dort eine 0 hinein. Das "
+    ("3. Getippt wird im Blatt „Abrechnung <Jahr>“, und zwar nur in den drei "
+     "gelb hinterlegten Spalten: verkaufte Ex., Eigenkauf und Korrektur. "
+     "Alles andere auf diesem Blatt ist Anzeige und wird beim nächsten "
+     "Speichern neu berechnet.", False),
+    ("4. Eine LEERE Zelle bei „verkaufte Ex.“ heißt „noch nicht "
+     "eingetragen“ — nicht „nichts verkauft“. Wenn ein Buch sich in einem "
+     "Jahr wirklich nicht verkauft hat, gehört dort eine 0 hinein. Das "
      "Werkzeug meldet fehlende Eingaben; eine irrtümliche 0 kann es nicht "
      "erkennen.", False),
-    ("4. Das Werkzeug schreibt diese Mappe beim Speichern vollständig neu. "
+    ("5. Was an einem Buch besonders ist — Staffel, Freimenge, "
+     "Vorauszahlung, Schwelle —, steht in der Spalte „Besonderheit“ und "
+     "ausführlich im Blatt „Regeln“. Die Jahre vor dem laufenden stehen im "
+     "Blatt „Historie“; der daraus errechnete Stand erscheint im "
+     "Arbeitsblatt in der Spalte „Stand bis Vorjahr“.", False),
+    ("6. Das Werkzeug schreibt diese Mappe beim Speichern vollständig neu. "
      "Eigene Formeln, Farben, Kommentare und zusätzliche Spalten gehen dabei "
      "verloren. Wer etwas festhalten will, schreibt es in „Notizen“.", False),
-    ("5. Die Datei schließen, bevor das Werkzeug speichert. Solange sie in "
+    ("7. Die Datei schließen, bevor das Werkzeug speichert. Solange sie in "
      "Excel offen ist, kann das Werkzeug nicht schreiben — es sagt das dann "
      "auch.", False),
     ("", False),
@@ -626,6 +713,7 @@ def lade_bestand(pfad: Path = None) -> Bestand:
                 aktenzeichen=_mehrzeilig(
                     hole(z, idx, "Aktenzeichen / Kontoinhaber")),
                 email=_text(hole(z, idx, "E-Mail")),
+                sammelposten=_ja_nein(hole(z, idx, "Sammelposten")),
             )
             if kennung in nach_kennung:
                 bestand.warnungen.append(
@@ -657,6 +745,7 @@ def lade_bestand(pfad: Path = None) -> Bestand:
                 mwst_pflichtig=_ja_nein(hole(z, idx, "MwSt-pflichtig")),
                 mwst_satz=_komma(hole(z, idx, "MwSt-Satz"), 7.0),
                 vorauszahlung=_komma(hole(z, idx, "Vorauszahlung"), 0.0),
+                gesondert=_ja_nein(hole(z, idx, "Gesondert abrechnen")),
                 stillgelegt=_ja_nein(hole(z, idx, "Stillgelegt")),
                 stillgelegt_grund=_mehrzeilig(hole(z, idx, "Grund")),
                 notizen=_mehrzeilig(hole(z, idx, "Notizen")),
@@ -687,24 +776,58 @@ def lade_bestand(pfad: Path = None) -> Bestand:
             buecher[bk] = b
             nach_kennung[ek].buecher.append(b)
 
-        idx, daten = _lies_blatt(wb, BLATT_JAHRE, PFLICHT_JAHRE)
-        for z in daten:
-            bk = _text(hole(z, idx, "Buch-Kennung"))
-            jahr = _ganzzahl(hole(z, idx, "Jahr"))
+        def merke_jahr(blatt, bk, jahr, verkauft, eigenkauf, korrektur,
+                       vortrag=None):
             if not bk or jahr is None:
-                continue
+                return
             if bk not in buecher:
                 bestand.warnungen.append(
-                    f"{BLATT_JAHRE}: Jahrgang {jahr} verweist auf das "
-                    f"unbekannte Buch „{bk}“ und wurde übergangen.")
-                continue
+                    f"{blatt}: Jahrgang {jahr} verweist auf das unbekannte "
+                    f"Buch „{bk}“ und wurde übergangen.")
+                return
             buecher[bk].jahre[jahr] = Jahreswert(
                 # Leer heißt „nicht erfasst“ — deshalb hier KEIN Vorgabewert 0.
-                verkauft=_ganzzahl(hole(z, idx, "verkauft")),
-                eigenkauf=_ganzzahl(hole(z, idx, "Eigenkauf"), 0) or 0,
-                korrektur=_ganzzahl(hole(z, idx, "Korrektur"), 0) or 0,
-                vortrag=_ganzzahl(hole(z, idx, "Vortrag")),
-            )
+                verkauft=verkauft, eigenkauf=eigenkauf or 0,
+                korrektur=korrektur or 0, vortrag=vortrag)
+
+        # Das Arbeitsblatt des laufenden Jahres. Es heißt „Abrechnung <Jahr>“;
+        # das Jahr steht im Blattnamen, damit es beim Wechsel nicht
+        # verwechselt werden kann.
+        for name in wb.sheetnames:
+            if not name.startswith(BLATT_ABRECHNUNG + " "):
+                continue
+            jahr = _ganzzahl(name.split()[-1])
+            if jahr is None:
+                continue
+            idx, daten = _lies_blatt(wb, name, PFLICHT_ABRECHNUNG)
+            for z in daten:
+                merke_jahr(name, _text(hole(z, idx, "Buch-Kennung")), jahr,
+                           _ganzzahl(hole(z, idx, "verkaufte Ex.")),
+                           _ganzzahl(hole(z, idx, "Eigenkauf"), 0),
+                           _ganzzahl(hole(z, idx, "Korrektur"), 0))
+
+        if BLATT_HISTORIE in wb.sheetnames:
+            idx, daten = _lies_blatt(wb, BLATT_HISTORIE, PFLICHT_HISTORIE)
+            for z in daten:
+                merke_jahr(BLATT_HISTORIE, _text(hole(z, idx, "Buch-Kennung")),
+                           _ganzzahl(hole(z, idx, "Jahr")),
+                           _ganzzahl(hole(z, idx, "verkauft")),
+                           _ganzzahl(hole(z, idx, "Eigenkauf"), 0),
+                           _ganzzahl(hole(z, idx, "Korrektur"), 0),
+                           _ganzzahl(hole(z, idx, "Vortrag")))
+
+        # Ältere Bestände führten alle Jahre in einem Blatt „Jahreswerte“.
+        # Die werden weiter gelesen, damit eine gespeicherte Mappe nach dem
+        # Umbau nicht wertlos wird.
+        if BLATT_JAHRE in wb.sheetnames:
+            idx, daten = _lies_blatt(wb, BLATT_JAHRE, PFLICHT_JAHRE)
+            for z in daten:
+                merke_jahr(BLATT_JAHRE, _text(hole(z, idx, "Buch-Kennung")),
+                           _ganzzahl(hole(z, idx, "Jahr")),
+                           _ganzzahl(hole(z, idx, "verkauft")),
+                           _ganzzahl(hole(z, idx, "Eigenkauf"), 0),
+                           _ganzzahl(hole(z, idx, "Korrektur"), 0),
+                           _ganzzahl(hole(z, idx, "Vortrag")))
 
         if BLATT_STAFFELN in wb.sheetnames:
             idx, daten = _lies_blatt(wb, BLATT_STAFFELN, PFLICHT_STAFFELN)
@@ -758,6 +881,21 @@ def _schreibe_blatt(wb, name: str, spalten: list[str],
                 zelle.number_format = fmt
 
 
+def _kennzeichne_eingabespalten(ws, spalten: list[str]) -> None:
+    """Die Spalten, in die getippt wird, farblich hinterlegen.
+
+    Vierzehn Spalten nebeneinander, und nur drei davon sind zum Ausfüllen —
+    ohne Markierung rät man jedes Jahr aufs Neue, welche.
+    """
+    hell = PatternFill("solid", fgColor="FFF6DA")
+    for i, name in enumerate(spalten, start=1):
+        if name not in EINGABESPALTEN:
+            continue
+        buchstabe = ws.cell(row=1, column=i).column_letter
+        for zelle in ws[buchstabe]:
+            zelle.fill = hell
+
+
 def _schreibe_hinweise(wb) -> None:
     ws = wb.create_sheet(BLATT_HINWEISE)
     ws.column_dimensions["A"].width = 110
@@ -769,7 +907,143 @@ def _schreibe_hinweise(wb) -> None:
             zelle.font = Font(bold=True, size=13)
 
 
-def speichere_bestand(bestand: Bestand, pfad: Path = None) -> Path:
+def sichere_zwischenstand(bestand: Bestand, jahr: int | None = None,
+                          cfg: dict | None = None) -> Path | None:
+    """Stillen Zwischenstand schreiben, ohne den richtigen Bestand anzufassen.
+
+    Bewusst in eine eigene Datei: der Bediener hat noch nicht gespeichert,
+    also darf auch nichts Gespeichertes überschrieben werden. Schlägt das
+    Schreiben fehl, wird das absichtlich verschluckt — ein Zwischenstand ist
+    eine Zugabe und darf die laufende Arbeit nie unterbrechen.
+    """
+    try:
+        return speichere_bestand(bestand, WIEDERHERSTELLUNG_PFAD,
+                                 mit_sicherung=False, jahr=jahr, cfg=cfg)
+    except Exception:
+        return None
+
+
+def verwerfe_zwischenstand() -> None:
+    try:
+        WIEDERHERSTELLUNG_PFAD.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+def offener_zwischenstand() -> str:
+    """Meldung, wenn ein Zwischenstand jünger ist als der Bestand.
+
+    Gibt "" zurück, wenn es nichts wiederherzustellen gibt.
+    """
+    if not WIEDERHERSTELLUNG_PFAD.exists():
+        return ""
+    try:
+        zwischen = WIEDERHERSTELLUNG_PFAD.stat().st_mtime
+        bestand = BESTAND_PFAD.stat().st_mtime if BESTAND_PFAD.exists() else 0
+    except OSError:
+        return ""
+    if zwischen <= bestand:
+        return ""
+    wann = datetime.fromtimestamp(zwischen).strftime("%d.%m.%Y um %H:%M")
+    return (f"Beim letzten Mal wurde das Programm beendet, ohne zu speichern.\n"
+            f"Es liegen Eingaben von {wann} vor.\n\n"
+            f"Sollen sie zurückgeholt werden?")
+
+
+def besonderheit(buch: "Buch") -> str:
+    """Ein kurzes Wort für das, was an diesem Buch nicht gewöhnlich ist."""
+    teile = []
+    if buch.stillgelegt:
+        teile.append("stillgelegt")
+    if buch.gesondert:
+        teile.append("gesondert abrechnen")
+    if buch.kondition.staffel:
+        teile.append("Staffel")
+    if buch.kondition.freimenge:
+        teile.append(f"Freimenge {buch.kondition.freimenge}")
+    if buch.vorauszahlung:
+        teile.append("Vorauszahlung offen")
+    if buch.kondition.schwelle_zehn:
+        teile.append("erst ab 10 Ex.")
+    if buch.kondition.teiler != 1:
+        teile.append(f"geteilt durch {buch.kondition.teiler}")
+    if buch.nachpflege:
+        teile.append("bitte prüfen")
+    return ", ".join(teile)
+
+
+def regelzeilen(bestand: Bestand) -> list[dict]:
+    """Die besonderen Abmachungen in ganzen Sätzen, je Buch eine Zeile.
+
+    Alles, was die Rechnung vom Gewöhnlichen abweichen lässt, steht hier
+    zusammen — sonst müsste man es aus den Konditionsspalten zusammenklauben,
+    und genau das will niemand einmal im Jahr tun.
+    """
+    zeilen = []
+    for e, b in bestand.buecher():
+        k = b.kondition
+        saetze = []
+        if b.stillgelegt:
+            saetze.append(f"Wird nicht mehr abgerechnet"
+                          + (f" — {b.stillgelegt_grund}." if b.stillgelegt_grund else "."))
+        if b.gesondert:
+            saetze.append(
+                "Wird auf einem eigenen Weg abgerechnet und löst hier keine "
+                "Auszahlung aus. Die Zahlen laufen trotzdem mit, damit "
+                "Staffel und Freimenge stimmen.")
+        if k.staffel:
+            stufen, untere = [], 1
+            for grenze, satz in k.staffel:
+                if grenze is None:
+                    stufen.append(f"ab {untere} Exemplaren {satz:g} %")
+                else:
+                    stufen.append(f"{untere} bis {grenze} Exemplare {satz:g} %")
+                    untere = grenze + 1
+            saetze.append("Gestaffelter Satz: " + ", ".join(stufen)
+                          + ". Welche Stufe gilt, entscheidet der Stand zu "
+                            "Jahresbeginn.")
+        if k.freimenge:
+            saetze.append(
+                f"Die ersten {k.freimenge} Exemplare werden nicht vergütet. "
+                f"Solange der Stand darunter liegt, wird nichts gezahlt — "
+                f"und auch nichts zurückgefordert.")
+        if b.vorauszahlung:
+            saetze.append(
+                f"Es ist noch eine Vorauszahlung von {euro(b.vorauszahlung)} "
+                f"offen. Sie wird vom Honorar abgezogen, bis sie getilgt ist.")
+        if k.schwelle_zehn:
+            saetze.append(
+                "Unter zehn Vergütungsexemplaren im Jahr entfällt das "
+                "Honorar. Bei genau zehn wird gezahlt.")
+        if k.teiler != 1:
+            saetze.append(f"Das Honorar teilen sich {k.teiler} Autoren.")
+        if k.betrag_je_ex is None and k.ladenpreis is not None:
+            weg = [f"Ladenpreis {euro(k.ladenpreis)}"]
+            if k.mwst_im_preis:
+                weg.append(("zuzüglich" if k.mwst_aufschlagen else "abzüglich")
+                           + f" {k.mwst_im_preis:g} % MwSt")
+            if k.rabatt_anwenden:
+                weg.append(f"minus {k.verlagsrabatt:g} % Verlagsrabatt")
+            if k.satz is not None:
+                weg.append(f"davon {k.satz:g} %")
+            saetze.append("Gerechnet wird: " + ", ".join(weg) + ".")
+        for hinweis in b.nachpflege:
+            saetze.append("Beim Einlesen aufgefallen: " + hinweis)
+        if not saetze:
+            continue
+        zeilen.append({
+            "Buch-Kennung": b.kennung,
+            "Autor / Einrichtung": e.anzeigename,
+            "Buchtitel": b.titel,
+            "Was gilt hier": besonderheit(b) or "—",
+            "Im Klartext": " ".join(saetze),
+        })
+    return zeilen
+
+
+def speichere_bestand(bestand: Bestand, pfad: Path = None,
+                      mit_sicherung: bool = True, jahr: int | None = None,
+                      cfg: dict | None = None) -> Path:
     """Den Bestand schreiben — Sicherungskopie zuerst, dann atomar ersetzen.
 
     Atomar über Temp-Datei + os.replace, weil die Mappe auf dem Netzlaufwerk
@@ -781,7 +1055,7 @@ def speichere_bestand(bestand: Bestand, pfad: Path = None) -> Path:
     if meldung:
         raise ValueError(meldung)
 
-    if pfad.exists():
+    if mit_sicherung and pfad.exists():
         try:
             shutil.copy2(pfad, SICHERUNG_PFAD)
         except OSError as e:
@@ -801,6 +1075,7 @@ def speichere_bestand(bestand: Bestand, pfad: Path = None) -> Path:
             "Institution": e.institution, "Straße": e.strasse, "PLZ": e.plz,
             "Ort": e.ort, "Land": e.land, "IBAN": e.iban,
             "Aktenzeichen / Kontoinhaber": e.aktenzeichen, "E-Mail": e.email,
+            "Sammelposten": _js(e.sammelposten),
         }
         for e in bestand.empfaenger
     ])
@@ -823,6 +1098,7 @@ def speichere_bestand(bestand: Bestand, pfad: Path = None) -> Path:
             "Freimenge ab Jahr": b.kondition.freimenge_ab_jahr,
             "Schwelle 10": _js(b.kondition.schwelle_zehn),
             "Vorauszahlung": b.vorauszahlung or None,
+            "Gesondert abrechnen": _js(b.gesondert),
             "Stillgelegt": _js(b.stillgelegt), "Grund": b.stillgelegt_grund,
             "Notizen": b.notizen, "Nachpflege": " | ".join(b.nachpflege),
             "Quelle": b.quelle,
@@ -830,17 +1106,63 @@ def speichere_bestand(bestand: Bestand, pfad: Path = None) -> Path:
         for e, b in bestand.buecher()
     ])
 
-    jahreszeilen = []
-    for _, b in bestand.buecher():
-        for jahr in sorted(b.jahre):
-            jw = b.jahre[jahr]
-            jahreszeilen.append({
-                "Buch-Kennung": b.kennung, "Jahr": jahr,
-                # None bleibt None: eine leere Zelle heißt „nicht erfasst“.
-                "verkauft": jw.verkauft, "Eigenkauf": jw.eigenkauf,
-                "Korrektur": jw.korrektur or None, "Vortrag": jw.vortrag,
+    # --- Das Arbeitsblatt des laufenden Jahres -------------------------
+    if jahr is None:
+        vorhanden = [j for _, b in bestand.buecher() for j in b.jahre]
+        jahr = max(vorhanden) if vorhanden else date.today().year - 1
+
+    abrechnungszeilen, historienzeilen = [], []
+    # Nach Autor und Titel sortiert — so sucht ein Mensch, nicht nach
+    # Kennungen.
+    sortiert = sorted(bestand.buecher(),
+                      key=lambda p: (p[0].anzeigename.lower(), p[1].titel.lower()))
+    for e, b in sortiert:
+        if b.stillgelegt:
+            # Stillgelegte Bücher gehören nicht ins Arbeitsblatt — sie
+            # blähten es um ein Fünftel auf, ohne dass je etwas einzutragen
+            # wäre. Ihre Zahlen wandern vollständig in die Historie, damit
+            # nichts verlorengeht.
+            for j in sorted(b.jahre):
+                h = b.jahre[j]
+                historienzeilen.append({
+                    "Buch-Kennung": b.kennung, "Buchtitel": b.titel, "Jahr": j,
+                    "verkauft": h.verkauft, "Eigenkauf": h.eigenkauf,
+                    "Korrektur": h.korrektur or None, "Vortrag": h.vortrag,
+                })
+            continue
+        jw = b.jahre.get(jahr)
+        posten = betrag_zeile(b, jahr, cfg or {}) if jw else None
+        abrechnungszeilen.append({
+            "Buch-Kennung": b.kennung,
+            "Autor / Einrichtung": e.anzeigename,
+            "Buchtitel": b.titel,
+            "ISBN": b.isbn,
+            "Vergütungsart": b.verguetungsart,
+            "€ je Ex.": satz_je_ex(b, jahr),
+            # Leer heißt „noch nicht eingetragen“ — deshalb keine 0 erzwingen.
+            "verkaufte Ex.": jw.verkauft if jw else None,
+            "Eigenkauf": jw.eigenkauf if jw and jw.verkauft is not None else None,
+            "Korrektur": (jw.korrektur or None) if jw else None,
+            "Stand bis Vorjahr": kumulierte_menge(b, jahr),
+            "Vergütungs-Ex.": posten.verguetungs_ex if posten else None,
+            "Betrag netto": posten.netto if posten else None,
+            "MwSt": posten.mwst if posten else None,
+            "Besonderheit": besonderheit(b),
+        })
+        for j in sorted(b.jahre):
+            if j == jahr:
+                continue
+            h = b.jahre[j]
+            historienzeilen.append({
+                "Buch-Kennung": b.kennung, "Buchtitel": b.titel, "Jahr": j,
+                "verkauft": h.verkauft, "Eigenkauf": h.eigenkauf,
+                "Korrektur": h.korrektur or None, "Vortrag": h.vortrag,
             })
-    _schreibe_blatt(wb, BLATT_JAHRE, SPALTEN_JAHRE, jahreszeilen)
+
+    blattname = f"{BLATT_ABRECHNUNG} {jahr}"
+    _schreibe_blatt(wb, blattname, SPALTEN_ABRECHNUNG, abrechnungszeilen)
+    _kennzeichne_eingabespalten(wb[blattname], SPALTEN_ABRECHNUNG)
+    _schreibe_blatt(wb, BLATT_HISTORIE, SPALTEN_HISTORIE, historienzeilen)
 
     staffelzeilen = []
     for _, b in bestand.buecher():
@@ -850,6 +1172,7 @@ def speichere_bestand(bestand: Bestand, pfad: Path = None) -> Path:
                 "bis Menge": grenze, "Satz": satz,
             })
     _schreibe_blatt(wb, BLATT_STAFFELN, SPALTEN_STAFFELN, staffelzeilen)
+    _schreibe_blatt(wb, BLATT_REGELN, SPALTEN_REGELN, regelzeilen(bestand))
 
     tmp = pfad.parent / f".{pfad.name}.{os.getpid()}.tmp"
     try:
@@ -1096,7 +1419,7 @@ def satz_aus_kondition(kond: Kondition, satz: float | None = None) -> float:
         wert *= genutzt / 100
     if kond.teiler and kond.teiler != 1:
         wert /= kond.teiler
-    return round(wert, 2) if kond.satz_runden else wert
+    return runde(wert) if kond.satz_runden else wert
 
 
 # ---------------------------------------------------------------------
@@ -1369,6 +1692,12 @@ def _hole_empfaenger(bestand: Bestand, register: dict, felder: dict
                 setattr(e, k, v)
         return e
     e = Empfaenger(kennung=bestand.naechste_kennung("E"), **felder)
+    # „verschiedene Autoren“ ist kein Mensch, sondern der Sammelposten einer
+    # Anthologie. Ein Brief dorthin wäre unzustellbar und eine Überweisung
+    # ginge ins Leere.
+    if "verschiedene autoren" in _schluessel(
+            felder.get("vorname", ""), felder.get("name", ""), ""):
+        e.sammelposten = True
     register[schluessel] = e
     bestand.empfaenger.append(e)
     return e
@@ -1485,20 +1814,29 @@ def _lies_jahre(buch: Buch, zeile: tuple, idx: dict,
         jw.eigenkauf = eigenkauf
         if jahr == standard_jahr and i_korrektur is not None:
             jw.korrektur = _ganzzahl(_zelle(zeile, i_korrektur), 0) or 0
-        # In einzelnen Altzeilen ist die Vergütungsexemplar-Zelle leer,
-        # obwohl Stückzahlen dastehen — dort hat jemand die Formel gelöscht.
-        # Excel rechnet deshalb mit 0 weiter, das Werkzeug mit der echten
-        # Menge. Der Unterschied ist gewollt, muss aber sichtbar sein.
         i_verg = sp.get("verguetung")
-        if (i_verg is not None and verkauft is not None
-                and _ganzzahl(_zelle(zeile, i_verg)) is None):
+        gezeigt = _ganzzahl(_zelle(zeile, i_verg)) if i_verg is not None else None
+        if i_verg is not None and verkauft is not None and gezeigt is None:
+            # In einzelnen Altzeilen ist die Vergütungsexemplar-Zelle leer,
+            # obwohl Stückzahlen dastehen — dort hat jemand die Formel
+            # gelöscht. Excel rechnet deshalb mit 0 weiter, das Werkzeug mit
+            # der echten Menge. Der Unterschied ist gewollt, muss aber
+            # sichtbar sein.
             buch.nachpflege.append(
                 f"Vergütungsexemplare {jahr} waren in der Altmappe leer "
                 f"(dort Betrag 0), hier aus {verkauft} Ex. gerechnet")
+        elif (gezeigt is not None and verkauft is not None
+                and gezeigt != verkauft - eigenkauf):
+            # Die Altmappe trägt in dieser Spalte den KUMULIERTEN Stand vor,
+            # nicht die Jahresmenge. Ohne ihn wäre die Staffel blind und aus
+            # einem Jahr mit Rückgaben („−69 Ex.“) würde ein negativer
+            # Saldo, obwohl in Wahrheit 1540 Exemplare aufgelaufen sind.
+            jw.vortrag = gezeigt
 
 
 def _blatt_zeilenweise(bestand, register, wbf, wbv, blattname, prot,
-                       stillgelegt=False, standard_jahr=None, ab=0):
+                       stillgelegt=False, standard_jahr=None, ab=0,
+                       gesondert=False):
     """Ein Stammblatt Zeile für Zeile einlesen (ohne Blockbildung).
 
     Für die Blätter, in denen jede Zeile für sich steht: Historie, Archiv,
@@ -1527,7 +1865,8 @@ def _blatt_zeilenweise(bestand, register, wbf, wbv, blattname, prot,
         if norm_kopf(_zelle(zeile, finde_spalte(idx, "Vorname"))) == "vorname":
             anzahl += _blatt_zeilenweise(
                 bestand, register, wbf, wbv, blattname, prot,
-                stillgelegt=stillgelegt, standard_jahr=standard_jahr, ab=r - 1)
+                stillgelegt=stillgelegt, standard_jahr=standard_jahr,
+                ab=r - 1, gesondert=gesondert)
             break
         felder = _stammfelder(zeile, idx)
         if not (felder["vorname"] or felder["name"] or felder["institution"]):
@@ -1537,6 +1876,7 @@ def _blatt_zeilenweise(bestand, register, wbf, wbv, blattname, prot,
         if buch is None:
             continue
         e = _hole_empfaenger(bestand, register, felder)
+        buch.gesondert = gesondert
         buch.stillgelegt = stillgelegt
         if stillgelegt:
             buch.stillgelegt_grund = _text(_zelle(zeile, i_grund))
@@ -1682,15 +2022,59 @@ def _anthologie(bestand, register, wbv, blattname, jahr, prot):
             kennung=bestand.naechste_kennung("B"),
             titel=blattname, isbn="", verguetungsart="Honorar",
             kondition=Kondition(betrag_je_ex=betrag),
-            notizen=f"Anteil am Topfbetrag der Anthologie „{blattname}“.",
-            nachpflege=["Anthologie-Anteil: Menge 1, Betrag = Anteil am Topf"],
+            quelle=f"{blattname}!Z{r}",
+            notizen=(f"Beteiligt an der Anthologie „{blattname}“. Der "
+                     f"Topfbetrag wird unter allen Beteiligten geteilt; "
+                     f"zuletzt ergab das {betrag} € je Person."),
+            nachpflege=[
+                "Anthologie: der Topfbetrag wird nicht automatisch verteilt. "
+                "Wenn in diesem Jahr ausgeschüttet werden soll, den Anteil "
+                "je Person von Hand eintragen."],
         )
-        buch.jahr(jahr).verkauft = 1 if betrag else 0
+        # KEINE Zahlung für das laufende Jahr erfinden. Der Topf der
+        # Altmappe war längst ausgeschüttet — bei „Tödliche Häppchen“ am
+        # 27.01.2022 —, und ein Import, der daraus 15 neue Auszahlungen und
+        # 15 Briefe macht, verschickt Geld ein zweites Mal.
+        buch.jahr(jahr).verkauft = 0
         e.buecher.append(buch)
         prot.merke(blattname, r, e.anzeigename, blattname,
                    f"Anteil {betrag}" if betrag else "kein Anteil", "")
         anzahl += 1
     return anzahl
+
+
+def _zahlungslisten_satz(wbv, betrag: float) -> dict | None:
+    """Den Empfänger zu einem Betrag aus der alten Zahlungsliste holen.
+
+    Das LUBW-Blatt nennt nur Titel und Beträge, nicht den Zahlungsempfänger.
+    Der steht in der Zahlungsliste — mit Name, Bankverbindung und der
+    Vergütungsart. Ohne diesen Umweg hieße der Empfänger „LUBW“, hätte keine
+    Bankverbindung, und der Brief ginge an den falschen Namen.
+    """
+    blatt = next((b for b in wbv.sheetnames
+                  if b.lower().startswith("zahlungsliste")), None)
+    if blatt is None:
+        return None
+    ws = wbv[blatt]
+    kopf_i, idx, _ = _alt_kopf(ws, {"Vorname", "Name", "Institution"})
+    if kopf_i < 0:
+        return None
+    for r in range(kopf_i + 2, ws.max_row + 1):
+        zeile = tuple(c.value for c in ws[r])
+        wert = _komma(_zelle(zeile, finde_spalte(idx, "Auszahlungs-Betrag")))
+        if wert is None or abs(wert - betrag) > 0.005:
+            continue
+        return {
+            "vorname": _text(_zelle(zeile, finde_spalte(idx, "Vorname"))),
+            "name": _text(_zelle(zeile, finde_spalte(idx, "Name"))),
+            "institution": _mehrzeilig(
+                _zelle(zeile, finde_spalte(idx, "Institution"))),
+            "iban": _text(_zelle(zeile, finde_spalte(idx, "Bankverbindung"))),
+            "aktenzeichen": _mehrzeilig(_zelle(
+                zeile, finde_spalte(idx, "Aktenzeichen / Kontoinhaber"))),
+            "art": _text(_zelle(zeile, finde_spalte(idx, "VERGÜT-ART"))),
+        }
+    return None
 
 
 def _lubw(bestand, register, wbv, jahr, prot):
@@ -1702,11 +2086,42 @@ def _lubw(bestand, register, wbv, jahr, prot):
     if kopf_i < 0:
         prot.warne(f"Blatt „{ALT_BLATT_LUBW}“: keine Kopfzeile gefunden.")
         return 0
+
     felder = {k: "" for k in ("lf_nr", "autorenart", "anrede", "titel_akad",
                               "vorname", "name", "strasse", "plz", "ort",
-                              "land", "iban", "email")}
+                              "land", "iban", "email", "aktenzeichen")}
     felder["institution"] = "LUBW"
     felder["anrede"] = "Damen und Herren"
+    art = "Rückfluss"
+
+    # Den echten Zahlungsempfänger über den Gesamtbetrag in der alten
+    # Zahlungsliste suchen.
+    i_gesamt = finde_spalte(idx, "Gesamtbetrag")
+    summe = 0.0
+    for r in range(kopf_i + 2, ws.max_row + 1):
+        wert = _komma(_zelle(tuple(c.value for c in ws[r]), i_gesamt))
+        if wert is not None:
+            summe += wert
+    summe = round(summe / 2, 2)   # die Summenzeile zählt alles doppelt
+    satz = _zahlungslisten_satz(wbv, summe)
+    if satz:
+        for schluessel in ("vorname", "name", "institution", "iban",
+                           "aktenzeichen"):
+            if satz.get(schluessel):
+                felder[schluessel] = satz[schluessel]
+        art = satz.get("art") or art
+        prot.warne(
+            f"{ALT_BLATT_LUBW}: Zahlungsempfänger aus der Zahlungsliste "
+            f"übernommen — „{felder['institution'] or felder['name']}“, "
+            f"Vergütungsart „{art}“. Das LUBW-Blatt selbst nennt keinen "
+            f"Empfänger; bitte prüfen, ob das stimmt.")
+    else:
+        prot.warne(
+            f"{ALT_BLATT_LUBW}: In der alten Zahlungsliste war kein "
+            f"Empfänger zum Gesamtbetrag von {summe:.2f} € zu finden. Der "
+            f"Empfänger heißt vorläufig „LUBW“ und hat keine "
+            f"Bankverbindung — bitte nachtragen.")
+
     e = _hole_empfaenger(bestand, register, felder)
     i_isbn = finde_spalte(idx, "ISBN")
     i_titel = finde_spalte(idx, "Titel")
@@ -1722,8 +2137,9 @@ def _lubw(bestand, register, wbv, jahr, prot):
             continue
         buch = Buch(
             kennung=bestand.naechste_kennung("B"),
-            titel=titel, isbn=isbn, verguetungsart="Rückfluss",
+            titel=titel, isbn=isbn, verguetungsart=art,
             kondition=Kondition(betrag_je_ex=einzel),
+            quelle=f"{ALT_BLATT_LUBW}!Z{r}",
             notizen="Pauschale je Exemplar laut LUBW-Vereinbarung.",
         )
         buch.jahr(jahr).verkauft = _ganzzahl(_zelle(zeile, i_menge), 0) or 0
@@ -1763,8 +2179,17 @@ def importiere_alt(pfad, jahr: int = 2025, log=None) -> tuple[Bestand, ImportPro
         melde(f"  {ALT_BLATT_ARCHIV}: {n} stillgelegte Bücher")
 
         n = _blatt_zeilenweise(bestand, register, wbf, wbv, ALT_BLATT_HISTORIE,
-                               prot, standard_jahr=jahr)
+                               prot, standard_jahr=jahr, gesondert=True)
         melde(f"  {ALT_BLATT_HISTORIE}: {n} Bücher mit Jahreshistorie")
+        prot.warne(
+            f"{ALT_BLATT_HISTORIE}: Diese {n} Bücher sind als „gesondert "
+            f"abrechnen“ übernommen und lösen KEINE Auszahlung aus. Das "
+            f"Blatt ist ein Laufzettel auf die vereinbarte Freimenge hin — "
+            f"die Summe seiner Betragsspalte ist negativ, und nur vier der "
+            f"dort geführten Personen stehen überhaupt in der alten "
+            f"Zahlungsliste. Ob und wie diese Verträge abgerechnet werden, "
+            f"muss der Verlag entscheiden; danach den Haken in der Spalte "
+            f"„Gesondert abrechnen“ entfernen.")
 
         n = _blatt_zeilenweise(bestand, register, wbf, wbv, ALT_BLATT_SONDER,
                                prot, standard_jahr=jahr)
@@ -1834,16 +2259,19 @@ class Posten:
     """Eine Zeile der Titeltabelle im Abrechnungsbrief."""
 
     buch: Buch
-    satz: float = 0.0
+    jahr: int = 0
+    satz: float = 0.0            # Betrag je Exemplar in Euro
+    satz_prozent: float | None = None   # der angewandte Honorarsatz
     verkauft: int = 0
     eigenkauf: int = 0
+    korrektur: int = 0
     verguetungs_ex: int = 0
     netto: float = 0.0
     mwst: float = 0.0
 
     @property
     def brutto(self) -> float:
-        return round(self.netto + self.mwst, 2)
+        return runde(self.netto + self.mwst)
 
 
 @dataclass
@@ -1921,6 +2349,18 @@ def kumulierte_menge(buch: Buch, jahr: int) -> int | None:
     return summe
 
 
+def angewandter_satz(buch: Buch, jahr: int) -> float | None:
+    """Welcher Prozentsatz in diesem Jahr gilt — mit Staffel der Stufensatz."""
+    kond = buch.kondition
+    if kond.staffel:
+        stand = kumulierte_menge(buch, jahr)
+        if stand is not None:
+            for grenze, satz in kond.staffel:
+                if grenze is None or stand <= grenze:
+                    return satz
+    return kond.satz
+
+
 def satz_je_ex(buch: Buch, jahr: int) -> float:
     """Betrag je Exemplar für dieses Jahr.
 
@@ -1968,16 +2408,29 @@ def betrag_zeile(buch: Buch, jahr: int, cfg: dict | None = None) -> Posten | Non
     satz = satz_je_ex(buch, jahr)
 
     schwelle = int(cfg.get("schwelle_menge", 10))
-    if buch.kondition.schwelle_zehn and menge < schwelle:
+    if buch.kondition.freimenge and menge < 0:
+        # Die Freimenge ist noch nicht erreicht: von den ersten 500
+        # Exemplaren bekommt der Autor nichts. Daraus darf aber KEINE
+        # Forderung gegen ihn werden — er schuldet nichts für Exemplare,
+        # die nie vergütet wurden. Der Saldo wird vorgetragen, der Betrag
+        # dieses Jahres ist null.
+        #
+        # Ohne diese Regel verschlang ein einzelnes solches Buch die
+        # Auszahlung des ganzen Autors: im Bestand 2025 fiel ein Empfänger
+        # dadurch von 6,69 € auf −1.038,59 €.
+        netto = 0.0
+    elif buch.kondition.schwelle_zehn and menge < schwelle:
         # „Keine Berechnung bei 10 o. weniger." — gemeint ist: unter der
         # Schwelle entfällt das Honorar, BEI genau zehn wird gezahlt.
         netto = 0.0
     else:
-        netto = round(menge * satz, 2)
+        netto = runde(menge * satz)
 
-    mwst = round(netto * buch.mwst_satz / 100, 2) if buch.mwst_pflichtig else 0.0
-    return Posten(buch=buch, satz=satz, verkauft=jw.verkauft,
-                  eigenkauf=jw.eigenkauf, verguetungs_ex=menge,
+    mwst = runde(netto * buch.mwst_satz / 100) if buch.mwst_pflichtig else 0.0
+    return Posten(buch=buch, jahr=jahr, satz=satz,
+                  satz_prozent=angewandter_satz(buch, jahr),
+                  verkauft=jw.verkauft, eigenkauf=jw.eigenkauf,
+                  korrektur=jw.korrektur, verguetungs_ex=menge,
                   netto=netto, mwst=mwst)
 
 
@@ -1990,6 +2443,16 @@ def rechne_empfaenger(e: Empfaenger, jahr: int,
     for buch in e.buecher:
         if buch.stillgelegt:
             continue
+        if buch.gesondert:
+            # Zählt für die Historie und die Staffel, aber nicht für die
+            # Auszahlung. Der Betrag wird trotzdem ausgewiesen, damit er
+            # nicht unbemerkt verschwindet.
+            posten = betrag_zeile(buch, jahr, cfg)
+            if posten is not None and posten.netto:
+                ab.probleme.append(
+                    f"„{buch.titel}“ wird gesondert abgerechnet und ist hier "
+                    f"NICHT enthalten (rechnerisch {euro(posten.netto)}).")
+            continue
         posten = betrag_zeile(buch, jahr, cfg)
         if posten is None:
             if any(j >= jahr - 1 for j in buch.jahre):
@@ -1997,20 +2460,20 @@ def rechne_empfaenger(e: Empfaenger, jahr: int,
                     f"„{buch.titel}“: Stückzahl {jahr} noch nicht erfasst.")
             continue
         ab.posten.append(posten)
-        ab.netto = round(ab.netto + posten.netto, 2)
-        ab.mwst = round(ab.mwst + posten.mwst, 2)
+        ab.netto = runde(ab.netto + posten.netto)
+        ab.mwst = runde(ab.mwst + posten.mwst)
         if buch.verguetungsart == KSK_ART:
-            ab.ksk_netto = round(ab.ksk_netto + posten.netto, 2)
+            ab.ksk_netto = runde(ab.ksk_netto + posten.netto)
 
-    ab.brutto = round(ab.netto + ab.mwst, 2)
+    ab.brutto = runde(ab.netto + ab.mwst)
 
     # Offene Vorauszahlungen zuerst verrechnen — ausgezahlt wird nur, was
     # darüber hinausgeht.
-    offen = round(sum(b.vorauszahlung for b in e.buecher
-                      if not b.stillgelegt and b.vorauszahlung > 0), 2)
+    offen = runde(sum(b.vorauszahlung for b in e.buecher
+                      if not b.stillgelegt and b.vorauszahlung > 0))
     if offen > 0 and ab.brutto > 0:
-        ab.verrechnet = round(min(offen, ab.brutto), 2)
-        ab.brutto = round(ab.brutto - ab.verrechnet, 2)
+        ab.verrechnet = runde(min(offen, ab.brutto))
+        ab.brutto = runde(ab.brutto - ab.verrechnet)
         ab.probleme.append(
             f"{ab.verrechnet:.2f} € mit der offenen Vorauszahlung verrechnet "
             f"(danach noch offen: {offen - ab.verrechnet:.2f} €).")
@@ -2018,8 +2481,23 @@ def rechne_empfaenger(e: Empfaenger, jahr: int,
     # Ein Brief geht nur hinaus, wenn es etwas zu berichten gibt.
     if not ab.posten:
         ab.gruende.append("kein erfasstes Buch in diesem Jahr")
-    elif ab.brutto <= 0:
-        ab.gruende.append(f"Auszahlungsbetrag {ab.brutto:.2f} €")
+    elif ab.brutto < 0:
+        # Mehr Rückgaben als Verkäufe. Ausgezahlt wird nichts — aber der
+        # Fehlbetrag verschwindet damit auch nicht von selbst. Wer ihn im
+        # nächsten Jahr verrechnen will, trägt ihn dort in „Korrektur“ ein;
+        # sonst bekommt der Autor im Folgejahr zu viel.
+        ab.gruende.append(
+            f"Auszahlungsbetrag {euro(ab.brutto)} — mehr Rückgaben als "
+            f"Verkäufe, es wird nichts überwiesen")
+        ab.probleme.append(
+            f"Fehlbetrag von {euro(abs(ab.brutto))}: soll er im nächsten "
+            f"Jahr verrechnet werden? Dann dort bei „Korrektur“ eintragen.")
+    elif ab.brutto == 0:
+        ab.gruende.append("nichts auszuzahlen")
+    elif e.sammelposten:
+        ab.gruende.append(
+            f"Sammelposten, kein einzelner Empfänger — die {ab.brutto:.2f} € "
+            f"sind auf die Beteiligten zu verteilen")
     ab.brief = not ab.gruende
 
     if ab.brief and not e.iban:
@@ -2087,12 +2565,168 @@ class Abweichung:
 
     @property
     def differenz(self) -> float:
-        return round(self.ist - self.soll, 2)
+        return runde(self.ist - self.soll)
+
+
+def _vergleichsschluessel(vorname: str, name: str, institution: str) -> str:
+    """Zwei Schreibweisen derselben Person vergleichbar machen.
+
+    Nur für die Gegenprobe. Die Altmappe schreibt dieselbe Person mal mit,
+    mal ohne Institution; verglichen wird deshalb über Vor- und Nachnamen,
+    und nur wo beide fehlen über die Institution.
+    """
+    def sauber(s):
+        s = unicodedata.normalize("NFKD", str(s or ""))
+        return re.sub(r"[^a-z0-9]", "", s.lower())
+    person = sauber(vorname) + "|" + sauber(name)
+    return person if person != "|" else "einrichtung:" + sauber(institution)[:24]
+
+
+def pruefe_zahlungsliste(bestand: Bestand, pfad_alt, jahr: int,
+                         cfg: dict | None = None) -> list[Abweichung]:
+    """Die Auszahlungen gegen die alte Zahlungsliste stellen.
+
+    Die Rechenprobe allein genügt nicht: sie prüft Beträge, aber nicht, ob
+    am Ende die richtigen Leute in der Liste stehen. Genau dort steckten die
+    Fehler — ein Empfänger hieß „LUBW“ statt nach der Stiftung, und eine
+    Anthologie erzeugte fünfzehn Auszahlungen für Geld, das Jahre zuvor
+    geflossen war.
+    """
+    cfg = cfg or {}
+    pfad_alt = Path(pfad_alt)
+    wb = openpyxl.load_workbook(pfad_alt, data_only=True)
+    abweichungen: list[Abweichung] = []
+    try:
+        blatt = next((b for b in wb.sheetnames
+                      if b.lower().startswith("zahlungsliste")), None)
+        if blatt is None:
+            return []
+        ws = wb[blatt]
+        kopf_i, idx, _ = _alt_kopf(ws, {"Vorname", "Name", "Institution"})
+        if kopf_i < 0:
+            return []
+        alt: dict[str, tuple] = {}
+        for r in range(kopf_i + 2, ws.max_row + 1):
+            zeile = tuple(c.value for c in ws[r])
+            vorname = _text(_zelle(zeile, finde_spalte(idx, "Vorname")))
+            name = _text(_zelle(zeile, finde_spalte(idx, "Name")))
+            inst = _mehrzeilig(_zelle(zeile, finde_spalte(idx, "Institution")))
+            if not (vorname or name or inst):
+                continue
+            betrag = _komma(_zelle(
+                zeile, finde_spalte(idx, "Auszahlungs-Betrag")))
+            alt[_vergleichsschluessel(vorname, name, inst)] = (
+                " ".join(x for x in (vorname, name, inst) if x), betrag)
+
+        meins: dict[str, tuple] = {}
+        for ab in rechne_alle(bestand, jahr, cfg):
+            if not ab.brief:
+                continue
+            e = ab.empfaenger
+            meins[_vergleichsschluessel(e.vorname, e.name, e.institution)] = (
+                e.anzeigename, ab.brutto)
+
+        for schluessel, (wer, soll) in alt.items():
+            if soll is None:
+                continue               # Zeile ohne Betrag: nichts zu zahlen
+            if schluessel not in meins:
+                abweichungen.append(Abweichung(
+                    "Zahlung", wer, "", soll, 0.0,
+                    "steht in der alten Zahlungsliste, bekommt hier nichts"))
+            elif abs(meins[schluessel][1] - soll) > 0.005:
+                abweichungen.append(Abweichung(
+                    "Zahlung", wer, "", soll, meins[schluessel][1]))
+        for schluessel, (wer, ist) in meins.items():
+            if schluessel not in alt:
+                abweichungen.append(Abweichung(
+                    "Zahlung", wer, "", 0.0, ist,
+                    "neu — stand nicht in der alten Zahlungsliste"))
+        return abweichungen
+    finally:
+        wb.close()
+
+
+def pruefe_ksk(bestand: Bestand, pfad_alt, jahr: int,
+               cfg: dict | None = None) -> list[Abweichung]:
+    """Die Meldebeträge gegen das alte Künstlersozialkasse-Blatt stellen.
+
+    Verglichen werden nur die Buchungen mit Belegdatum 31.12. — alles
+    andere auf jenem Blatt stammt aus anderen Vorgängen (Lektorate,
+    Einzelhonorare) und hat mit der Jahresabrechnung nichts zu tun.
+    """
+    cfg = cfg or {}
+    pfad_alt = Path(pfad_alt)
+    wb = openpyxl.load_workbook(pfad_alt, data_only=True)
+    abweichungen: list[Abweichung] = []
+    try:
+        blatt = next((b for b in wb.sheetnames
+                      if "sozialkasse" in b.lower()), None)
+        if blatt is None:
+            return []
+        ws = wb[blatt]
+        alt: dict[str, tuple] = {}
+        for r in range(1, ws.max_row + 1):
+            zeile = [c.value for c in ws[r]]
+            if _text(_zelle(tuple(zeile), 0)) != f"31.12.{jahr}":
+                continue
+            text = _text(_zelle(tuple(zeile), 2))
+            wer = text.split("_")[0].strip().rstrip(",")
+            nachname, _, vorname = wer.partition(",")
+            betrag = _komma(_zelle(tuple(zeile), 4), 0.0) or 0.0
+            alt[_vergleichsschluessel(vorname, nachname, wer)] = (wer, betrag)
+
+        meins: dict[str, tuple] = {}
+        auszahlung: dict[str, float] = {}
+        for ab in rechne_alle(bestand, jahr, cfg):
+            e = ab.empfaenger
+            schluessel = _vergleichsschluessel(e.vorname, e.name, e.institution)
+            auszahlung[schluessel] = ab.brutto
+            if ab.ksk_netto <= 0:
+                continue
+            meins[schluessel] = (e.anzeigename, ab.ksk_netto)
+
+        for schluessel, (wer, soll) in alt.items():
+            if schluessel not in meins:
+                abweichungen.append(Abweichung(
+                    "KSK", wer, "", soll, 0.0,
+                    "stand im alten KSK-Blatt, wird hier nicht gemeldet"))
+            elif abs(meins[schluessel][1] - soll) > 0.005:
+                unterschied = abs(meins[schluessel][1] - soll)
+                # Die Beträge im alten KSK-Blatt wurden von Hand übertragen;
+                # dabei ist manches auf volle Cent oder ganze Euro gerundet
+                # worden (Buck steht dort mit 2214 statt 2214,01). Ein Cent
+                # ist deshalb kein Befund, sondern eine Abschreibspur.
+                if unterschied <= 0.015:
+                    grund = "Centdifferenz — im alten Blatt von Hand übertragen"
+                elif abs(auszahlung.get(schluessel, 0.0) - soll) <= 0.015:
+                    # Im alten Blatt steht der AUSZAHLUNGSBETRAG statt der
+                    # Honorarsumme. Damit wurden Rückflüsse und Erlösanteile
+                    # mitgemeldet, die der Künstlersozialkasse nicht
+                    # zustehen. Das ist ein Fehler der Altmappe, kein
+                    # Rechenfehler hier — die Altmappe selbst kommt in ihrer
+                    # eigenen KSK-Spalte auf denselben Wert wie dieses
+                    # Werkzeug.
+                    grund = ("im alten Blatt wurde der Auszahlungsbetrag "
+                             "gemeldet statt der Honorarsumme — dort sind "
+                             "Rückflüsse mitgezählt, die nicht zur KSK "
+                             "gehören")
+                else:
+                    grund = ""
+                abweichungen.append(Abweichung(
+                    "KSK", wer, "", soll, meins[schluessel][1], grund))
+        for schluessel, (wer, ist) in meins.items():
+            if schluessel not in alt:
+                abweichungen.append(Abweichung(
+                    "KSK", wer, "", 0.0, ist,
+                    "neu — stand nicht im alten KSK-Blatt"))
+        return abweichungen
+    finally:
+        wb.close()
 
 
 def pruefe_gegen_excel(bestand: Bestand, pfad_alt, jahr: int = 2025,
                        cfg: dict | None = None) -> list[Abweichung]:
-    """Jede Zeile und jede Auszahlung des Abrechnungsblattes nachrechnen."""
+    """Jede Zeile, jede Auszahlung UND jede Ausgabeliste nachrechnen."""
     pfad_alt = Path(pfad_alt)
     wbv = openpyxl.load_workbook(pfad_alt, data_only=True)
     wbf = openpyxl.load_workbook(pfad_alt, data_only=False)
@@ -2155,7 +2789,7 @@ def pruefe_gegen_excel(bestand: Bestand, pfad_alt, jahr: int = 2025,
                 posten = betrag_zeile(buch, jahr, cfg)
                 if posten is None:
                     continue
-                ist = round(ist + posten.brutto, 2)
+                ist = runde(ist + posten.brutto)
                 grund = _abweichungsgrund(buch, jahr)
                 if grund:
                     gruende.add(grund)
@@ -2164,6 +2798,12 @@ def pruefe_gegen_excel(bestand: Bestand, pfad_alt, jahr: int = 2025,
                     "Auszahlung", im_block[0][0].anzeigename,
                     ", ".join(sorted({b.titel for _, b in im_block}))[:60],
                     round(soll, 2), ist, "; ".join(sorted(gruende))))
+
+        # Die Rechnung kann stimmen und die Ausgabe trotzdem falsch sein —
+        # falscher Empfänger, doppelte Zahlung, fehlende Meldung. Deshalb
+        # werden beide Listen mitgeprüft.
+        abweichungen += pruefe_zahlungsliste(bestand, pfad_alt, jahr, cfg)
+        abweichungen += pruefe_ksk(bestand, pfad_alt, jahr, cfg)
         return abweichungen
     finally:
         wbv.close()
@@ -2181,6 +2821,21 @@ def ausgabeordner(cfg: dict, jahr: int) -> Path:
     return ordner
 
 
+def runde(betrag: float, stellen: int = 2) -> float:
+    """Kaufmännisch runden — 5,635 wird 5,64, nicht 5,63.
+
+    Pythons eingebautes ``round`` rundet die Hälfte zur geraden Ziffer und
+    rechnet dabei auf der Fließkommadarstellung: aus 5,635 wird 5,63, aus
+    2,675 wird 2,67. Excel rundet die Hälfte immer auf. Bei einer Abrechnung
+    über 20.000 € und 500 Posten ist das kein Schönheitsfehler, sondern ein
+    Cent, der irgendwo fehlt — und der Verlag rechnet gegen eine Excel nach.
+    """
+    if betrag is None:
+        return betrag
+    muster = Decimal(1).scaleb(-stellen)
+    return float(Decimal(repr(float(betrag))).quantize(muster, ROUND_HALF_UP))
+
+
 def euro(betrag: float) -> str:
     """1234.5 → „1.234,50 €" — deutsche Schreibweise wie in den Altbriefen."""
     s = f"{betrag:,.2f}".replace(",", "#").replace(".", ",").replace("#", ".")
@@ -2195,15 +2850,37 @@ def _sicherer_dateiname(text: str) -> str:
     return " ".join(text.split()).strip(". ")
 
 
-def schreibe_zahlungsliste(abrechnungen: list[Abrechnung], jahr: int,
-                           ziel: Path) -> Path:
+def schreibe_listen(abrechnungen: list[Abrechnung], jahr: int, ziel: Path,
+                    cfg: dict) -> Path:
+    """Zahlungsliste, KSK-Meldung und Protokoll in EINER Mappe.
+
+    Drei Dateien für drei Listen waren drei Gelegenheiten, die falsche zu
+    öffnen oder eine zu übersehen. Sie gehören zusammen: dieselbe
+    Abrechnung, dasselbe Jahr, derselbe Arbeitsgang.
+
+    Die Datei heißt weiterhin `Zahlungsliste_<Jahr>.xlsx` — das ist der Name,
+    unter dem im Verlag danach gesucht wird, und die Zahlungsliste steht als
+    erstes Blatt darin. „Abrechnung_<Jahr>“ wäre zu leicht mit dem Blatt
+    „Abrechnung <Jahr>“ im Bestand zu verwechseln.
+    """
+    wb = openpyxl.Workbook()
+    wb.remove(wb.active)
+    _blatt_zahlungsliste(wb, abrechnungen, jahr)
+    _blatt_ksk(wb, abrechnungen, jahr, cfg)
+    _blatt_protokoll(wb, abrechnungen, jahr)
+    ziel = Path(ziel)
+    ziel.parent.mkdir(parents=True, exist_ok=True)
+    wb.save(ziel)
+    wb.close()
+    return ziel
+
+
+def _blatt_zahlungsliste(wb, abrechnungen: list[Abrechnung], jahr: int):
     """Die Liste für die Überweisungen — Aufbau wie das bisherige Blatt."""
     spalten = ["Vorname", "Name", "Institution", "VERGÜT-ART",
                "Auszahlungs-Betrag", "Bankverbindung",
                "Aktenzeichen / Kontoinhaber", "Überweisung"]
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = f"Zahlungsliste {jahr}"
+    ws = wb.create_sheet(f"Zahlungsliste {jahr}")
     ws.append(spalten)
     for z in ws[1]:
         z.font = Font(bold=True)
@@ -2222,23 +2899,39 @@ def schreibe_zahlungsliste(abrechnungen: list[Abrechnung], jahr: int,
             "Aktenzeichen / Kontoinhaber": 30, "Überweisung": 14}.get(s, 14)
         if s == "Auszahlungs-Betrag":
             for zelle in ws[b][1:]:
-                zelle.number_format = "#,##0.00"
+                zelle.number_format = GELDFORMAT
         if s in ("Bankverbindung", "Überweisung"):
             for zelle in ws[b][1:]:
                 zelle.number_format = "@"
-    ziel = Path(ziel)
-    wb.save(ziel)
-    wb.close()
-    return ziel
+    return ws
 
 
-def schreibe_ksk_liste(abrechnungen: list[Abrechnung], jahr: int, ziel: Path,
-                       cfg: dict) -> Path:
+def ksk_satz(ab: Abrechnung) -> float:
+    """Mit welchem Umsatzsteuersatz dieser Empfänger zu melden ist.
+
+    0 heißt: nicht mehrwertsteuerpflichtig. Das ist keine Randgruppe — im
+    Altbestand sind es 54 von 74 Buchungen, und sie gehören auf ein eigenes
+    Konto („Honorare“), nicht zu den Fremdarbeiten mit Steuer.
+    """
+    saetze = {p.buch.mwst_satz for p in ab.posten
+              if p.buch.verguetungsart == KSK_ART and p.buch.mwst_pflichtig}
+    return max(saetze) if saetze else 0.0
+
+
+def _blatt_ksk(wb, abrechnungen: list[Abrechnung], jahr: int, cfg: dict):
     """Die Meldung an die Künstlersozialkasse, im Buchungsformat der Mappe.
 
     Nur echte Honorare zählen — Rückflüsse, Erlösanteile und
-    Darlehensrückzahlungen sind keine Honorare im Sinne der KSK. Zwei
-    Abschnitte, je einer für den Steuersatz.
+    Darlehensrückzahlungen sind keine Honorare im Sinne der KSK.
+
+    Drei Abschnitte, nicht zwei: getrennt wird danach, ob der Autor
+    mehrwertsteuerpflichtig ist und mit welchem Satz. Wer es nicht ist,
+    kommt auf ein eigenes Konto ohne Umsatzsteuer.
+
+    Negative Beträge bleiben draußen. Ein Autor mit mehr Rückgaben als
+    Verkäufen hat kein negatives Honorar zu melden; die Altmappe kennt
+    solche Zeilen auch nicht. Sie stehen stattdessen im Protokoll, damit
+    niemand sie übersieht.
 
     Bewusst nur eine Excel: der Weg über die ASCII-Schnittstelle nach Lexware
     (s. PLAN_Buchhaltung.md) ist eine eigene Entscheidung mit eigener
@@ -2246,55 +2939,79 @@ def schreibe_ksk_liste(abrechnungen: list[Abrechnung], jahr: int, ziel: Path,
     """
     spalten = ["Belegdatum", "Belegnummer", "Buchungstext", "Gegenkonto",
                "Sollbetrag EUR", "Habenbetrag EUR", "USt-Konto", "USt-%"]
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = f"Künstlersozialkasse {jahr}"
+    ws = wb.create_sheet(f"Künstlersozialkasse {jahr}")
 
     nach_satz: dict[float, list] = {}
     for ab in abrechnungen:
         if ab.ksk_netto <= 0:
             continue
-        saetze = {p.buch.mwst_satz for p in ab.posten
-                  if p.buch.verguetungsart == KSK_ART and p.buch.mwst_pflichtig}
-        satz = max(saetze) if saetze else 7.0
-        nach_satz.setdefault(satz, []).append(ab)
+        nach_satz.setdefault(ksk_satz(ab), []).append(ab)
+
+    konten = {19.0: ("ksk_konto_19", "ksk_bezeichnung_19", "ksk_ust_konto_19"),
+              7.0: ("ksk_konto_7", "ksk_bezeichnung_7", "ksk_ust_konto_7"),
+              0.0: ("ksk_konto_0", "ksk_bezeichnung_0", None)}
 
     belegdatum = f"31.12.{jahr}"
     for satz in sorted(nach_satz, reverse=True):
-        konto = cfg.get("ksk_konto_19" if satz >= 19 else "ksk_konto_7")
-        ust = cfg.get("ksk_ust_konto_19" if satz >= 19 else "ksk_ust_konto_7")
-        ws.append(["Konto", konto, f"Fremdarbeiten ({satz:g}%)"])
+        schluessel = konten.get(satz, konten[7.0])
+        konto = cfg.get(schluessel[0], "")
+        bezeichnung = cfg.get(schluessel[1], f"Fremdarbeiten ({satz:g}%)")
+        ust = cfg.get(schluessel[2], "") if schluessel[2] else ""
+        ws.append(["Konto", konto, bezeichnung])
         ws.cell(row=ws.max_row, column=1).font = Font(bold=True)
         ws.append(spalten)
         for z in ws[ws.max_row]:
             z.font = Font(bold=True)
         erste = ws.max_row + 1
-        for ab in nach_satz[satz]:
+        for ab in sorted(nach_satz[satz],
+                         key=lambda a: a.empfaenger.dateiname_basis.lower()):
             e = ab.empfaenger
             wer = f"{e.name}, {e.vorname}".strip(", ") or e.institution
             ws.append([belegdatum, "", f"{wer}_Honorar {jahr}",
                        cfg.get("ksk_gegenkonto"), ab.ksk_netto, "",
                        ust, f"{satz:g},00".replace(".", ",")])
         letzte = ws.max_row
-        ws.append([None, None, None, "Summe",
-                   f"=SUM(E{erste}:E{letzte})", "netto=",
-                   f"=E{letzte + 1}*100/{100 + satz:g}"])
+        summenzeile = [None, None, None, "Summe",
+                       f"=SUM(E{erste}:E{letzte})"]
+        if satz:
+            summenzeile += ["netto=", f"=E{letzte + 1}*100/{100 + satz:g}"]
+        ws.append(summenzeile)
         ws.cell(row=ws.max_row, column=4).font = Font(bold=True)
         ws.append([])
+
+    # Gesamtsumme, wie sie auch in der Altmappe unten steht.
+    gesamt = runde(sum(a.ksk_netto for a in abrechnungen if a.ksk_netto > 0))
+    ws.append([None, None, "KSK-Gesamtsumme", None, gesamt])
+    ws.cell(row=ws.max_row, column=3).font = Font(bold=True)
+
+    # Wer wegen eines negativen Honorars nicht gemeldet wird.
+    negativ = [a for a in abrechnungen if a.ksk_netto < 0]
+    if negativ:
+        ws.append([])
+        ws.append([None, None,
+                   "Nicht gemeldet, weil das Honorar negativ ist "
+                   "(mehr Rückgaben als Verkäufe):"])
+        ws.cell(row=ws.max_row, column=3).font = Font(bold=True)
+        for a in sorted(negativ, key=lambda x: x.ksk_netto):
+            ws.append([None, None, a.empfaenger.anzeigename, None, a.ksk_netto])
 
     ws.column_dimensions["A"].width = 13
     ws.column_dimensions["B"].width = 13
     ws.column_dimensions["C"].width = 46
     for sp in "DEFGH":
         ws.column_dimensions[sp].width = 15
-    ziel = Path(ziel)
-    wb.save(ziel)
-    wb.close()
-    return ziel
+    # Soll- und Habenbetrag in deutscher Schreibweise; Belegdatum,
+    # Belegnummer und die Kontonummern bleiben Text, damit Excel aus
+    # „001610“ keine 1610 macht.
+    for zelle in ws["E"][1:] + ws["F"][1:]:
+        zelle.number_format = GELDFORMAT
+    for sp in ("A", "B", "D", "G", "H"):
+        for zelle in ws[sp][1:]:
+            zelle.number_format = "@"
+    return ws
 
 
-def schreibe_laufprotokoll(abrechnungen: list[Abrechnung], jahr: int,
-                           ziel: Path) -> Path:
+def _blatt_protokoll(wb, abrechnungen: list[Abrechnung], jahr: int):
     """Wer bekommt einen Brief, wer nicht, und was ist offen.
 
     Gerade die Empfänger OHNE Brief gehören hier hinein: sonst bleibt
@@ -2302,9 +3019,7 @@ def schreibe_laufprotokoll(abrechnungen: list[Abrechnung], jahr: int,
     """
     spalten = ["Empfänger", "Vergütungsart", "Bücher", "Netto", "MwSt",
                "Auszahlung", "KSK-Netto", "Brief", "Grund / Hinweis"]
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = f"Durchlauf {jahr}"
+    ws = wb.create_sheet(f"Protokoll {jahr}")
     ws.append(spalten)
     for z in ws[1]:
         z.font = Font(bold=True)
@@ -2324,11 +3039,8 @@ def schreibe_laufprotokoll(abrechnungen: list[Abrechnung], jahr: int,
             "Grund / Hinweis": 80}.get(s, 14)
         if s in ("Netto", "MwSt", "Auszahlung", "KSK-Netto"):
             for zelle in ws[b][1:]:
-                zelle.number_format = "#,##0.00"
-    ziel = Path(ziel)
-    wb.save(ziel)
-    wb.close()
-    return ziel
+                zelle.number_format = GELDFORMAT
+    return ws
 
 
 # ---------------------------------------------------------------------
@@ -2369,11 +3081,85 @@ BRIEFTEXT = [
     "schönes und erfolgreiches Jahr.",
 ]
 
-SPALTEN_MIT_MWST = ["Titel", "€/je Ex.", "VK {{JAHR}}", "Eigenkauf",
-                    "Vergütungs-Ex.", "Vergütungs-Art", "Betrag Netto",
-                    "MwSt. {{MWSTSATZ}}"]
-SPALTEN_OHNE_MWST = ["Titel", "€/je Ex.", "VK {{JAHR}}", "Eigenkauf",
-                     "Vergütungs-Ex.", "Vergütungs-Art", "Betrag"]
+# Die Titeltabelle auf Seite 2, Spalte für Spalte: Überschrift, Breite und
+# Ausrichtung. Ohne feste Breiten verteilt Word gleichmäßig — dann bricht der
+# Buchtitel dreizeilig um, während „Eigenkauf“ mit vier Zeichen eine
+# handbreite Spalte belegt. Die Maße sind am Muster-PDF abgenommen; in der
+# Summe 24,9 cm, die Seite bietet quer 26,7 cm zwischen den Rändern.
+SPALTEN_TABELLE = [
+    ("Titel",              Cm(7.6), "mitte"),
+    ("€/je Ex.",           Cm(2.0), "mitte"),
+    ("VK {{JAHR}}",        Cm(2.2), "mitte"),
+    ("Eigenkauf",          Cm(2.3), "mitte"),
+    ("Vergütungs-Ex.",     Cm(2.9), "mitte"),
+    ("Vergütungs-Art",     Cm(3.0), "mitte"),
+    ("Betrag Netto",       Cm(2.7), "rechts"),
+    ("MwSt. {{MWSTSATZ}}", Cm(2.2), "rechts"),
+]
+
+AUSRICHTUNG = {
+    "links": WD_ALIGN_PARAGRAPH.LEFT,
+    "mitte": WD_ALIGN_PARAGRAPH.CENTER,
+    "rechts": WD_ALIGN_PARAGRAPH.RIGHT,
+}
+
+
+def _setze_spaltenraster(tab, breiten) -> None:
+    """Die Spaltenbreiten ins ``tblGrid`` schreiben.
+
+    python-docx setzt beim Zuweisen von ``zelle.width`` nur das ``tcW`` der
+    einzelnen Zelle. Bei festem Tabellenlayout richtet Word sich aber nach
+    dem ``tblGrid`` — und das steht weiterhin auf acht gleich breiten
+    Spalten. Ergebnis: alle Spalten gleich breit, der Buchtitel bricht
+    dreizeilig um. Also beides setzen.
+    """
+    raster = tab._tbl.find(qn("w:tblGrid"))
+    if raster is None:
+        return
+    vorhanden = raster.findall(qn("w:gridCol"))
+    # Das Raster muss GENAU so viele Spalten haben wie die Tabelle. Bleibt
+    # eine überzählige stehen (etwa nachdem die MwSt-Spalte entfernt wurde),
+    # rechnet Word weiter mit acht Spalten und die Breiten verrutschen.
+    for ueberzaehlig in vorhanden[len(breiten):]:
+        raster.remove(ueberzaehlig)
+    while len(raster.findall(qn("w:gridCol"))) < len(breiten):
+        raster.append(OxmlElement("w:gridCol"))
+    for spalte, breite in zip(raster.findall(qn("w:gridCol")), breiten):
+        spalte.set(qn("w:w"), str(Emu(int(breite)).twips))
+    # Gesamtbreite ebenfalls festschreiben, sonst rechnet Word sie sich neu.
+    tblpr = tab._tbl.tblPr
+    for alt in tblpr.findall(qn("w:tblW")):
+        tblpr.remove(alt)
+    gesamt = OxmlElement("w:tblW")
+    gesamt.set(qn("w:type"), "dxa")
+    gesamt.set(qn("w:w"), str(sum(Emu(int(b)).twips for b in breiten)))
+    tblpr.append(gesamt)
+
+
+def _schmale_zellraender(tab, mm: int = 30) -> None:
+    """Innenabstand der Zellen verkleinern (Angabe in Twips)."""
+    tblpr = tab._tbl.tblPr
+    for alt in tblpr.findall(qn("w:tblCellMar")):
+        tblpr.remove(alt)
+    raender = OxmlElement("w:tblCellMar")
+    for seite in ("top", "left", "bottom", "right"):
+        rand = OxmlElement(f"w:{seite}")
+        rand.set(qn("w:w"), str(mm))
+        rand.set(qn("w:type"), "dxa")
+        raender.append(rand)
+    tblpr.append(raender)
+
+
+def _kopfzeile_wiederholen(tab) -> None:
+    """Die Überschriftenzeile auf jeder Folgeseite wiederholen.
+
+    Ein Autor mit vierzig Titeln bekommt sonst eine zweite Seite ohne
+    Spaltenüberschriften — und niemand weiß mehr, welche Zahl was ist.
+    """
+    trpr = tab.rows[0]._tr.get_or_add_trPr()
+    kopf = OxmlElement("w:tblHeader")
+    kopf.set(qn("w:val"), "true")
+    trpr.append(kopf)
 
 
 def _absatz(ziel, text="", groesse=11, fett=False, schrift="Times New Roman",
@@ -2410,14 +3196,25 @@ def baue_briefvorlage(ziel: Path) -> Path:
     fuss = abschnitt.footer
     fuss.paragraphs[0].text = ""
     tabelle = fuss.add_table(rows=7, cols=4, width=Cm(16))
+    tabelle.autofit = False
+    # Die vier Spalten tragen unterschiedlich lange Angaben. Gleich breit
+    # bricht jede zweite Zeile mitten im Wort um („Ubstadt-/Weiher“).
+    breiten = (Cm(4.5), Cm(4.4), Cm(4.4), Cm(3.4))
+    _setze_spaltenraster(tabelle, breiten)
+    # Word gibt jeder Zelle links und rechts knapp 2 mm Rand mit. Bei 6-pt-
+    # Text in einer 4,5-cm-Spalte ist das der Unterschied zwischen einer und
+    # zwei Zeilen.
+    _schmale_zellraender(tabelle)
     for spalte, zeilen in enumerate(BRIEFKOPF_SPALTEN):
         for zeile, text in enumerate(zeilen):
             zelle = tabelle.cell(zeile, spalte)
-            zelle.paragraphs[0].text = ""
-            run = zelle.paragraphs[0].add_run(text)
-            run.font.size = Pt(6.5)
+            zelle.width = breiten[spalte]
+            absatz = zelle.paragraphs[0]
+            absatz.text = ""
+            absatz.paragraph_format.space_after = Pt(0)
+            run = absatz.add_run(text)
+            run.font.size = Pt(6)
             run.font.name = "Arial"
-            zelle.paragraphs[0].paragraph_format.space_after = Pt(0)
 
     _absatz(doc, RUECKSENDEZEILE, groesse=7, schrift="Arial", abstand_nach=14)
     _absatz(doc, "{{ANSCHRIFT}}", groesse=11, abstand_nach=0)
@@ -2436,34 +3233,47 @@ def baue_briefvorlage(ziel: Path) -> Path:
     quer.orientation = WD_ORIENT.LANDSCAPE
     quer.page_width, quer.page_height = Cm(29.7), Cm(21)
     quer.left_margin = quer.right_margin = Cm(1.5)
-    quer.top_margin = quer.bottom_margin = Cm(1.5)
+    # Oben Luft lassen, wie im Muster — die Tabelle klebt sonst am Rand.
+    quer.top_margin = Cm(3.0)
+    quer.bottom_margin = Cm(1.5)
     # Die Fußzeile des Briefkopfs gehört nicht auf die Tabellenseite.
     quer.footer.is_linked_to_previous = False
     quer.footer.paragraphs[0].text = ""
 
-    _absatz(doc, "verlag regionalkultur", groesse=10, schrift="Verdana",
-            abstand_nach=12)
-
-    # Die Tabelle wird mit der breitesten Variante angelegt; die
-    # MwSt-Spalte entfernt der Brieferzeuger, wenn sie nicht gebraucht wird.
-    tab = doc.add_table(rows=2, cols=len(SPALTEN_MIT_MWST))
+    # Die Tabelle wird mit der breitesten Fassung angelegt; die MwSt-Spalte
+    # entfernt der Brieferzeuger, wenn sie nicht gebraucht wird.
+    tab = doc.add_table(rows=2, cols=len(SPALTEN_TABELLE))
     tab.style = "Table Grid"
-    for i, titel in enumerate(SPALTEN_MIT_MWST):
-        zelle = tab.cell(0, i)
-        zelle.paragraphs[0].text = ""
-        run = zelle.paragraphs[0].add_run(titel)
-        run.font.size = Pt(8)
-        run.font.name = "Arial"
-        run.bold = True
-    # Musterzeile: sie wird je Posten geklont und danach entfernt.
+    tab.alignment = WD_TABLE_ALIGNMENT.CENTER
+    # Ohne autofit=False ignoriert Word die Breiten und verteilt gleichmäßig.
+    tab.autofit = False
+
     muster = ["{{TITEL}}", "{{SATZ}}", "{{VK}}", "{{EIGENKAUF}}",
               "{{VERGEX}}", "{{ART}}", "{{NETTO}}", "{{MWST}}"]
-    for i, platzhalter in enumerate(muster):
-        zelle = tab.cell(1, i)
-        zelle.paragraphs[0].text = ""
-        run = zelle.paragraphs[0].add_run(platzhalter)
-        run.font.size = Pt(8)
-        run.font.name = "Arial"
+
+    for i, (titel, breite, wohin) in enumerate(SPALTEN_TABELLE):
+        for zeile_nr, inhalt in ((0, titel), (1, muster[i])):
+            zelle = tab.cell(zeile_nr, i)
+            # Die Breite muss an JEDER Zelle stehen, nicht nur an der Spalte —
+            # Word liest sie aus den Zellen, nicht aus dem Spaltenraster.
+            zelle.width = breite
+            zelle.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+            absatz = zelle.paragraphs[0]
+            absatz.text = ""
+            absatz.alignment = AUSRICHTUNG[wohin if zeile_nr else "mitte"]
+            absatz.paragraph_format.space_before = Pt(2)
+            absatz.paragraph_format.space_after = Pt(2)
+            run = absatz.add_run(inhalt)
+            run.font.size = Pt(9)
+            run.font.name = "Arial"
+            run.bold = (zeile_nr == 0)
+
+    _setze_spaltenraster(tab, [b for _, b, _ in SPALTEN_TABELLE])
+    _kopfzeile_wiederholen(tab)
+
+    # Das Logo steht im Muster unten links, nicht über der Tabelle.
+    _absatz(doc, "", abstand_nach=18)
+    _absatz(doc, "verlag regionalkultur", groesse=10, schrift="Verdana")
 
     ziel = Path(ziel)
     ziel.parent.mkdir(parents=True, exist_ok=True)
@@ -2566,10 +3376,14 @@ def _entferne_spalte(doc, index: int) -> None:
     Empfänger ohne Mehrwertsteuerpflicht bekommen die MwSt-Spalte gar nicht
     erst zu sehen — so ist es auch in den Altbriefen. Eine zweite Vorlage
     dafür zu pflegen wäre die schlechtere Lösung.
+
+    Die frei werdende Breite bekommt die Titelspalte. Sonst stünde die
+    Tabelle danach schmal und linkslastig auf der Seite.
     """
     if not doc.tables:
         return
     tab = doc.tables[-1]
+    frei = SPALTEN_TABELLE[index][1] if index < len(SPALTEN_TABELLE) else Cm(0)
     for zeile in tab.rows:
         zellen = zeile.cells
         if index < len(zellen):
@@ -2577,10 +3391,14 @@ def _entferne_spalte(doc, index: int) -> None:
             tc = zellen[index]._tc
             if tc.getparent() is tr:
                 tr.remove(tc)
-    raster = tab._tbl.find(
-        "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblGrid")
-    if raster is not None and index < len(raster):
-        raster.remove(raster[index])
+        if zeile.cells:
+            # Länge + Länge ergibt in python-docx ein nacktes int — wieder in
+            # eine Länge fassen, sonst fehlt später die twips-Umrechnung.
+            zeile.cells[0].width = Emu(int(SPALTEN_TABELLE[0][1]) + int(frei))
+    breiten = [b for _, b, _ in SPALTEN_TABELLE]
+    breiten[0] = Emu(int(breiten[0]) + int(frei))
+    del breiten[index]
+    _setze_spaltenraster(tab, breiten)
 
 
 def anschrift_zeilen(e: Empfaenger) -> list[str]:
@@ -2635,6 +3453,13 @@ def generiere_brief(vorlage: Path, ab: Abrechnung, cfg: dict,
 
     zeilen = []
     for p in ab.posten:
+        # Bücher, mit denen im Abrechnungsjahr gar nichts passiert ist,
+        # stehen auch in den Altbriefen nicht drin. Neun Zeilen „0 Ex. ·
+        # 0,00 €“ machen die Aufstellung nur unübersichtlich. Ein Buch mit
+        # Verkäufen bleibt drin, auch wenn der Betrag durch die Schwelle auf
+        # null fällt — das will der Autor sehen.
+        if not p.verkauft and not p.eigenkauf and not p.netto:
+            continue
         werte = [p.buch.titel, euro(p.satz), f"{p.verkauft} Ex.",
                  f"{p.eigenkauf} Ex.", f"{p.verguetungs_ex} Ex.",
                  p.buch.verguetungsart, euro(p.netto)]
@@ -2642,7 +3467,7 @@ def generiere_brief(vorlage: Path, ab: Abrechnung, cfg: dict,
             werte.append(euro(p.mwst))
         zeilen.append(werte)
     if not mit_mwst:
-        _entferne_spalte(doc, len(SPALTEN_MIT_MWST) - 1)
+        _entferne_spalte(doc, len(SPALTEN_TABELLE) - 1)
     _fuelle_tabelle(doc, zeilen)
 
     _fuelle_mehrzeilig(doc, "{{ANSCHRIFT}}", anschrift_zeilen(ab.empfaenger))
@@ -2717,23 +3542,175 @@ def wandle_nach_pdf(pfade: list[Path], log=None) -> list[Path]:
         return []
 
     # Bewusst lokal importiert: pywin32 gibt es nur unter Windows.
+    import pythoncom
     import win32com.client
 
-    word = win32com.client.Dispatch("Word.Application")
-    word.Visible = False
+    # COM muss in JEDEM Thread einzeln angemeldet werden. Diese Funktion
+    # läuft aus einem Arbeitsthread heraus (die Oberfläche darf nicht
+    # einfrieren), und ohne diesen Aufruf scheitert schon das Dispatch mit
+    # „CoInitialize has not been called“.
+    pythoncom.CoInitialize()
     erzeugt: list[Path] = []
+    fehlgeschlagen: list[str] = []
+    word = None
     try:
+        word = win32com.client.Dispatch("Word.Application")
+        word.Visible = False
+        # Ohne das bleibt Word bei der ersten Rückfrage stehen — etwa wenn
+        # eine Datei noch offen ist — und niemand sieht das Fenster, weil es
+        # unsichtbar gestartet wurde.
+        word.DisplayAlerts = 0
+
         for pfad in pfade:
             pfad = Path(pfad)
             ziel = pfad.with_suffix(".pdf")
-            doc = word.Documents.Open(str(pfad.resolve()))
+            doc = None
             try:
+                doc = word.Documents.Open(str(pfad.resolve()))
                 doc.SaveAs(str(ziel.resolve()), FileFormat=17)  # 17 = PDF
                 erzeugt.append(ziel)
                 melde(f"  {ziel.name}")
+            except Exception as e:
+                # Ein einzelner kaputter Brief darf nicht die übrigen
+                # einundneunzig verhindern.
+                fehlgeschlagen.append(f"{pfad.name}: {e}")
+                melde(f"  ! {pfad.name} — {e}")
             finally:
-                doc.Close(False)
+                if doc is not None:
+                    try:
+                        doc.Close(False)
+                    except Exception:
+                        pass
     finally:
-        word.Quit()
+        if word is not None:
+            try:
+                word.Quit()
+            except Exception:
+                pass
+        pythoncom.CoUninitialize()
+
+    if fehlgeschlagen:
+        melde(f"{len(fehlgeschlagen)} Briefe konnten nicht umgewandelt "
+              f"werden — die .docx sind aber da.")
     melde(f"{len(erzeugt)} PDF-Dateien erzeugt.")
     return erzeugt
+
+
+def lies_stueckzahl(text) -> tuple[int | None, str]:
+    """Eine eingetippte Stückzahl streng lesen.
+
+    Gibt (Zahl, "") zurück oder (None, Klartextmeldung). Die Meldung ist für
+    den Bediener gedacht und wird genau so angezeigt.
+
+    Warum streng: ``float()`` macht aus dem deutschen Tausenderpunkt „1.234"
+    klaglos die Zahl 1,234 und daraus gerundet eine **1**. Aus 1234 verkauften
+    Exemplaren würde eines — ohne jede Meldung, mitten in einer Abrechnung
+    über 20.000 €. Lieber einmal nachfragen als einmal falsch überweisen.
+
+    Negative Zahlen sind erlaubt und gewollt: Rückgaben kommen im Bestand vor
+    (im Musterbrief des Stadtarchivs steht „-9 Ex.").
+    """
+    roh = " ".join(str(text if text is not None else "").split())
+    if not roh:
+        return None, ""
+
+    # Tausendertrennung wegnehmen, aber nur wo sie wirklich Tausender trennt:
+    # „1.234", „12 345", „1.234.567".
+    if re.fullmatch(r"-?\d{1,3}([. ]\d{3})+", roh):
+        roh = roh.replace(".", "").replace(" ", "")
+
+    if re.fullmatch(r"[+-]?\d+", roh):
+        return int(roh), ""
+
+    if re.fullmatch(r"[+-]?\d+[.,]\d+", roh):
+        return None, (f"„{text}“ ist eine Kommazahl. Exemplare gibt es nur "
+                      f"ganz — bitte eine ganze Zahl eintragen.")
+
+    return None, (f"„{text}“ kann ich nicht als Stückzahl lesen.\n\n"
+                  f"Bitte nur eine ganze Zahl eintragen, zum Beispiel 1234. "
+                  f"Ein Minus ist erlaubt (etwa -9 für Rückgaben). Hat sich "
+                  f"das Buch nicht verkauft, tragen Sie eine 0 ein.")
+
+
+def rechenweg(posten: Posten) -> list[str]:
+    """Wie dieser Betrag zustande kommt — in ganzen Sätzen.
+
+    In Excel konnte man in die Zelle klicken und die Formel lesen. Genau
+    daran hängt das Vertrauen in eine Abrechnung über 20.000 €. Ein Betrag,
+    den man nicht nachvollziehen kann, wird entweder blind geglaubt oder das
+    Werkzeug wird nicht benutzt — beides schlecht.
+    """
+    b = posten.buch
+    k = b.kondition
+    zeilen = [b.titel]
+
+    # 1. Die Menge
+    teile = [f"{posten.verkauft} verkauft"]
+    if posten.eigenkauf:
+        teile.append(f"− {posten.eigenkauf} Eigenkauf")
+    if posten.korrektur:
+        teile.append(f"{'+' if posten.korrektur > 0 else '−'} "
+                     f"{abs(posten.korrektur)} Korrektur aus dem Vorjahr")
+    if k.freimenge:
+        teile.append(f"(die ersten {k.freimenge} Exemplare werden nicht "
+                     f"vergütet)")
+    zeilen.append("   " + " ".join(teile) +
+                  f"  =  {posten.verguetungs_ex} Exemplare")
+
+    # 2. Der Betrag je Exemplar
+    if k.betrag_je_ex is not None:
+        zeilen.append(f"   Fest vereinbart: {euro(k.betrag_je_ex)} je Exemplar")
+    elif k.ladenpreis is not None:
+        schritte = [f"Ladenpreis {euro(k.ladenpreis)}"]
+        wert = k.ladenpreis
+        if k.mwst_im_preis and not k.mwst_aufschlagen:
+            wert /= 1 + k.mwst_im_preis / 100
+            schritte.append(f"ohne {k.mwst_im_preis:g} % MwSt {euro(wert)}")
+        elif k.mwst_im_preis:
+            wert *= 1 + k.mwst_im_preis / 100
+            schritte.append(f"mit {k.mwst_im_preis:g} % MwSt {euro(wert)}")
+        if k.rabatt_anwenden:
+            wert *= 1 - k.verlagsrabatt / 100
+            schritte.append(f"minus {k.verlagsrabatt:g} % Verlagsrabatt "
+                            f"{euro(wert)}")
+        if posten.satz_prozent is not None:
+            schritte.append(f"davon {posten.satz_prozent:g} % Honorar")
+        if k.teiler != 1:
+            schritte.append(f"geteilt durch {k.teiler} Mitautoren")
+        zeilen.append("   " + ", ".join(schritte) +
+                      f"  =  {euro(posten.satz)} je Exemplar")
+    if k.staffel:
+        stufen = []
+        untere = 1
+        for grenze, satz in k.staffel:
+            if grenze is None:
+                stufen.append(f"ab {untere} Exemplaren {satz:g} %")
+            else:
+                stufen.append(f"{untere} bis {grenze} Exemplare {satz:g} %")
+                untere = grenze + 1
+        zeilen.append("   Staffel laut Vertrag: " + ", ".join(stufen) + ".")
+        stand = kumulierte_menge(b, posten.jahr)
+        if stand is None:
+            # Ohne Vorjahreszahlen lässt sich die Stufe nicht bestimmen. Das
+            # muss dastehen — sonst zeigt die Auskunft eine Staffel und
+            # rechnet daneben mit einem anderen Satz.
+            zeilen.append(
+                f"   Wie viele Exemplare vor {posten.jahr} verkauft wurden, "
+                f"ist hier nicht hinterlegt. Deshalb wird mit dem zuletzt "
+                f"vereinbarten Satz von {posten.satz_prozent:g} % gerechnet.")
+        else:
+            zeilen.append(
+                f"   Bis Ende {posten.jahr - 1} waren es {stand} Exemplare — "
+                f"damit gilt die Stufe mit {posten.satz_prozent:g} %.")
+
+    # 3. Das Ergebnis
+    if k.schwelle_zehn and posten.netto == 0 and posten.verguetungs_ex < 10:
+        zeilen.append(f"   Unter zehn Exemplaren entfällt das Honorar laut "
+                      f"Vertrag  =  {euro(0)}")
+    else:
+        zeilen.append(f"   {posten.verguetungs_ex} × {euro(posten.satz)}"
+                      f"  =  {euro(posten.netto)}")
+    if posten.mwst:
+        zeilen.append(f"   zuzüglich {b.mwst_satz:g} % Mehrwertsteuer "
+                      f"{euro(posten.mwst)}  =  {euro(posten.brutto)}")
+    return zeilen

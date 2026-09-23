@@ -33,6 +33,7 @@ verlag_automations/
 │   └── core.py, app.py, main.py, Buchdurchgang.spec, README.md
 ├── honorar_abrechner/          ← Autorenhonorare abrechnen (Briefe, Zahlungs- und KSK-Liste)
 │   ├── core.py, app.py, main.py, HonorarAbrechner.spec, README.md
+│   ├── windows_pruefung.py     ← Entwicklerskript: prüft die Windows-Eigenheiten
 │   ├── vorlagen/               ← Briefvorlage (in die .exe gebündelt)
 │   └── beispiele/              ← Altmappe + Musterbriefe (personenbezogen, nicht eingecheckt)
 │                                 Bestand (Honorarbestand.xlsx) liegt neben der .exe
