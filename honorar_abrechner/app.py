@@ -1726,14 +1726,13 @@ class App(Tk):
         fenster = Toplevel(self)
         fenster.title(f"Offener Sonderfall — {z['Buchtitel']}")
         fenster.geometry("860x520")
-        feld = Text(fenster, wrap="word", font=("Segoe UI", 10))
+        feld = self._rechenfeld(fenster)
         feld.pack(fill="both", expand=True, **PAD)
-        feld.insert(END, f"{z['Empfänger']}\n{z['Buchtitel']}\n\n")
+        feld.insert(END, f"{z['Empfänger']}\n")
         if buch is not None:
             posten = core.betrag_zeile(buch, self.jahr.get(), self.cfg)
             if posten is not None:
-                for zeile in core.rechenweg(posten):
-                    feld.insert(END, zeile + "\n")
+                self._schreibe_rechenweg(feld, posten)
                 feld.insert(END, "\n")
         feld.insert(END, "─" * 68 + "\n")
         feld.insert(END,
@@ -1784,24 +1783,52 @@ class App(Tk):
         fenster = Toplevel(self)
         fenster.title(f"Wie der Betrag zustande kommt — {ab.empfaenger.anzeigename}")
         fenster.geometry("900x640")
-        feld = Text(fenster, wrap="word", font=("Segoe UI", 10))
+        feld = self._rechenfeld(fenster)
         feld.pack(fill="both", expand=True, **PAD)
         for posten in ab.posten:
-            for zeile in core.rechenweg(posten):
-                feld.insert(END, zeile + "\n")
+            self._schreibe_rechenweg(feld, posten)
             feld.insert(END, "\n")
-        feld.insert(END, "─" * 70 + "\n")
-        feld.insert(END, f"Summe netto:      {core.euro(ab.netto)}\n")
+        feld.insert(END, "─" * 62 + "\n")
+        if len(ab.posten) > 1 or ab.mwst or ab.verrechnet:
+            feld.insert(END, f"\tSumme netto\t{core.euro(ab.netto)}\n")
         if ab.mwst:
-            feld.insert(END, f"Mehrwertsteuer:   {core.euro(ab.mwst)}\n")
+            feld.insert(END, f"\tMehrwertsteuer\t{core.euro(ab.mwst)}\n")
         if ab.verrechnet:
-            feld.insert(END, f"einbehalten für den offenen Vorschuss: "
-                             f"−{core.euro(ab.verrechnet)}\n")
-        feld.insert(END, f"Auszahlung:       {core.euro(ab.brutto)}\n")
+            feld.insert(END, f"\teinbehalten für den offenen Vorschuss\t"
+                             f"− {core.euro(ab.verrechnet)}\n")
+        feld.insert(END, f"\tAuszahlung\t{core.euro(ab.brutto)}\n", "summe")
         if ab.gruende:
             feld.insert(END, "\nEs geht kein Brief hinaus: "
                              + "; ".join(ab.gruende) + "\n")
         feld.configure(state=DISABLED)
+
+    @staticmethod
+    def _rechenfeld(fenster) -> Text:
+        """Ein Textfeld für den Rechenweg: Beschriftung links eingerückt,
+        Beträge an einem rechtsbündigen Tabulator — wie auf dem Papier."""
+        feld = Text(fenster, wrap="word", font=("Segoe UI", 10),
+                    tabs=("0.8c", "13c", "right"), spacing1=1)
+        feld.tag_configure("titel", font=("Segoe UI", 10, "bold"),
+                           spacing1=8, spacing3=4)
+        feld.tag_configure("summe", font=("Segoe UI", 10, "bold"))
+        # Ein langer Hinweis bricht sonst am linken Rand um statt unter
+        # seinem eigenen Anfang.
+        feld.tag_configure("notiz", lmargin2="0.8c")
+        return feld
+
+    @staticmethod
+    def _schreibe_rechenweg(feld, posten) -> None:
+        titel, *rest = core.rechenweg(posten)
+        feld.insert(END, titel + "\n", "titel")
+        for i, zeile in enumerate(rest):
+            # Die Ergebniszeile eines Buches (die letzte mit Betrag) fett.
+            if i == len(rest) - 1:
+                marke = "summe"
+            elif zeile.count("\t") == 1:
+                marke = "notiz"
+            else:
+                marke = ()
+            feld.insert(END, zeile + "\n", marke)
 
     # -----------------------------------------------------------------
     # Reiter 4: Ausgaben

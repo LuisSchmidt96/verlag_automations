@@ -4003,84 +4003,124 @@ def lies_stueckzahl(text) -> tuple[int | None, str]:
 
 
 def rechenweg(posten: Posten) -> list[str]:
-    """Wie dieser Betrag zustande kommt — in ganzen Sätzen.
+    """Wie dieser Betrag zustande kommt — als schriftliche Rechnung.
 
     In Excel konnte man in die Zelle klicken und die Formel lesen. Genau
     daran hängt das Vertrauen in eine Abrechnung über 20.000 €. Ein Betrag,
     den man nicht nachvollziehen kann, wird entweder blind geglaubt oder das
     Werkzeug wird nicht benutzt — beides schlecht.
+
+    Jede Rechenzeile ist „\tBeschriftung\tWert“: das Fenster setzt den
+    Wert an einen rechtsbündigen Tabulator, so stehen die Zahlen
+    untereinander wie auf dem Papier. Als ein einziger Satz mit Kommas
+    dazwischen war der Weg vom Ladenpreis zum Honorar kaum zu lesen.
+    Die erste Zeile ist der Buchtitel.
     """
     b = posten.buch
     k = b.kondition
     zeilen = [b.titel]
 
+    def ex(n) -> str:
+        return f"{n} Ex."
+
+    def pz(x) -> str:
+        # „1,875 %“ statt „1.875 %“ — die Seite ist sonst durchgehend deutsch.
+        return f"{x:g}".replace(".", ",")
+
     # 1. Die Menge
-    teile = [f"{posten.verkauft} verkauft"]
+    zeilen.append(f"\tverkauft\t{ex(posten.verkauft)}")
+    abgezogen = False
     if posten.eigenkauf:
-        teile.append(f"− {posten.eigenkauf} Eigenkauf")
+        zeilen.append(f"\tabzüglich Eigenkauf\t− {ex(posten.eigenkauf)}")
+        abgezogen = True
     if posten.korrektur:
-        teile.append(f"{'+' if posten.korrektur > 0 else '−'} "
-                     f"{abs(posten.korrektur)} Korrektur aus dem Vorjahr")
+        zeichen = "+" if posten.korrektur > 0 else "−"
+        zeilen.append(f"\tKorrektur aus dem Vorjahr\t"
+                      f"{zeichen} {ex(abs(posten.korrektur))}")
+        abgezogen = True
     if k.freimenge:
-        teile.append(f"(die ersten {k.freimenge} Exemplare werden nicht "
-                     f"vergütet)")
-    zeilen.append("   " + " ".join(teile) +
-                  f"  =  {posten.verguetungs_ex} Exemplare")
+        ab = k.freimenge + 1
+        stand = kumulierte_menge(b, posten.jahr)
+        if stand is None:
+            zeilen.append(f"\tHonorar ab dem {ab}. Exemplar — ohne "
+                          f"Vorjahreszahlen gilt das als erreicht")
+        elif stand < 0:
+            zeilen.append(f"\tnoch frei bis zum {ab}. Exemplar\t"
+                          f"− {ex(-stand)}")
+        else:
+            zeilen.append(f"\tdas {ab}. Exemplar war schon vor "
+                          f"{posten.jahr} erreicht")
+        abgezogen = True
+    if abgezogen or posten.verguetungs_ex != posten.verkauft:
+        zeilen.append(f"\tvergütet werden\t"
+                      f"{ex(max(posten.verguetungs_ex, 0))}")
+    zeilen.append("")
 
     # 2. Der Betrag je Exemplar
     if k.betrag_je_ex is not None:
-        zeilen.append(f"   Fest vereinbart: {euro(k.betrag_je_ex)} je Exemplar")
+        zeilen.append(f"\tfest vereinbart je Exemplar\t"
+                      f"{euro(k.betrag_je_ex)}")
     elif k.ladenpreis is not None:
-        schritte = [f"Ladenpreis {euro(k.ladenpreis)}"]
+        zeilen.append(f"\tLadenpreis\t{euro(k.ladenpreis)}")
         wert = k.ladenpreis
         if k.mwst_im_preis and not k.mwst_aufschlagen:
             wert /= 1 + k.mwst_im_preis / 100
-            schritte.append(f"ohne {k.mwst_im_preis:g} % MwSt {euro(wert)}")
+            zeilen.append(f"\tohne {pz(k.mwst_im_preis)} % MwSt\t{euro(wert)}")
         elif k.mwst_im_preis:
             wert *= 1 + k.mwst_im_preis / 100
-            schritte.append(f"mit {k.mwst_im_preis:g} % MwSt {euro(wert)}")
+            zeilen.append(f"\tmit {pz(k.mwst_im_preis)} % MwSt\t{euro(wert)}")
         if k.rabatt_anwenden:
             wert *= 1 - k.verlagsrabatt / 100
-            schritte.append(f"minus {k.verlagsrabatt:g} % Verlagsrabatt "
-                            f"{euro(wert)}")
-        if posten.satz_prozent is not None:
-            schritte.append(f"davon {posten.satz_prozent:g} % Honorar")
+            zeilen.append(f"\tabzüglich {pz(k.verlagsrabatt)} % Verlagsrabatt"
+                          f"\t{euro(wert)}")
         if k.teiler != 1:
-            schritte.append(f"geteilt durch {k.teiler} Mitautoren")
-        zeilen.append("   " + ", ".join(schritte) +
-                      f"  =  {euro(posten.satz)} je Exemplar")
+            if posten.satz_prozent is not None:
+                zeilen.append(f"\tdavon {pz(posten.satz_prozent)} % Honorar\t"
+                              f"{euro(wert * posten.satz_prozent / 100)}")
+            zeilen.append(f"\tgeteilt durch {k.teiler} Mitautoren — "
+                          f"je Exemplar\t{euro(posten.satz)}")
+        elif posten.satz_prozent is not None:
+            zeilen.append(f"\tdavon {pz(posten.satz_prozent)} % Honorar — "
+                          f"je Exemplar\t{euro(posten.satz)}")
+        else:
+            zeilen.append(f"\tje Exemplar\t{euro(posten.satz)}")
     if k.staffel:
         stufen = []
         untere = 1
         for grenze, satz in k.staffel:
             if grenze is None:
-                stufen.append(f"ab {untere} Exemplaren {satz:g} %")
+                stufen.append(f"ab {untere} Ex. {pz(satz)} %")
             else:
-                stufen.append(f"{untere} bis {grenze} Exemplare {satz:g} %")
+                stufen.append(f"{untere}–{grenze} Ex. {pz(satz)} %")
                 untere = grenze + 1
-        zeilen.append("   Staffel laut Vertrag: " + ", ".join(stufen) + ".")
+        zeilen.append("\tStaffel laut Vertrag: " + " · ".join(stufen))
         stand = kumulierte_menge(b, posten.jahr)
         if stand is None:
             # Ohne Vorjahreszahlen lässt sich die Stufe nicht bestimmen. Das
             # muss dastehen — sonst zeigt die Auskunft eine Staffel und
             # rechnet daneben mit einem anderen Satz.
             zeilen.append(
-                f"   Wie viele Exemplare vor {posten.jahr} verkauft wurden, "
+                f"\tWie viele Exemplare vor {posten.jahr} verkauft wurden, "
                 f"ist hier nicht hinterlegt. Deshalb wird mit dem zuletzt "
-                f"vereinbarten Satz von {posten.satz_prozent:g} % gerechnet.")
+                f"vereinbarten Satz von {pz(posten.satz_prozent)} % gerechnet.")
         else:
             zeilen.append(
-                f"   Bis Ende {posten.jahr - 1} waren es {stand} Exemplare — "
-                f"damit gilt die Stufe mit {posten.satz_prozent:g} %.")
+                f"\tBis Ende {posten.jahr - 1} waren es {stand} Exemplare — "
+                f"damit gilt die Stufe mit {pz(posten.satz_prozent)} %.")
+    zeilen.append("")
 
     # 3. Das Ergebnis
-    if k.schwelle_zehn and posten.netto == 0 and posten.verguetungs_ex < 10:
-        zeilen.append(f"   Unter zehn Exemplaren entfällt das Honorar laut "
-                      f"Vertrag  =  {euro(0)}")
+    if k.freimenge and posten.verguetungs_ex < 0:
+        zeilen.append(f"\tes fehlen noch {posten.verguetungs_ex * -1} "
+                      f"Exemplare bis zum Honorar\t{euro(0)}")
+    elif k.schwelle_zehn and posten.netto == 0 and posten.verguetungs_ex < 10:
+        zeilen.append(f"\tunter zehn Exemplaren entfällt das Honorar "
+                      f"laut Vertrag\t{euro(0)}")
     else:
-        zeilen.append(f"   {posten.verguetungs_ex} × {euro(posten.satz)}"
-                      f"  =  {euro(posten.netto)}")
+        zeilen.append(f"\t{ex(posten.verguetungs_ex)} × {euro(posten.satz)}"
+                      f"\t{euro(posten.netto)}")
     if posten.mwst:
-        zeilen.append(f"   zuzüglich {b.mwst_satz:g} % Mehrwertsteuer "
-                      f"{euro(posten.mwst)}  =  {euro(posten.brutto)}")
+        zeilen.append(f"\tzuzüglich {pz(b.mwst_satz)} % Mehrwertsteuer\t"
+                      f"{euro(posten.mwst)}")
+        zeilen.append(f"\tzusammen\t{euro(posten.brutto)}")
     return zeilen
