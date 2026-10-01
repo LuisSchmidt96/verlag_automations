@@ -21,9 +21,32 @@ import traceback
 from datetime import date
 from pathlib import Path
 from tkinter import (Tk, StringVar, BooleanVar, IntVar, END, NORMAL, DISABLED,
-                     filedialog, messagebox, ttk, Text, Toplevel)
+                     TclError, filedialog, messagebox, ttk, Text, Toplevel)
 
 from honorar_abrechner import core
+
+
+def dez(zahl: float) -> str:
+    """Eine Zahl so, wie man sie hier schreibt: 0,84 statt 0.84."""
+    return f"{zahl:g}".replace(".", ",")
+
+
+def _sperre_eingabe(fenster, versuche: int = 20) -> None:
+    """Das Fenster modal machen — erst, wenn es auf dem Bildschirm ist.
+
+    Unter X11 scheitert grab_set mit „grab failed: window not viewable“,
+    solange der Fenstermanager das neue Fenster noch nicht gezeigt hat. Die
+    Ausnahme brach den Aufbau des Buch-Dialogs ab, noch bevor ein einziges
+    Feld darin stand: übrig blieb ein leeres Fenster mit Titel. Also nicht
+    warten (das zeigte das Fenster leer an), sondern es kurz darauf noch
+    einmal versuchen, während der Inhalt schon entsteht.
+    """
+    try:
+        fenster.grab_set()
+    except TclError:
+        if versuche and fenster.winfo_exists():
+            fenster.after(50, lambda: fenster.winfo_exists()
+                          and _sperre_eingabe(fenster, versuche - 1))
 
 
 def _spur() -> None:
@@ -245,7 +268,7 @@ class App(Tk):
         fenster = Toplevel(self)
         fenster.title(titel)
         fenster.transient(self)
-        fenster.grab_set()
+        _sperre_eingabe(fenster)
         rahmen = ttk.Frame(fenster)
         rahmen.pack(fill="both", expand=True, **PAD)
 
@@ -357,9 +380,10 @@ class App(Tk):
     # war Deuten alternativlos, beim Eingeben ist es die schlechteste
     # Loesung.
 
-    def _neues_buch(self, e):
+    def _neues_buch(self, e, eltern=None):
         buch = core.Buch(kennung=self.bestand.naechste_kennung("B"))
-        if not self._buchfenster(f"Neues Buch für {e.anzeigename}", buch):
+        if not self._buchfenster(f"Neues Buch für {e.anzeigename}", buch,
+                                 eltern):
             return
         e.buecher.append(buch)
         self.geaendert = True
@@ -369,9 +393,9 @@ class App(Tk):
         self._male_schrittleiste()
         self.status.set(f"„{buch.titel}“ angelegt — noch nicht gespeichert.")
 
-    def _aendere_buch(self, e, buch):
+    def _aendere_buch(self, e, buch, eltern=None):
         """Ein bestehendes Buch ändern."""
-        if not self._buchfenster(f"Buch ändern — {buch.titel}", buch):
+        if not self._buchfenster(f"Buch ändern — {buch.titel}", buch, eltern):
             return
         self.geaendert = True
         self._rechnung_veraltet = bool(self.abrechnungen)
@@ -386,7 +410,7 @@ class App(Tk):
     # Entfernt wird nur, was versehentlich angelegt wurde. Deshalb nennt
     # die Rueckfrage beides und zaehlt auf, was verloren geht.
 
-    def _entferne_buch(self, e, buch, danach=None) -> bool:
+    def _entferne_buch(self, e, buch, danach=None, eltern=None) -> bool:
         jahre = sorted(j for j, w in buch.jahre.items() if w.erfasst)
         if jahre:
             verlust = (f"\n\nDamit gehen die erfassten Zahlen aus "
@@ -400,7 +424,8 @@ class App(Tk):
         if not messagebox.askokcancel(
                 "Buch entfernen",
                 f"„{buch.titel}“ von {e.anzeigename} wirklich entfernen?"
-                + verlust, icon="warning", default="cancel"):
+                + verlust, icon="warning", default="cancel",
+                parent=eltern or self):
             return False
         e.buecher.remove(buch)
         self.geaendert = True
@@ -450,13 +475,29 @@ class App(Tk):
         if e is not None:
             self._entferne_empfaenger(e)
 
-    def _buchfenster(self, titel: str, buch) -> bool:
-        """Buchangaben erfassen. True, wenn übernommen wurde."""
+    def _buchfenster(self, titel: str, buch, eltern=None) -> bool:
+        """Buchangaben erfassen. True, wenn übernommen wurde.
+
+        ``eltern`` ist das Fenster, aus dem heraus geöffnet wird — meist das
+        Autorenfenster. Hinge der Dialog am Hauptfenster, holte der
+        Fenstermanager beim Schließen das Hauptfenster nach vorn, und das
+        Autorenfenster verschwände dahinter, als wäre es mit zugegangen.
+        """
         k = buch.kondition
-        fenster = Toplevel(self)
+        fenster = Toplevel(eltern or self)
         fenster.title(titel)
-        fenster.transient(self)
-        fenster.grab_set()
+        fenster.transient(eltern or self)
+        _sperre_eingabe(fenster)
+        try:
+            return self._baue_buchfenster(fenster, buch, k)
+        except Exception:
+            # Sonst bliebe ein leeres Fenster mit Titel stehen und hielte
+            # die Eingabesperre — der Fehler selbst landete nur im Terminal.
+            if fenster.winfo_exists():
+                fenster.destroy()
+            raise
+
+    def _baue_buchfenster(self, fenster, buch, k) -> bool:
 
         def feld(eltern, zeile, beschriftung, var, breite=26, werte=None):
             ttk.Label(eltern, text=beschriftung).grid(
@@ -495,7 +536,7 @@ class App(Tk):
                             row=0, column=0, sticky="w", padx=8, pady=(6, 0))
         fest.grid(row=1, column=0, sticky="w", padx=32)
         v_fest = StringVar(value="" if k.betrag_je_ex is None
-                           else f"{k.betrag_je_ex:g}")
+                           else dez(k.betrag_je_ex))
         feld(fest, 0, "Betrag in €", v_fest, 12)
 
         ttk.Radiobutton(geld, text="Ein Anteil am Verlagsabgabepreis",
@@ -505,10 +546,10 @@ class App(Tk):
         anteil = ttk.Frame(geld)
         anteil.grid(row=3, column=0, sticky="w", padx=32)
         v_preis = StringVar(value="" if k.ladenpreis is None
-                            else f"{k.ladenpreis:g}")
+                            else dez(k.ladenpreis))
         v_mwst = StringVar(value="keine" if not k.mwst_im_preis
-                           else f"{k.mwst_im_preis:g} %")
-        v_rabatt = StringVar(value=f"{k.verlagsrabatt:g}"
+                           else dez(k.mwst_im_preis) + " %")
+        v_rabatt = StringVar(value=dez(k.verlagsrabatt)
                              if k.rabatt_anwenden else "")
         v_teiler = StringVar(value=str(k.teiler or 1))
         feld(anteil, 0, "Ladenpreis in €", v_preis, 12)
@@ -518,26 +559,32 @@ class App(Tk):
         feld(anteil, 3, "geteilt durch (Mitautoren)", v_teiler, 12)
 
         # --- Der Honorarsatz, gleich ob fest oder gestaffelt ------------
-        satzrahmen = ttk.LabelFrame(
-            fenster, text="Honorarsatz — gleichbleibend oder nach Menge gestaffelt")
-        satzrahmen.pack(fill="x", **PAD)
-        v_satzart = StringVar(value="staffel" if k.staffel else "fest")
-        ttk.Radiobutton(satzrahmen, text="Immer derselbe Satz",
-                        variable=v_satzart, value="fest",
-                        command=lambda: umschalten()).grid(
-                            row=0, column=0, sticky="w", padx=8, pady=(6, 0))
+        # Er gehört zum Anteil am Verlagsabgabepreis und steht deshalb im
+        # selben Kasten darunter. Als eigener Kasten sah es aus, als gälte
+        # bei einem festen Betrag zusätzlich noch ein Prozentsatz — zumal
+        # „Immer derselbe Satz“ dort angewählt erschien.
+        satzrahmen = ttk.Frame(geld)
+        satzrahmen.grid(row=4, column=0, sticky="w", padx=32, pady=(6, 0))
+        ttk.Label(satzrahmen, text="Honorarsatz — gleichbleibend oder nach "
+                                   "Menge gestaffelt").grid(
+                                       row=0, column=0, sticky="w", pady=(4, 0))
+        satz_gemerkt = "staffel" if k.staffel else "fest"
+        v_satzart = StringVar(value=satz_gemerkt)
+        r_einfach = ttk.Radiobutton(satzrahmen, text="Immer derselbe Satz",
+                                    variable=v_satzart, value="fest",
+                                    command=lambda: umschalten())
+        r_einfach.grid(row=1, column=0, sticky="w", padx=8, pady=(4, 0))
         einfach = ttk.Frame(satzrahmen)
-        einfach.grid(row=1, column=0, sticky="w", padx=32)
-        v_satz = StringVar(value="" if k.satz is None else f"{k.satz:g}")
+        einfach.grid(row=2, column=0, sticky="w", padx=32)
+        v_satz = StringVar(value="" if k.satz is None else dez(k.satz))
         feld(einfach, 0, "Satz in %", v_satz, 10)
 
-        ttk.Radiobutton(satzrahmen,
-                        text="Gestaffelt — der Satz steigt mit der Menge",
-                        variable=v_satzart, value="staffel",
-                        command=lambda: umschalten()).grid(
-                            row=2, column=0, sticky="w", padx=8, pady=(10, 0))
+        r_staffel = ttk.Radiobutton(
+            satzrahmen, text="Gestaffelt — der Satz steigt mit der Menge",
+            variable=v_satzart, value="staffel", command=lambda: umschalten())
+        r_staffel.grid(row=3, column=0, sticky="w", padx=8, pady=(10, 0))
         stufen = ttk.Frame(satzrahmen)
-        stufen.grid(row=3, column=0, sticky="w", padx=32)
+        stufen.grid(row=4, column=0, sticky="w", padx=32)
         ttk.Label(stufen, text="bis … Exemplare").grid(row=0, column=1)
         ttk.Label(stufen, text="Satz in %").grid(row=0, column=2)
 
@@ -561,7 +608,7 @@ class App(Tk):
         vorhandene = list(k.staffel) or [(None, None)]
         for grenze, satz in vorhandene:
             stufe_anlegen("" if grenze is None else str(grenze),
-                          "" if satz is None else f"{satz:g}")
+                          "" if satz is None else dez(satz))
         while len(stufenzeilen) < 2:
             stufe_anlegen()
         ttk.Button(stufen, text="+ Stufe",
@@ -571,14 +618,32 @@ class App(Tk):
             "Die letzte Stufe ohne Mengenangabe gilt nach oben offen. Welche "
             "Stufe in einem Jahr greift, entscheidet der Stand zu\n"
             "Jahresbeginn (Spalte „Stand bis Vorjahr“).")
-        ).grid(row=4, column=0, sticky="w", padx=8, pady=(4, 8))
+        ).grid(row=5, column=0, sticky="w", padx=8, pady=(4, 8))
 
         # --- Sonderregeln ------------------------------------------------
         sonder = ttk.LabelFrame(fenster, text="Sonderregeln")
         sonder.pack(fill="x", **PAD)
         v_mwstpflicht = BooleanVar(value=buch.mwst_pflichtig)
         v_schwelle = BooleanVar(value=k.schwelle_zehn)
-        v_frei = StringVar(value=str(k.freimenge) if k.freimenge else "")
+        # Die Freimenge wird so eingegeben, wie sie im Vertrag steht: „ab dem
+        # 201. Exemplar“. Dazu gehört der Stand — ohne ihn weiß das Werkzeug
+        # nicht, wie weit es bis zur Schwelle noch ist, und zahlt im ersten
+        # Jahr ab dem ersten Exemplar.
+        jahr = self.jahr.get()
+        v_ab = StringVar(value=str(k.freimenge + 1) if k.freimenge else "")
+        bisher_alt = core.freimenge_stand(buch, jahr)
+        v_bisher = StringVar(
+            value=str(bisher_alt) if bisher_alt is not None
+            else ("0" if not buch.jahre else ""))
+        frei_info = StringVar()
+        # Ein Haken davor, damit sichtbar ist, OB die Regel gilt — ein leeres
+        # Feld allein sieht aus wie „vergessen auszufüllen“.
+        v_frei_an = BooleanVar(value=bool(k.freimenge))
+        v_voraus_an = BooleanVar(value=bool(buch.vorauszahlung))
+
+        def stueck(var):
+            """Ganze Stückzahl; „1.000“ ist tausend, nicht eins."""
+            return core._ganzzahl(var.get().strip().replace(".", ""))
         ttk.Checkbutton(sonder, text="Autor ist mehrwertsteuerpflichtig",
                         variable=v_mwstpflicht).grid(row=0, column=0,
                                                      sticky="w", padx=8, pady=2)
@@ -588,8 +653,18 @@ class App(Tk):
                                                   padx=8, pady=2)
         frei = ttk.Frame(sonder)
         frei.grid(row=2, column=0, sticky="w", padx=8, pady=2)
-        feld(frei, 0, "Freimenge: die ersten … Exemplare ohne Honorar",
-             v_frei, 10)
+        ttk.Checkbutton(frei, text="Honorar erst ab dem … verkauften Exemplar",
+                        variable=v_frei_an,
+                        command=lambda: vorschau()).grid(
+                            row=0, column=0, sticky="w", pady=3)
+        w_ab = ttk.Entry(frei, textvariable=v_ab, width=10)
+        w_ab.grid(row=0, column=1, sticky="w", padx=(8, 0), pady=3)
+        ttk.Label(frei, text=f"davon bis Ende {jahr - 1} schon verkauft").grid(
+            row=1, column=0, sticky="e", pady=3)
+        w_bisher = ttk.Entry(frei, textvariable=v_bisher, width=10)
+        w_bisher.grid(row=1, column=1, sticky="w", padx=(8, 0), pady=3)
+        ttk.Label(frei, textvariable=frei_info, foreground="#555555").grid(
+            row=1, column=2, sticky="w", padx=(8, 0))
 
         # Ein Buch aus der Abrechnung nehmen, ohne es zu verlieren. Das ist
         # der haeufigste Grund, warum ein Titel verschwindet — vergriffen,
@@ -603,12 +678,17 @@ class App(Tk):
         # danach noch offen ist — eingetragen wird der neue Restbetrag hier
         # von Hand. Automatisch zurueckschreiben waere bequemer und falsch:
         # zweimal rechnen wuerde die Vorauszahlung zweimal abziehen.
-        v_voraus = StringVar(value=f"{buch.vorauszahlung:g}"
+        v_voraus = StringVar(value=dez(buch.vorauszahlung)
                              if buch.vorauszahlung else "")
         vor = ttk.Frame(sonder)
         vor.grid(row=3, column=0, sticky="w", padx=8, pady=2)
-        feld(vor, 0, "noch offene Vorauszahlung (€) — wird verrechnet, "
-                     "bevor ausgezahlt wird", v_voraus, 10)
+        ttk.Checkbutton(vor, text="noch offene Vorauszahlung (€) — wird "
+                                  "verrechnet, bevor ausgezahlt wird",
+                        variable=v_voraus_an,
+                        command=lambda: vorschau()).grid(
+                            row=0, column=0, sticky="w", pady=3)
+        w_voraus = ttk.Entry(vor, textvariable=v_voraus, width=10)
+        w_voraus.grid(row=0, column=1, sticky="w", padx=(8, 0), pady=3)
 
         ttk.Separator(sonder, orient="horizontal").grid(
             row=4, column=0, sticky="ew", padx=8, pady=(8, 4))
@@ -621,8 +701,9 @@ class App(Tk):
         grundrahmen.grid(row=6, column=0, sticky="w", padx=32, pady=2)
         w_grund = feld(grundrahmen, 0, "Grund", v_grund, 40)
         ttk.Checkbutton(
-            sonder, text="Wird gesondert abgerechnet — zählt für Staffel und "
-                         "Freimenge, löst aber keine Auszahlung aus",
+            sonder, text="Sonderfall: Honorar entscheidet der Verlag von "
+                         "Hand — die Zahlen laufen mit, ausgezahlt wird "
+                         "nichts automatisch",
             variable=v_gesondert).grid(row=7, column=0, sticky="w",
                                        padx=8, pady=2)
 
@@ -715,13 +796,56 @@ class App(Tk):
                                  else (begrenzt or offen)[0][1]
                                  if (begrenzt or offen) else None)
             kond.schwelle_zehn = v_schwelle.get()
-            kond.freimenge = int(zahl(v_frei, "Freimenge", 0) or 0)
-            voraus = zahl(v_voraus, "Vorauszahlung", 0.0) or 0.0
-            if voraus < 0:
-                fehler.append("Eine Vorauszahlung kann nicht negativ sein.")
+            # Ohne Haken gilt die Regel nicht — was im ausgegrauten Feld
+            # noch steht, wird ignoriert.
+            kond.freimenge = 0
+            if v_frei_an.get():
+                ab = stueck(v_ab)
+                if ab is None or ab < 2:
+                    fehler.append("Bitte eintragen, ab dem wievielten "
+                                  "Exemplar Honorar gezahlt wird (mindestens "
+                                  "2) — oder den Haken davor entfernen.")
+                else:
+                    kond.freimenge = ab - 1
+                    if stueck(v_bisher) is None:
+                        fehler.append(
+                            f"Bitte eintragen, wie viele Exemplare bis Ende "
+                            f"{jahr - 1} schon verkauft waren — bei einem "
+                            f"neuen Buch 0.")
+            voraus = 0.0
+            if v_voraus_an.get():
+                voraus = zahl(v_voraus, "Vorauszahlung", None)
+                if voraus is None:
+                    fehler.append("Bitte den offenen Betrag der Vorauszahlung "
+                                  "eintragen — oder den Haken davor "
+                                  "entfernen.")
+                    voraus = 0.0
+                elif voraus < 0:
+                    fehler.append("Eine Vorauszahlung kann nicht negativ "
+                                  "sein.")
             return kond, voraus, fehler
 
+        def freimenge_zeigen():
+            ab, bisher = stueck(v_ab), stueck(v_bisher)
+            an = v_frei_an.get()
+            w_ab.configure(state="normal" if an else "disabled")
+            w_bisher.configure(
+                state="normal" if an and ab and ab > 1 else "disabled")
+            w_voraus.configure(
+                state="normal" if v_voraus_an.get() else "disabled")
+            if not an or not ab or ab < 2:
+                frei_info.set("")
+            elif bisher is None:
+                frei_info.set("")
+            elif bisher >= ab - 1:
+                frei_info.set("→ Schwelle erreicht, jedes weitere Exemplar "
+                              "wird vergütet")
+            else:
+                frei_info.set(f"→ noch {ab - 1 - bisher} Exemplare bis zum "
+                              f"Honorar")
+
         def vorschau(*_):
+            freimenge_zeigen()
             kond, voraus, fehler = lies()
             if fehler:
                 ergebnis.set("… " + fehler[0])
@@ -745,7 +869,19 @@ class App(Tk):
                              + " je Exemplar.")
 
         def umschalten():
+            nonlocal satz_gemerkt
             anteilig = v_weg.get() == "anteil"
+            # Bei festem Betrag gibt es keinen Satz: dann ist auch keiner
+            # der beiden Knöpfe angewählt. Die Wahl wird gemerkt und kommt
+            # zurück, sobald wieder „Anteil“ gewählt ist.
+            if anteilig:
+                if not v_satzart.get():
+                    v_satzart.set(satz_gemerkt)
+            elif v_satzart.get():
+                satz_gemerkt = v_satzart.get()
+                v_satzart.set("")
+            for w in (r_einfach, r_staffel):
+                w.configure(state="normal" if anteilig else "disabled")
             for w in fest.winfo_children():
                 w.configure(state="normal" if not anteilig else "disabled")
             for rahmen in (anteil, einfach, stufen):
@@ -764,7 +900,8 @@ class App(Tk):
                         w.configure(state="normal" if gestaffelt else "disabled")
             vorschau()
 
-        for var in (v_fest, v_preis, v_rabatt, v_satz, v_teiler, v_frei):
+        for var in (v_fest, v_preis, v_rabatt, v_satz, v_teiler, v_ab,
+                    v_bisher):
             var.trace_add("write", lambda *_: vorschau())
         v_mwst.trace_add("write", lambda *_: vorschau())
         umschalten()
@@ -794,6 +931,10 @@ class App(Tk):
                                       if v_still.get() else "")
             buch.gesondert = v_gesondert.get()
             buch.kondition = kond
+            if kond.freimenge:
+                bisher = stueck(v_bisher)
+                if bisher != bisher_alt or kond.freimenge != k.freimenge:
+                    core.setze_freimenge_stand(buch, jahr, bisher)
             fertig["ok"] = True
             fenster.destroy()
 
@@ -1369,7 +1510,7 @@ class App(Tk):
         def aendern(_ereignis=None):
             b = gewaehltes_buch()
             if b is not None:
-                self._aendere_buch(e, b)
+                self._aendere_buch(e, b, eltern=fenster)
                 fuelle()
 
         baum.bind("<Double-1>", aendern)
@@ -1382,13 +1523,13 @@ class App(Tk):
                    command=aendern).pack(side="left")
         ttk.Button(
             buchknoepfe, text="Neues Buch …",
-            command=lambda: (self._neues_buch(e), fuelle())).pack(side="left",
+            command=lambda: (self._neues_buch(e, eltern=fenster), fuelle())).pack(side="left",
                                                                  padx=6)
 
         def entfernen():
             b = gewaehltes_buch()
             if b is not None:
-                self._entferne_buch(e, b, danach=fuelle)
+                self._entferne_buch(e, b, danach=fuelle, eltern=fenster)
 
         ttk.Button(buchknoepfe, text="Buch entfernen …",
                    command=entfernen).pack(side="left", padx=(12, 0))
