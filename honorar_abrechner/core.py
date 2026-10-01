@@ -959,7 +959,7 @@ def besonderheit(buch: "Buch") -> str:
     teile = []
     for art in regelarten(buch):
         if art == "Freimenge":
-            teile.append(f"Freimenge {buch.kondition.freimenge}")
+            teile.append(f"Honorar ab dem {buch.kondition.freimenge + 1}. Ex.")
         elif art == "Mitautoren":
             teile.append(f"geteilt durch {buch.kondition.teiler}")
         elif art == "Schwelle":
@@ -1444,12 +1444,14 @@ def zerlege_satzformel(formel: str) -> tuple[Kondition | None, str]:
 def satz_aus_kondition(kond: Kondition, satz: float | None = None) -> float:
     """Betrag je Exemplar aus den Bestandteilen.
 
-    Die Rundung sitzt genau dort, wo sie in der Altmappe sitzt: um den Satz
-    je Exemplar, NICHT um das spätere Produkt aus Menge und Satz. Anders
-    gerundet weichen die Auszahlungen im Cent ab.
+    Gerundet wird der Satz je Exemplar auf volle Cent, NICHT erst das
+    spätere Produkt aus Menge und Satz. Und zwar IMMER: in der Altmappe
+    fehlte das RUNDEN in acht Formeln, und dann steht im Brief „20 × 1,85 €
+    = 36,92 €“ — eine Rechnung, die kein Autor nachrechnen kann. Der Schalter
+    ``satz_runden`` wird deshalb nicht mehr beachtet.
     """
     if kond.betrag_je_ex is not None:
-        return kond.betrag_je_ex
+        return runde(kond.betrag_je_ex)
     if kond.ladenpreis is None:
         return 0.0
     wert = kond.ladenpreis
@@ -1465,7 +1467,7 @@ def satz_aus_kondition(kond: Kondition, satz: float | None = None) -> float:
         wert *= genutzt / 100
     if kond.teiler and kond.teiler != 1:
         wert /= kond.teiler
-    return runde(wert) if kond.satz_runden else wert
+    return runde(wert)
 
 
 # ---------------------------------------------------------------------
@@ -1844,8 +1846,10 @@ def _lies_buch(bestand: Bestand, zeile: tuple, zeile_f: tuple, idx: dict,
             buch.nachpflege.append(hinweis)
             kond = Kondition(betrag_je_ex=wert)
 
-    kond.schwelle_zehn = _ja_nein(_zelle(
-        zeile, finde_spalte(idx, "Keine Berechnung bei 10 o. weniger.")))
+    kond.schwelle_zehn = (
+        _ja_nein(_zelle(
+            zeile, finde_spalte(idx, "Keine Berechnung bei 10 o. weniger.")))
+        or zehnerregel_in_notiz(buch.notizen))
 
     # Staffel und Freimenge stehen als Fließtext in den Notizen.
     stufen, stand_jahr, stand_menge, freimenge = zerlege_staffel(buch.notizen)
@@ -1926,6 +1930,159 @@ def _lies_jahre(buch: Buch, zeile: tuple, idx: dict,
             jw.vortrag = gezeigt
 
 
+# Die Verträge im Blatt „Zahlung ab XX Ex.“ formulieren die Schwelle auf
+# ein Dutzend Arten: „ab dem 201. von uns verkauften“, „ab dem 300sten“,
+# „Ab dem 501. Exemplar“, „ab 501. Ex.“, „ab dem 1.000. Exemplar“,
+# „Honorarverzicht bei den ersten 300 Ex.“, „Falls mehr als 1.000 Ex. …“.
+# _RX_FREIMENGE kennt nur die erste; damit hatten 24 von 68 Büchern eine
+# Freimenge. Bewusst NUR für dieses Blatt: im Hauptblatt stehen dieselben
+# Sätze bei Büchern, die die Schwelle längst hinter sich haben und keine
+# Vorgeschichte mitbringen — eine Freimenge dort striche ihr Honorar.
+_ZAHL = r"(\d{1,3}(?:\.\d{3})+|\d+)"
+_RX_SCHWELLE_AB = re.compile(
+    r"\bab\s+(?:dem\s+)?" + _ZAHL + r"\s*(?:\.|sten\b|ten\b)?\s*"
+    r"(?=(?:\S+\s+){0,2}?(?:Ex\b|Ex\.|Exemplar|von\s+uns|verkauft|"
+    r"für\s+jedes|,|das\s+der))", re.I)
+_RX_SCHWELLE_ERSTE = re.compile(
+    r"(?:bei|für)\s+den\s+ersten\s+" + _ZAHL + r"\s*(?:Ex|Exemplar|verkauft)",
+    re.I)
+_RX_SCHWELLE_MEHR = re.compile(r"mehr\s+als\s+" + _ZAHL + r"\s*Ex", re.I)
+_SCHWELLE_WORTE = {"zweihundertersten": 201, "dreihundertersten": 301,
+                   "fünfhundertersten": 501, "tausendersten": 1001}
+# „Honorar für E-Book erst, wenn für das Buch Honorar fällig ist“: die
+# Schwelle hängt an einem ANDEREN Buch. Das kann die Freimenge nicht
+# abbilden — solche Titel bleiben ein Sonderfall.
+_RX_SCHWELLE_FREMD = re.compile(r"erst,?\s+wenn", re.I)
+
+
+def freimenge_aus_notiz(notiz: str) -> int | None:
+    """Die Freimenge aus einem Vertragstext, wörtlich gelesen.
+
+    „ab dem 300sten“ heißt: 299 sind frei. So hat es auch die Altmappe
+    gerechnet — bei allen Laufzetteln, deren Beginn sich nachrechnen lässt,
+    stimmt die wörtliche Lesart (bis auf Mörderliebchen, siehe _laufzettel_einrichten).
+    """
+    text = notiz or ""
+    if m := _RX_SCHWELLE_ERSTE.search(text):
+        return int(m.group(1).replace(".", ""))
+    if m := _RX_SCHWELLE_AB.search(text):
+        n = int(m.group(1).replace(".", ""))
+        return n - 1 if n > 1 else None      # „ab dem 1.“ ist keine Schwelle
+    for wort, n in _SCHWELLE_WORTE.items():
+        if wort in text.lower():
+            return n - 1
+    if m := _RX_SCHWELLE_MEHR.search(text):
+        return int(m.group(1).replace(".", ""))
+    return None
+
+
+# „Falls sich der Verkauf auf weniger als 10 Ex. pro Kalenderjahr
+# reduziert, entfällt das Honorar“ — in 81 Notizen, aber nur bei 30 war in
+# der Altmappe auch die Spalte angekreuzt. Ob die übrigen bezahlt wurden,
+# war Ermessen. Der Verlag hat entschieden (Oktober 2026): es gilt, was im
+# Vertrag steht — der Haken folgt der Notiz.
+_RX_ZEHNERREGEL = re.compile(
+    r"(weniger|unter)\s+(als\s+)?(10|zehn)\b"
+    r"|\b(10|zehn)\s*(Ex\.?|Exemplare?)?\s*(o\.|oder)\s*weniger", re.I)
+
+
+def zehnerregel_in_notiz(notiz: str) -> bool:
+    return bool(_RX_ZEHNERREGEL.search(notiz or ""))
+
+
+def setze_zehnerregel(bestand: Bestand) -> list[str]:
+    """Für einen schon importierten Bestand: den Haken „kein Honorar unter
+    zehn Exemplaren“ überall setzen, wo die Notiz es sagt. Nur setzen, nie
+    entfernen. Gibt die betroffenen Titel zurück."""
+    geaendert = []
+    for e, b in bestand.buecher():
+        if not b.kondition.schwelle_zehn and zehnerregel_in_notiz(b.notizen):
+            b.kondition.schwelle_zehn = True
+            geaendert.append(f"{e.anzeigename} — {b.titel}")
+    return geaendert
+
+
+def _laufzettel_beginn(buch: Buch) -> int | None:
+    """Mit welcher Freimenge der Laufzettel der Altmappe begonnen hat.
+
+    Im ersten Jahr mit Saldo ist verkauft − Saldo genau die Freimenge,
+    sofern davor nichts verkauft wurde. Sonst lässt es sich nicht sagen.
+    """
+    jahre = sorted(buch.jahre)
+    erst = next((j for j in jahre if buch.jahre[j].vortrag is not None), None)
+    if erst is None:
+        return None
+    if any(buch.jahre[j].verkauft for j in jahre if j < erst):
+        return None
+    jw = buch.jahre[erst]
+    if jw.verkauft is None:
+        return None
+    beginn = jw.verkauft - jw.eigenkauf - jw.vortrag
+    return beginn if beginn > 0 else None
+
+
+def _laufzettel_einrichten(buch: Buch) -> str:
+    """Ein Buch aus „Zahlung ab XX Ex.“ auf eine gewöhnliche Freimenge setzen.
+
+    Das Blatt ist kein Sonderweg, sondern der Laufzettel für Verträge, die
+    erst ab einer bestimmten Stückzahl Honorar zahlen — die Freimenge
+    leistet genau das. „Gesondert“ bleibt nur, wessen Schwelle sich nicht
+    als Zahl fassen lässt (ab der zweiten Auflage, Garantiehonorar, E-Book
+    erst mit dem gedruckten Buch). Gibt zurück, was ins Protokoll gehört, oder "".
+    """
+    notiz = buch.notizen or ""
+    laut_vertrag = freimenge_aus_notiz(notiz)
+    if laut_vertrag is None or _RX_SCHWELLE_FREMD.search(notiz):
+        return ""
+    beginn = _laufzettel_beginn(buch)
+    # Die Schwelle steht in der Notiz, und die gilt (Entscheidung des
+    # Verlags, Oktober 2026). Bei „Mörderliebchen“ sagt die Notiz „ab dem
+    # 200sten“, der Laufzettel der Altmappe begann aber 2017 bei 51
+    # verkauften mit „noch 199“ — also mit 250 freien. Der Laufzettel wird
+    # deshalb um den Unterschied verschoben: Ende 2024 fehlen dann noch 120
+    # Exemplare statt 171. Bei sechs weiteren Büchern macht das ein Exemplar.
+    buch.kondition.freimenge = laut_vertrag
+    if beginn is not None and beginn != laut_vertrag:
+        for jw in buch.jahre.values():
+            if jw.vortrag is not None:
+                jw.vortrag += beginn - laut_vertrag
+    # Startpunkt vor dem ersten Jahr: gezählt wird von null an. Ohne ihn
+    # fände die Freimenge im ersten Jahr keinen Anknüpfungspunkt, und es
+    # würde ab dem ersten Exemplar gezahlt — bei „Wandern in den Rheinauen“
+    # 280,90 € für 265 von 500 freien Exemplaren. Die Altmappe trägt den
+    # Saldo erst NACH dem Jahr ein, für das erste Jahr hilft er also nicht.
+    # Spätere Salden bleiben der Anker; der Startpunkt ändert nur das
+    # erste Jahr.
+    if buch.jahre:
+        erstes = min(buch.jahre)
+        buch.jahr(erstes - 1).vortrag = -buch.kondition.freimenge
+    buch.gesondert = False
+    if beginn is not None and abs(beginn - laut_vertrag) > 1:
+        return (f"„{buch.titel}“: Die Notiz nennt Honorar ab dem "
+                f"{laut_vertrag + 1}. Exemplar, der Laufzettel der Altmappe "
+                f"hat mit {beginn} freien gezählt. Die Notiz gilt; der Stand "
+                f"ist um {beginn - laut_vertrag} Exemplare angepasst.")
+    return ""
+
+
+def stelle_laufzettel_um(bestand: Bestand) -> tuple[int, list[str]]:
+    """Für einen schon importierten Bestand: die Laufzettel-Bücher umstellen.
+
+    Berührt nur Bücher aus „Zahlung ab XX Ex.“, die noch auf „gesondert“
+    stehen. Gibt die Zahl der umgestellten Bücher und die Prüfhinweise zurück.
+    """
+    n, hinweise = 0, []
+    for _, b in bestand.buecher():
+        if not (b.gesondert and b.quelle.startswith(ALT_BLATT_HISTORIE)):
+            continue
+        hinweis = _laufzettel_einrichten(b)
+        if not b.gesondert:
+            n += 1
+        if hinweis:
+            hinweise.append(hinweis)
+    return n, hinweise
+
+
 def _blatt_zeilenweise(bestand, register, wbf, wbv, blattname, prot,
                        stillgelegt=False, standard_jahr=None, ab=0,
                        gesondert=False):
@@ -1981,6 +2138,10 @@ def _blatt_zeilenweise(bestand, register, wbf, wbv, blattname, prot,
         if i_voraus is not None:
             buch.vorauszahlung = _komma(_zelle(zeile, i_voraus), 0.0) or 0.0
         _lies_jahre(buch, zeile, idx, jahresspalten, standard_jahr)
+        if gesondert:
+            hinweis = _laufzettel_einrichten(buch)
+            if hinweis:
+                prot.warne(f"{blattname}, Zeile {r}: {hinweis}")
         e.buecher.append(buch)
         prot.zeilen[-1]["Empfänger"] = e.anzeigename
         anzahl += 1
@@ -2386,15 +2547,18 @@ def importiere_alt(pfad, jahr: int = 2025, log=None) -> tuple[Bestand, ImportPro
         n = _blatt_zeilenweise(bestand, register, wbf, wbv, ALT_BLATT_HISTORIE,
                                prot, standard_jahr=jahr, gesondert=True)
         melde(f"  {ALT_BLATT_HISTORIE}: {n} Bücher mit Jahreshistorie")
+        # Das Blatt ist der Laufzettel für Verträge mit Freimenge. Wo die
+        # Schwelle eine Zahl ist, wird es eine gewöhnliche Freimenge; nur
+        # der Rest bleibt „gesondert“ und wartet auf den Verlag.
+        rest = [b for _, b in bestand.buecher()
+                if b.gesondert and b.quelle.startswith(ALT_BLATT_HISTORIE)]
         prot.warne(
-            f"{ALT_BLATT_HISTORIE}: Diese {n} Bücher sind als „gesondert "
-            f"abrechnen“ übernommen und lösen KEINE Auszahlung aus. Das "
-            f"Blatt ist ein Laufzettel auf die vereinbarte Freimenge hin — "
-            f"die Summe seiner Betragsspalte ist negativ, und nur vier der "
-            f"dort geführten Personen stehen überhaupt in der alten "
-            f"Zahlungsliste. Ob und wie diese Verträge abgerechnet werden, "
-            f"muss der Verlag entscheiden; danach den Haken in der Spalte "
-            f"„Gesondert abrechnen“ entfernen.")
+            f"{ALT_BLATT_HISTORIE}: {n - len(rest)} von {n} Büchern zahlen "
+            f"ab einer festen Stückzahl und laufen als Freimenge mit. "
+            f"{len(rest)} sind als „gesondert abrechnen“ übernommen und "
+            f"lösen KEINE Auszahlung aus — ihre Schwelle ist keine Zahl "
+            f"(ab der zweiten Auflage, Garantiehonorar, E-Book erst mit dem "
+            f"Buch). Wie sie abgerechnet werden, muss der Verlag entscheiden.")
 
         n = _blatt_zeilenweise(bestand, register, wbf, wbv, ALT_BLATT_SONDER,
                                prot, standard_jahr=jahr)
@@ -2594,6 +2758,11 @@ def verguetungs_ex(buch: Buch, jahr: int) -> int | None:
     Bei Verträgen mit Freimenge kommt der kumulierte Saldo hinzu, der
     jahrelang negativ bleiben darf — gezahlt wird erst, wenn er ins Plus
     dreht. Gibt None zurück, wenn das Jahr noch nicht erfasst ist.
+
+    Nur ein NEGATIVER Saldo wird verrechnet. Ist die Freimenge schon
+    überschritten, wurden die Exemplare darüber im Jahr des Überschreitens
+    bezahlt; sie noch einmal aufzuschlagen hieße, sie jedes Jahr erneut zu
+    vergüten.
     """
     jw = buch.jahre.get(jahr)
     if jw is None or jw.verkauft is None:
@@ -2602,8 +2771,31 @@ def verguetungs_ex(buch: Buch, jahr: int) -> int | None:
     if buch.kondition.freimenge:
         vortrag = kumulierte_menge(buch, jahr)
         if vortrag is not None:
-            menge += vortrag
+            menge += min(vortrag, 0)
     return menge
+
+
+def freimenge_stand(buch: Buch, jahr: int) -> int | None:
+    """Wie viele Exemplare bis Ende des Vorjahres auf die Freimenge zählen.
+
+    Gespeichert ist der Saldo GEGEN die Freimenge (−171 heißt: noch 171
+    bis zum Honorar) — so führt ihn auch der Laufzettel der Altmappe. Für
+    Menschen ist die Zahl der bisher verkauften Exemplare greifbarer; sie
+    ist Saldo plus Freimenge. None, wenn es keine Vorgeschichte gibt.
+    """
+    stand = kumulierte_menge(buch, jahr)
+    if stand is None or not buch.kondition.freimenge:
+        return None
+    return stand + buch.kondition.freimenge
+
+
+def setze_freimenge_stand(buch: Buch, jahr: int, bisher: int) -> None:
+    """Den Stand „bis Ende des Vorjahres verkauft“ von Hand festlegen.
+
+    Abgelegt als Vortrag des Vorjahres; der jüngste Vortrag ist der Anker,
+    ältere Jahre zählen dann nicht mehr mit.
+    """
+    buch.jahr(jahr - 1).vortrag = bisher - buch.kondition.freimenge
 
 
 def betrag_zeile(buch: Buch, jahr: int, cfg: dict | None = None) -> Posten | None:
@@ -2699,6 +2891,14 @@ def rechne_empfaenger(e: Empfaenger, jahr: int,
         hinweis = staffel_ohne_stand(buch, jahr)
         if hinweis:
             ab.probleme.append(hinweis)
+        if posten.verguetungs_ex > 0 and not posten.satz:
+            # Sechs Laufzettel-Bücher haben in der Altmappe keinen Betrag je
+            # Exemplar — solange die Freimenge läuft, fällt das nicht auf.
+            # Ist sie erreicht, ergäbe es stillschweigend 0 €.
+            ab.probleme.append(
+                f"„{buch.titel}“: {posten.verguetungs_ex} Exemplare sind zu "
+                f"vergüten, aber für das Buch ist kein Betrag je Exemplar "
+                f"hinterlegt — gerechnet wurde 0 €. Bitte im Buch nachtragen.")
         ab.posten.append(posten)
         ab.netto = runde(ab.netto + posten.netto)
         ab.mwst = runde(ab.mwst + posten.mwst)
@@ -2795,6 +2995,35 @@ def zurueckgehalten(bestand: Bestand, jahr: int,
 # Wahrheit: rechnet das Werkzeug für dasselbe Jahr etwas anderes, ist erst zu
 # klären, warum — und nicht die Zahl anzupassen, bis sie passt.
 
+# ``satz_runden`` steht nur noch als Spur im Bestand: es merkt sich, dass
+# die Altmappe bei diesem Buch NICHT gerundet hat. Gerechnet wird immer
+# gerundet (siehe satz_aus_kondition) — die Gegenprobe muss den Unterschied
+# erklären können.
+_GRUND_GERUNDET = "Satz je Exemplar auf Cent gerundet (Altmappe: ungerundet)"
+
+
+_GRUND_ZEHN = ("unter zehn Exemplaren kein Honorar — steht in der Notiz, "
+               "in der Altmappe nicht angekreuzt (Entscheidung Okt. 2026)")
+
+
+def _zehnerregel_greift(buch: Buch, jahr: int) -> bool:
+    if not (buch.kondition.schwelle_zehn and zehnerregel_in_notiz(buch.notizen)):
+        return False
+    menge = verguetungs_ex(buch, jahr)
+    return menge is not None and 0 < menge < 10
+
+
+def _empfaengergrund(e: Empfaenger, jahr: int) -> str:
+    """Warum die Summe eines Empfängers von der Altmappe abweichen darf."""
+    gruende = []
+    aktiv = [b for b in e.buecher if not b.stillgelegt]
+    if any(not b.kondition.satz_runden for b in aktiv):
+        gruende.append(_GRUND_GERUNDET)
+    if any(_zehnerregel_greift(b, jahr) for b in aktiv):
+        gruende.append(_GRUND_ZEHN)
+    return "; ".join(gruende)
+
+
 def _abweichungsgrund(buch: Buch, jahr: int) -> str:
     """Warum das Werkzeug hier anders rechnet als die Altmappe.
 
@@ -2810,6 +3039,10 @@ def _abweichungsgrund(buch: Buch, jahr: int) -> str:
         gruende.append("Freimenge angewandt (Altmappe: ohne Vortrag)")
     if buch.vorauszahlung:
         gruende.append("Vorauszahlung verrechnet")
+    if not buch.kondition.satz_runden:
+        gruende.append(_GRUND_GERUNDET)
+    if _zehnerregel_greift(buch, jahr):
+        gruende.append(_GRUND_ZEHN)
     for hinweis in buch.nachpflege:
         if "Altmappe" in hinweis:
             gruende.append(hinweis)
@@ -2881,12 +3114,14 @@ def pruefe_zahlungsliste(bestand: Bestand, pfad_alt, jahr: int,
                 " ".join(x for x in (vorname, name, inst) if x), betrag)
 
         meins: dict[str, tuple] = {}
+        grund_je: dict[str, str] = {}
         for ab in rechne_alle(bestand, jahr, cfg):
             if not ab.brief:
                 continue
             e = ab.empfaenger
-            meins[_vergleichsschluessel(e.vorname, e.name, e.institution)] = (
-                e.anzeigename, ab.brutto)
+            schluessel = _vergleichsschluessel(e.vorname, e.name, e.institution)
+            meins[schluessel] = (e.anzeigename, ab.brutto)
+            grund_je[schluessel] = _empfaengergrund(e, jahr)
 
         for schluessel, (wer, soll) in alt.items():
             if soll is None:
@@ -2897,7 +3132,8 @@ def pruefe_zahlungsliste(bestand: Bestand, pfad_alt, jahr: int,
                     "steht in der alten Zahlungsliste, bekommt hier nichts"))
             elif abs(meins[schluessel][1] - soll) > 0.005:
                 abweichungen.append(Abweichung(
-                    "Zahlung", wer, "", soll, meins[schluessel][1]))
+                    "Zahlung", wer, "", soll, meins[schluessel][1],
+                    grund_je.get(schluessel, "")))
         for schluessel, (wer, ist) in meins.items():
             if schluessel not in alt:
                 abweichungen.append(Abweichung(
@@ -2939,10 +3175,12 @@ def pruefe_ksk(bestand: Bestand, pfad_alt, jahr: int,
 
         meins: dict[str, tuple] = {}
         auszahlung: dict[str, float] = {}
+        grund_je: dict[str, str] = {}
         for ab in rechne_alle(bestand, jahr, cfg):
             e = ab.empfaenger
             schluessel = _vergleichsschluessel(e.vorname, e.name, e.institution)
             auszahlung[schluessel] = ab.brutto
+            grund_je[schluessel] = _empfaengergrund(e, jahr)
             if ab.ksk_netto <= 0:
                 continue
             meins[schluessel] = (e.anzeigename, ab.ksk_netto)
@@ -2960,7 +3198,11 @@ def pruefe_ksk(bestand: Bestand, pfad_alt, jahr: int,
                 # ist deshalb kein Befund, sondern eine Abschreibspur.
                 if unterschied <= 0.015:
                     grund = "Centdifferenz — im alten Blatt von Hand übertragen"
-                elif abs(auszahlung.get(schluessel, 0.0) - soll) <= 0.015:
+                elif abs(auszahlung.get(schluessel, 0.0) - soll) <= (
+                        # Mit gerundetem Satz weicht auch die Auszahlung
+                        # um ein paar Cent von der Altmappe ab.
+                        0.5 if _GRUND_GERUNDET in grund_je.get(schluessel, "")
+                        else 0.015):
                     # Im alten Blatt steht der AUSZAHLUNGSBETRAG statt der
                     # Honorarsumme. Damit wurden Rückflüsse und Erlösanteile
                     # mitgemeldet, die der Künstlersozialkasse nicht
@@ -2973,7 +3215,7 @@ def pruefe_ksk(bestand: Bestand, pfad_alt, jahr: int,
                              "Rückflüsse mitgezählt, die nicht zur KSK "
                              "gehören")
                 else:
-                    grund = ""
+                    grund = grund_je.get(schluessel, "")
                 abweichungen.append(Abweichung(
                     "KSK", wer, "", soll, meins[schluessel][1], grund))
         for schluessel, (wer, ist) in meins.items():

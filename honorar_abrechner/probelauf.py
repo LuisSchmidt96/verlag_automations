@@ -34,11 +34,23 @@ JAHR = 2025
 SOLL = {
     "empfaenger": 250,
     "buecher": 494,
-    "gesondert": 68,          # Verträge aus „Zahlung ab XX Ex."
+    # Von den 68 Verträgen aus „Zahlung ab XX Ex.“ zahlen 56 ab einer festen
+    # Stückzahl und laufen als Freimenge; nur die 12 ohne zahlenmäßige
+    # Schwelle (zweite Auflage, Garantiehonorar, E-Book erst mit dem Buch)
+    # bleiben „gesondert“. 2025 erreicht keiner der 56 seine Schwelle.
+    "gesondert": 12,
     "stillgelegt": 105,
-    "briefe": 92,
-    "auszahlung": 19142.18,
-    "ksk": 14460.82,
+    # Sabine Maucher fällt heraus: ihre drei E-Books liegen unter zehn
+    # Exemplaren, und die Zehnerregel aus der Notiz gilt jetzt.
+    "briefe": 91,
+    # 36,30 € weniger als zuvor: die Zehnerregel steht in 81 Notizen, war
+    # aber nur bei 30 angekreuzt — der Verlag hat entschieden, dass sie
+    # gilt (Maucher −15,36 €, Albertini −20,94 €). Dazu 7 Cent über der
+    # Altmappe: der Satz je Exemplar wird jetzt immer auf
+    # Cent gerundet. Schaupp „Freiheitsbäume“ 20 × 1,85 € = 37,00 € statt
+    # 20 × 1,8458 € = 36,92 €; Scheidle einen Cent weniger.
+    "auszahlung": 19105.95,
+    "ksk": 14424.52,          # − 36,30 € Zehnerregel, siehe oben
     # Dieter Buck: steht so im Musterbrief und im alten KSK-Blatt.
     "buck_brutto": 2368.98,
     "buck_netto": 2214.01,
