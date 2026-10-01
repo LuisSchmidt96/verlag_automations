@@ -167,7 +167,11 @@ class Kondition:
     verlagsrabatt: float = 40.0          # Ladenpreis minus 40 % = Abgabepreis
     rabatt_anwenden: bool = True
     satz: float | None = None            # Honorarsatz in Prozent
-    teiler: int = 1                      # Aufteilung auf Mitautoren
+    teiler: int = 1                      # Aufteilung auf Mitautoren (alt)
+    # Welcher Anteil vom Honorar des BUCHES an diesen Autor geht, in
+    # Prozent. Ersetzt den Teiler: „geteilt durch 2“ kann keine 30/70-
+    # Aufteilung ausdrücken, und im Dialog denkt der Verlag in Prozenten.
+    anteil: float = 100.0
     # Staffel als [(Obergrenze, Satz), ...]; die letzte Stufe hat Obergrenze
     # None und gilt nach oben offen.
     staffel: list[tuple[int | None, float]] = field(default_factory=list)
@@ -456,7 +460,7 @@ SPALTEN_BUECHER = [
     "Buch-Kennung", "Empfänger-Kennung", "Buchtitel", "ISBN", "Vergütungsart",
     "MwSt-pflichtig", "MwSt-Satz", "Betrag je Ex.", "Ladenpreis",
     "MwSt im Preis", "MwSt aufschlagen", "Verlagsrabatt", "Rabatt anwenden",
-    "Satz", "Teiler", "Satz runden", "Freimenge", "Freimenge ab Jahr",
+    "Satz", "Teiler", "Anteil %", "Satz runden", "Freimenge", "Freimenge ab Jahr",
     "Schwelle 10",
     "Vorauszahlung", "Gesondert abrechnen", "Stillgelegt", "Grund",
     "Notizen", "Nachpflege", "Quelle",
@@ -512,7 +516,8 @@ BREITEN = {
     "Buchtitel": 42, "ISBN": 10, "Vergütungsart": 18, "MwSt-pflichtig": 14,
     "MwSt-Satz": 10, "Betrag je Ex.": 13, "Ladenpreis": 11,
     "MwSt im Preis": 13, "MwSt aufschlagen": 16, "Verlagsrabatt": 13,
-    "Rabatt anwenden": 15, "Satz": 8, "Teiler": 8, "Satz runden": 12,
+    "Rabatt anwenden": 15, "Satz": 8, "Teiler": 8, "Anteil %": 10,
+    "Satz runden": 12,
     "Freimenge": 10,
     "Freimenge ab Jahr": 16, "Schwelle 10": 12, "Vorauszahlung": 13,
     "Gesondert abrechnen": 18,
@@ -762,6 +767,8 @@ def lade_bestand(pfad: Path = None) -> Bestand:
                         hole(z, idx, "Rabatt anwenden"), True),
                     satz=_komma(hole(z, idx, "Satz")),
                     teiler=_ganzzahl(hole(z, idx, "Teiler"), 1) or 1,
+                    # Ältere Bestände haben die Spalte nicht: dann 100 %.
+                    anteil=_komma(hole(z, idx, "Anteil %"), 100.0) or 100.0,
                     satz_runden=_ja_nein(hole(z, idx, "Satz runden"), True),
                     freimenge=_ganzzahl(hole(z, idx, "Freimenge"), 0) or 0,
                     freimenge_ab_jahr=_ganzzahl(
@@ -961,7 +968,9 @@ def besonderheit(buch: "Buch") -> str:
         if art == "Freimenge":
             teile.append(f"Honorar ab dem {buch.kondition.freimenge + 1}. Ex.")
         elif art == "Mitautoren":
-            teile.append(f"geteilt durch {buch.kondition.teiler}")
+            k = buch.kondition
+            anteil = (k.anteil or 100.0) / (k.teiler or 1)
+            teile.append(f"Anteil {pz(round(anteil, 2))} %")
         elif art == "Schwelle":
             teile.append("erst ab 10 Ex.")
         elif art == "Gesondert":
@@ -1024,7 +1033,7 @@ def regelarten(buch: "Buch") -> list[str]:
         arten.append("Gesondert")
     if k.schwelle_zehn:
         arten.append("Schwelle")
-    if k.teiler != 1:
+    if k.teiler != 1 or k.anteil != 100:
         arten.append("Mitautoren")
     if pruefhinweise(buch):
         arten.append("Bitte prüfen")
@@ -1081,8 +1090,10 @@ def regelzeilen(bestand: Bestand) -> list[dict]:
             saetze.append(
                 "Unter zehn Vergütungsexemplaren im Jahr entfällt das "
                 "Honorar. Bei genau zehn wird gezahlt.")
-        if k.teiler != 1:
-            saetze.append(f"Das Honorar teilen sich {k.teiler} Autoren.")
+        if k.teiler != 1 or k.anteil != 100:
+            anteil = (k.anteil or 100.0) / (k.teiler or 1)
+            saetze.append(f"Dieser Autor bekommt {pz(round(anteil, 2))} % "
+                          f"vom Honorar des Buches.")
         if b.stillgelegt:
             saetze.append("Wird nicht mehr abgerechnet"
                           + (f" — {b.stillgelegt_grund}." if b.stillgelegt_grund
@@ -1157,6 +1168,8 @@ def speichere_bestand(bestand: Bestand, pfad: Path = None,
             "Verlagsrabatt": b.kondition.verlagsrabatt,
             "Rabatt anwenden": _js(b.kondition.rabatt_anwenden),
             "Satz": b.kondition.satz, "Teiler": b.kondition.teiler,
+            "Anteil %": (b.kondition.anteil
+                         if b.kondition.anteil != 100 else None),
             "Satz runden": _js(b.kondition.satz_runden),
             "Freimenge": b.kondition.freimenge or None,
             "Freimenge ab Jahr": b.kondition.freimenge_ab_jahr,
@@ -1469,7 +1482,7 @@ def satz_aus_kondition(kond: Kondition, satz: float | None = None) -> float:
     ``satz_runden`` wird deshalb nicht mehr beachtet.
     """
     if kond.betrag_je_ex is not None:
-        return runde(kond.betrag_je_ex)
+        return runde(kond.betrag_je_ex * (kond.anteil or 100.0) / 100)
     if kond.ladenpreis is None:
         return 0.0
     wert = kond.ladenpreis
@@ -1485,6 +1498,8 @@ def satz_aus_kondition(kond: Kondition, satz: float | None = None) -> float:
         wert *= genutzt / 100
     if kond.teiler and kond.teiler != 1:
         wert /= kond.teiler
+    if kond.anteil and kond.anteil != 100:
+        wert *= kond.anteil / 100
     return runde(wert)
 
 
@@ -2836,6 +2851,78 @@ def setze_freimenge_stand(buch: Buch, jahr: int, bisher: int) -> None:
     ältere Jahre zählen dann nicht mehr mit.
     """
     buch.jahr(jahr - 1).vortrag = bisher - buch.kondition.freimenge
+
+
+def buch_basis(kopien: list) -> tuple:
+    """Das Honorar des BUCHES und die Anteile der Autoren daran.
+
+    Ein Buch mit mehreren Autoren steht im Bestand einmal je Autor, und
+    jeder Eintrag trägt seinen fertigen Teil: 1,875 % ÷ 2 hier, 11,25 %
+    dort, 0,84 € fest beim nächsten. Der Dialog denkt umgekehrt — erst was
+    das Buch je Exemplar abwirft, dann wer wie viel Prozent davon bekommt.
+    Diese Funktion rechnet das eine ins andere um, ohne dass sich ein Cent
+    an der Auszahlung ändert.
+
+    Rückgabe (Kondition des Buches, Anteile in % je Eintrag oder None,
+    Fehlertext). Rechnen die Einträge auf verschiedenen Grundlagen —
+    einer fest, einer in Prozent, oder mit anderem Ladenpreis —, gibt es
+    keine gemeinsame Basis: dann kommt die Kondition des ersten Eintrags,
+    None und der Fehler zurück.
+    """
+    def faktor(k):
+        # Der alte Teiler wirkte nur auf Prozentsätze — einen festen Betrag
+        # hat satz_aus_kondition nie geteilt. Das muss hier genauso bleiben.
+        teiler = 1 if k.betrag_je_ex is not None else (k.teiler or 1)
+        return (k.anteil or 100.0) / 100 / teiler
+
+    def grundlage(k):
+        art = ("fest" if k.betrag_je_ex is not None
+               else "staffel" if k.staffel else "prozent")
+        if art == "fest":
+            return (art,)
+        return (art, k.ladenpreis, k.mwst_im_preis, k.mwst_aufschlagen,
+                k.verlagsrabatt if k.rabatt_anwenden else None,
+                tuple(k.staffel))
+
+    erste = kopien[0].kondition
+    basis = Kondition(**{**erste.__dict__, "staffel": list(erste.staffel),
+                         "teiler": 1, "anteil": 100.0})
+    if len(kopien) == 1:
+        # Ein Autor: die gespeicherten Werte SIND das Buchhonorar; ein alter
+        # Teiler wird zum Anteil (der Mitautor steht dann nicht im Bestand).
+        return basis, [runde(faktor(erste) * 100, 4)], ""
+    grundlagen = {grundlage(b.kondition) for b in kopien}
+    if len(grundlagen) > 1:
+        unterschiede = sorted({g[0] for g in grundlagen})
+        was = ("teils fester Betrag, teils Prozent" if len(unterschiede) > 1
+               else "unterschiedlicher Ladenpreis, MwSt, Rabatt oder Staffel")
+        return basis, None, (f"Die Einträge der Autoren passen nicht "
+                             f"zusammen ({was}). Angezeigt sind die Werte "
+                             f"des ersten; mit „Übernehmen“ gelten sie für "
+                             f"alle — dann bitte die Anteile eintragen.")
+
+    art = next(iter(grundlagen))[0]
+    if art == "fest":
+        teile = [(b.kondition.betrag_je_ex or 0.0) * faktor(b.kondition)
+                 for b in kopien]
+        basis.betrag_je_ex = runde(sum(teile), 4)
+    elif art == "prozent":
+        if any(b.kondition.satz is None for b in kopien):
+            return basis, None, "Bei einem der Autoren fehlt der Satz."
+        teile = [b.kondition.satz * faktor(b.kondition) for b in kopien]
+        basis.satz = runde(sum(teile), 4)
+    else:
+        # Die Stufen sind bei allen gleich; der Anteil steckt im Faktor.
+        teile = [faktor(b.kondition) for b in kopien]
+        gesamt = sum(teile)
+        basis.staffel = [(g, runde(sz * gesamt, 4)) for g, sz in erste.staffel]
+        rueckfall = [b.kondition.satz * faktor(b.kondition)
+                     for b in kopien if b.kondition.satz is not None]
+        basis.satz = runde(sum(rueckfall), 4) if rueckfall else None
+    gesamt = sum(teile)
+    if not gesamt:
+        return basis, [runde(100 / len(kopien), 4)] * len(kopien), ""
+    return basis, [runde(t / gesamt * 100, 4) for t in teile], ""
 
 
 def tausender(n: int) -> str:
@@ -4392,7 +4479,13 @@ def rechenweg(posten: Posten) -> list[str]:
     zeilen.append("")
 
     # 2. Der Betrag je Exemplar
-    if k.betrag_je_ex is not None:
+    anteil = (k.anteil or 100.0) / (k.teiler or 1)
+    if k.betrag_je_ex is not None and anteil != 100:
+        zeilen.append(f"\tfür das Buch fest vereinbart\t"
+                      f"{euro(k.betrag_je_ex)}")
+        zeilen.append(f"\tdavon {pz(round(anteil, 2))} % Anteil — je "
+                      f"Exemplar\t{euro(posten.satz)}")
+    elif k.betrag_je_ex is not None:
         zeilen.append(f"\tfest vereinbart je Exemplar\t"
                       f"{euro(k.betrag_je_ex)}")
     elif k.ladenpreis is not None:
@@ -4408,11 +4501,11 @@ def rechenweg(posten: Posten) -> list[str]:
             wert *= 1 - k.verlagsrabatt / 100
             zeilen.append(f"\tabzüglich {pz(k.verlagsrabatt)} % Verlagsrabatt"
                           f"\t{euro(wert)}")
-        if k.teiler != 1:
+        if anteil != 100:
             if posten.satz_prozent is not None:
                 zeilen.append(f"\tdavon {pz(posten.satz_prozent)} % Honorar\t"
                               f"{euro(wert * posten.satz_prozent / 100)}")
-            zeilen.append(f"\tgeteilt durch {k.teiler} Mitautoren — "
+            zeilen.append(f"\tdavon {pz(round(anteil, 2))} % Anteil — "
                           f"je Exemplar\t{euro(posten.satz)}")
         elif posten.satz_prozent is not None:
             zeilen.append(f"\tdavon {pz(posten.satz_prozent)} % Honorar — "

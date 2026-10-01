@@ -43,15 +43,17 @@ Anschrift. Reiter *2. Bücher* listet jedes Buch einmal, bei mehreren
 Autoren mit „ / " getrennt; Doppelklick oder „Buch ändern …" öffnet den
 Buchdialog, „Neues Buch …" fragt zuerst, zu welchem Autor es gehört.
 
-Der Buchdialog bearbeitet ein Buch mit **allen** seinen Autoren. Im Bestand
-steht es weiter einmal je Autor (jeder bekommt seinen eigenen Brief), aber
-Titel, Ladenpreis, Staffel und Sonderregeln gelten für alle. Unter „Wer
-bekommt was je Exemplar" hat jeder Autor eine Zeile: *% vom VAP*,
-*Festbetrag* oder *gestaffelt* (dann mit „geteilt durch"), dazu
-MwSt-Pflicht und offene Vorauszahlung; darunter steht, was der Verlag je
-Exemplar insgesamt zahlt. „+ Mitautor …" fügt einen weiteren Autor an.
-Gemeinsame Angaben werden nur geschrieben, wenn sie im Dialog geändert
-wurden — eine abweichende Notiz eines Mitautors bleibt sonst stehen.
+Der Buchdialog bestimmt, was das **Buch** je Exemplar an Honorar abwirft —
+fester Betrag oder Anteil am Verlagsabgabepreis, Satz oder Staffel. Rechts
+daneben steht der Autor mit einem Knopf zu ihm; hat das Buch mehrere
+Autoren, steht dort stattdessen, wer wie viel **Prozent** davon bekommt
+(zusammen 100 %). Im Bestand steht das Buch weiter einmal je Autor, jeder
+mit seinem Anteil (Spalte „Anteil %“) — so bekommt jeder seinen eigenen
+Brief. Rechnen die Einträge der Mitautoren auf verschiedenen Grundlagen
+(einer fest, einer in Prozent, anderer Ladenpreis), zeigt der Dialog das
+als Fehler; mit „Übernehmen“ gilt dann für alle das Honorar von hier.
+Gemeinsame Angaben werden nur geschrieben, wenn sie geändert wurden — eine
+abweichende Notiz eines Mitautors bleibt sonst stehen.
 
 **Honorar erst ab einer Stückzahl** („ab dem 201. Exemplar") ist im
 Buchdialog ein Haken mit zwei Feldern: ab dem wievielten Exemplar, und wie
