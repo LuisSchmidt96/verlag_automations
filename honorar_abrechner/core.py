@@ -2200,6 +2200,88 @@ def _zahlungslisten_satz(wbv, betrag: float) -> dict | None:
     return None
 
 
+def _iban_schluessel(iban) -> str:
+    return "".join(str(iban or "").split()).upper()
+
+
+def _aktenzeichen_nachtragen(bestand: Bestand, wbv, prot) -> int:
+    """Aktenzeichen und Kontoinhaber aus der alten Zahlungsliste übernehmen.
+
+    Die Abrechnungsblätter haben dafür keine Spalte — die Angabe steht nur
+    in der Zahlungsliste, und ohne sie kommt etwa bei einer Stadtkasse die
+    Überweisung ohne Buchungszeichen an und lässt sich dort nicht zuordnen.
+
+    Zugeordnet wird über die IBAN, nicht über den Namen: die Zahlungsliste
+    schreibt „Ev. Bildungszentrum Hospitalhof“, wo das Hauptblatt
+    „Evangelisches …“ hat, und nennt beim Stadtarchiv Karlsruhe keinen
+    Ansprechpartner. Über den Namen fänden sich drei von acht, über die IBAN
+    sieben — der achte steht im Bestand gar nicht.
+    """
+    blatt = next((b for b in wbv.sheetnames
+                  if b.lower().startswith("zahlungsliste")), None)
+    if blatt is None:
+        return 0
+    ws = wbv[blatt]
+    kopf_i, idx, _ = _alt_kopf(ws, {"Bankverbindung",
+                                    "Aktenzeichen / Kontoinhaber"})
+    if kopf_i < 0:
+        prot.warne(f"Blatt „{blatt}“: keine Kopfzeile gefunden — "
+                   f"Aktenzeichen wurden nicht übernommen.")
+        return 0
+    nach_iban: dict[str, list[Empfaenger]] = {}
+    for e in bestand.empfaenger:
+        if e.iban:
+            nach_iban.setdefault(_iban_schluessel(e.iban), []).append(e)
+
+    anzahl = 0
+    for r in range(kopf_i + 2, ws.max_row + 1):
+        zeile = tuple(c.value for c in ws[r])
+        az = _mehrzeilig(_zelle(
+            zeile, finde_spalte(idx, "Aktenzeichen / Kontoinhaber")))
+        if not az:
+            continue
+        iban = _text(_zelle(zeile, finde_spalte(idx, "Bankverbindung")))
+        wer = " ".join(t for t in (
+            _text(_zelle(zeile, finde_spalte(idx, "Vorname"))),
+            _text(_zelle(zeile, finde_spalte(idx, "Name"))),
+            _mehrzeilig(_zelle(zeile, finde_spalte(idx, "Institution"))))
+            if t) or f"Zeile {r}"
+        treffer = nach_iban.get(_iban_schluessel(iban), []) if iban else []
+        if not treffer:
+            prot.warne(
+                f"{blatt}, Zeile {r}: „{wer}“ hat das Aktenzeichen „{az}“, "
+                f"steht aber mit dieser IBAN in keinem Abrechnungsblatt — "
+                f"nicht übernommen. Falls weiter gezahlt wird, als Autor "
+                f"von Hand anlegen.")
+            continue
+        for e in treffer:
+            if not e.aktenzeichen:
+                e.aktenzeichen = az
+                anzahl += 1
+            elif e.aktenzeichen != az:
+                prot.warne(
+                    f"{blatt}, Zeile {r}: bei „{e.anzeigename}“ steht schon "
+                    f"„{e.aktenzeichen}“, die Zahlungsliste sagt „{az}“ — "
+                    f"das vorhandene bleibt, bitte prüfen.")
+    return anzahl
+
+
+def trage_aktenzeichen_nach(bestand: Bestand, altmappe) -> ImportProtokoll:
+    """Für einen schon importierten Bestand: nur die Aktenzeichen nachholen.
+
+    Ein neuer Import wäre der falsche Weg — er verwürfe alles, was seitdem
+    eingetragen wurde. Hier werden ausschließlich LEERE Aktenzeichen gefüllt.
+    """
+    prot = ImportProtokoll()
+    wbv = openpyxl.load_workbook(Path(altmappe), data_only=True)
+    try:
+        n = _aktenzeichen_nachtragen(bestand, wbv, prot)
+    finally:
+        wbv.close()
+    prot.warne(f"{n} Aktenzeichen aus der Zahlungsliste übernommen.")
+    return prot
+
+
 def _lubw(bestand, register, wbv, jahr, prot):
     """Das LUBW-Blatt: ein Empfänger, viele Titel, fester Betrag je Exemplar."""
     if ALT_BLATT_LUBW not in wbv.sheetnames:
@@ -2329,6 +2411,9 @@ def importiere_alt(pfad, jahr: int = 2025, log=None) -> tuple[Bestand, ImportPro
 
         n = _lubw(bestand, register, wbv, jahr, prot)
         melde(f"  {ALT_BLATT_LUBW}: {n} Titel")
+
+        n = _aktenzeichen_nachtragen(bestand, wbv, prot)
+        melde(f"  Zahlungsliste: {n} Aktenzeichen übernommen")
 
         melde(f"Fertig: {len(bestand.empfaenger)} Empfänger, "
               f"{sum(1 for _ in bestand.buecher())} Bücher, "
