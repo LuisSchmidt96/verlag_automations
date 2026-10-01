@@ -992,6 +992,24 @@ REGELARTEN = [
 ]
 
 
+# Hinweise aus dem Import, die nur informieren und nichts zu prüfen geben.
+# „bitte prüfen“ an 72 Büchern wurde überlesen — darunter 25 Anthologie-
+# Beiträge und Dieter Bucks Stände aus der Notiz, an denen niemand etwas
+# tun muss.
+INFO_HINWEISE = ("Anthologie:", "kumulierter Stand")
+
+
+def pruefhinweise(buch: "Buch") -> list[str]:
+    """Was an diesem Buch wirklich zu prüfen ist.
+
+    Ein stillgelegtes Buch geht in keine Abrechnung mehr ein; was beim
+    Einlesen daran auffiel, ändert nichts mehr.
+    """
+    if buch.stillgelegt:
+        return []
+    return [h for h in buch.nachpflege if not h.startswith(INFO_HINWEISE)]
+
+
 def regelarten(buch: "Buch") -> list[str]:
     """Welche Sonderregeln an diesem Buch hängen — leer heißt: keine."""
     k = buch.kondition
@@ -1008,7 +1026,7 @@ def regelarten(buch: "Buch") -> list[str]:
         arten.append("Schwelle")
     if k.teiler != 1:
         arten.append("Mitautoren")
-    if buch.nachpflege:
+    if pruefhinweise(buch):
         arten.append("Bitte prüfen")
     if buch.stillgelegt:
         arten.append("Stillgelegt")
@@ -1912,7 +1930,11 @@ def _lies_jahre(buch: Buch, zeile: tuple, idx: dict,
             jw.korrektur = _ganzzahl(_zelle(zeile, i_korrektur), 0) or 0
         i_verg = sp.get("verguetung")
         gezeigt = _ganzzahl(_zelle(zeile, i_verg)) if i_verg is not None else None
-        if i_verg is not None and verkauft is not None and gezeigt is None:
+        # Ergibt die echte Menge ebenfalls 0, gibt es keinen Unterschied
+        # und nichts zu melden — 17 Bücher trugen sonst nur „aus 0 Ex.
+        # gerechnet“ als „bitte prüfen“.
+        if (i_verg is not None and verkauft is not None and gezeigt is None
+                and verkauft - eigenkauf != 0):
             # In einzelnen Altzeilen ist die Vergütungsexemplar-Zelle leer,
             # obwohl Stückzahlen dastehen — dort hat jemand die Formel
             # gelöscht. Excel rechnet deshalb mit 0 weiter, das Werkzeug mit
@@ -2640,10 +2662,24 @@ class Posten:
     verguetungs_ex: int = 0
     netto: float = 0.0
     mwst: float = 0.0
+    # Nur wenn im Jahr eine Staffelgrenze überschritten wurde: je Stufe
+    # (Exemplare, Betrag je Ex., Prozentsatz, ab dem wievielten Exemplar).
+    stufen: list[tuple[int, float, float, int]] = field(default_factory=list)
 
     @property
     def brutto(self) -> float:
         return runde(self.netto + self.mwst)
+
+    def stufentext(self) -> str:
+        """„50 Ex. zu 1,04 € und 23 Ex. zu 1,15 € — ab dem 3.501. …“."""
+        if len(self.stufen) < 2:
+            return ""
+        teile = [f"{m} Ex. zu {euro(betrag)}" for m, betrag, _, _ in self.stufen]
+        wechsel = [f"ab dem {tausender(ab)}. verkauften Exemplar "
+                   f"{pz(prozent)} %"
+                   for _, _, prozent, ab in self.stufen[1:]]
+        return (" und ".join(teile) + " — laut Vertrag gilt "
+                + " und ".join(wechsel) + ".")
 
 
 @dataclass
@@ -2728,7 +2764,9 @@ def angewandter_satz(buch: Buch, jahr: int) -> float | None:
         stand = kumulierte_menge(buch, jahr)
         if stand is not None:
             for grenze, satz in kond.staffel:
-                if grenze is None or stand <= grenze:
+                # Das NÄCHSTE Exemplar (stand + 1) entscheidet: bei 3500
+                # verkauften ist das 3501. schon in der Stufe darüber.
+                if grenze is None or stand < grenze:
                     return satz
     return kond.satz
 
@@ -2747,7 +2785,9 @@ def satz_je_ex(buch: Buch, jahr: int) -> float:
         stand = kumulierte_menge(buch, jahr)
         if stand is not None:
             for grenze, satz in kond.staffel:
-                if grenze is None or stand <= grenze:
+                # Das NÄCHSTE Exemplar (stand + 1) entscheidet: bei 3500
+                # verkauften ist das 3501. schon in der Stufe darüber.
+                if grenze is None or stand < grenze:
                     return satz_aus_kondition(kond, satz)
     return satz_aus_kondition(kond)
 
@@ -2798,6 +2838,47 @@ def setze_freimenge_stand(buch: Buch, jahr: int, bisher: int) -> None:
     buch.jahr(jahr - 1).vortrag = bisher - buch.kondition.freimenge
 
 
+def tausender(n: int) -> str:
+    return f"{n:,}".replace(",", ".")
+
+
+def pz(x: float) -> str:
+    """„1,875“ statt „1.875“ — für Prozentsätze im Fließtext."""
+    return f"{x:g}".replace(".", ",")
+
+
+def staffel_tranchen(buch: Buch, jahr: int,
+                     menge: int) -> list[tuple[int, float, float, int]]:
+    """Die Jahresmenge auf die Staffelstufen verteilen.
+
+    Wird im Lauf des Jahres eine Grenze überschritten — etwa das 3.500.
+    Exemplar verkauft —, gilt der höhere Satz nur für die Exemplare DARÜBER.
+    So steht es in den Verträgen („bis 3500 Ex. 12 %, ab 3501 Ex. 13 %“),
+    und so lässt es sich dem Autor im Brief erklären. Vorher galt für das
+    ganze Jahr der Satz vom Jahresbeginn (Entscheidung Oktober 2026).
+
+    Leer, wenn es nichts zu verteilen gibt: keine Staffel, Stand unbekannt,
+    keine positive Menge — dann gilt wie bisher ein Satz.
+    """
+    kond = buch.kondition
+    stand = kumulierte_menge(buch, jahr)
+    if not kond.staffel or stand is None or menge <= 0 or kond.freimenge:
+        return []
+    tranchen = []
+    untere = 1
+    von, bis = stand + 1, stand + menge      # die Exemplare dieses Jahres
+    for grenze, prozent in kond.staffel:
+        obere = grenze if grenze is not None else bis
+        anteil = min(bis, obere) - max(von, untere) + 1
+        if anteil > 0:
+            tranchen.append((anteil, satz_aus_kondition(kond, prozent),
+                             prozent, max(von, untere)))
+        if grenze is None:
+            break
+        untere = grenze + 1
+    return tranchen
+
+
 def betrag_zeile(buch: Buch, jahr: int, cfg: dict | None = None) -> Posten | None:
     """Einen Posten rechnen. None, wenn das Jahr nicht erfasst ist."""
     cfg = cfg or {}
@@ -2824,14 +2905,21 @@ def betrag_zeile(buch: Buch, jahr: int, cfg: dict | None = None) -> Posten | Non
         # Schwelle entfällt das Honorar, BEI genau zehn wird gezahlt.
         netto = 0.0
     else:
-        netto = runde(menge * satz)
+        stufen = staffel_tranchen(buch, jahr, menge)
+        if len(stufen) < 2:
+            stufen = []
+            netto = runde(menge * satz)
+        else:
+            # Je Stufe gerundet, dann addiert — so wie es im Brief steht.
+            netto = runde(sum(runde(m * betrag) for m, betrag, _, _ in stufen))
 
     mwst = runde(netto * buch.mwst_satz / 100) if buch.mwst_pflichtig else 0.0
     return Posten(buch=buch, jahr=jahr, satz=satz,
                   satz_prozent=angewandter_satz(buch, jahr),
                   verkauft=jw.verkauft, eigenkauf=jw.eigenkauf,
                   korrektur=jw.korrektur, verguetungs_ex=menge,
-                  netto=netto, mwst=mwst)
+                  netto=netto, mwst=mwst,
+                  stufen=stufen if netto else [])
 
 
 def staffel_ohne_stand(buch: Buch, jahr: int) -> str:
@@ -2956,7 +3044,7 @@ def rechne_empfaenger(e: Empfaenger, jahr: int,
         ab.probleme.append(
             "mehrere Vergütungsarten in einem Brief: " + ", ".join(sorted(arten)))
     for buch in e.buecher:
-        for hinweis in buch.nachpflege:
+        for hinweis in pruefhinweise(buch):
             ab.probleme.append(f"„{buch.titel}“: {hinweis}")
     return ab
 
@@ -4061,7 +4149,15 @@ def generiere_brief(vorlage: Path, ab: Abrechnung, cfg: dict,
         # null fällt — das will der Autor sehen.
         if not p.verkauft and not p.eigenkauf and not p.netto:
             continue
-        werte = [p.buch.titel, euro(p.satz), f"{p.verkauft} Ex.",
+        # Wurde im Jahr eine Staffelgrenze überschritten, steht unter dem
+        # Titel, wie viele Exemplare zu welchem Satz gerechnet sind und
+        # warum — sonst passt „73 Ex. × 1,04 €“ nicht zum Betrag daneben.
+        titel = p.buch.titel
+        je_ex = euro(p.satz)
+        if p.stufen:
+            titel += "\n" + p.stufentext()
+            je_ex = "\n".join(euro(b) for _, b, _, _ in p.stufen)
+        werte = [titel, je_ex, f"{p.verkauft} Ex.",
                  f"{p.eigenkauf} Ex.", f"{p.verguetungs_ex} Ex.",
                  p.buch.verguetungsart, euro(p.netto)]
         if mit_mwst:
@@ -4265,9 +4361,6 @@ def rechenweg(posten: Posten) -> list[str]:
     def ex(n) -> str:
         return f"{n} Ex."
 
-    def pz(x) -> str:
-        # „1,875 %“ statt „1.875 %“ — die Seite ist sonst durchgehend deutsch.
-        return f"{x:g}".replace(".", ",")
 
     # 1. Die Menge
     zeilen.append(f"\tverkauft\t{ex(posten.verkauft)}")
@@ -4345,10 +4438,16 @@ def rechenweg(posten: Posten) -> list[str]:
                 f"\tWie viele Exemplare vor {posten.jahr} verkauft wurden, "
                 f"ist hier nicht hinterlegt. Deshalb wird mit dem zuletzt "
                 f"vereinbarten Satz von {pz(posten.satz_prozent)} % gerechnet.")
+        elif posten.stufen:
+            zeilen.append(
+                f"\tBis Ende {posten.jahr - 1} waren es {tausender(stand)} "
+                f"Exemplare; im Lauf von {posten.jahr} wurde die nächste "
+                f"Stufe erreicht.")
         else:
             zeilen.append(
-                f"\tBis Ende {posten.jahr - 1} waren es {stand} Exemplare — "
-                f"damit gilt die Stufe mit {pz(posten.satz_prozent)} %.")
+                f"\tBis Ende {posten.jahr - 1} waren es {tausender(stand)} "
+                f"Exemplare — damit gilt die Stufe mit "
+                f"{pz(posten.satz_prozent)} %.")
     zeilen.append("")
 
     # 3. Das Ergebnis
@@ -4358,6 +4457,12 @@ def rechenweg(posten: Posten) -> list[str]:
     elif k.schwelle_zehn and posten.netto == 0 and posten.verguetungs_ex < 10:
         zeilen.append(f"\tunter zehn Exemplaren entfällt das Honorar "
                       f"laut Vertrag\t{euro(0)}")
+    elif posten.stufen:
+        for m, betrag, prozent, ab in posten.stufen:
+            zeilen.append(f"\t{ex(m)} × {euro(betrag)} ({pz(prozent)} %, ab "
+                          f"dem {tausender(ab)}. Exemplar)\t"
+                          f"{euro(runde(m * betrag))}")
+        zeilen.append(f"\tzusammen\t{euro(posten.netto)}")
     else:
         zeilen.append(f"\t{ex(posten.verguetungs_ex)} × {euro(posten.satz)}"
                       f"\t{euro(posten.netto)}")

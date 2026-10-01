@@ -143,6 +143,25 @@ def main() -> int:
         p.gleich("Warnung „Staffel ohne Stand“", len(gewarnt),
                  SOLL["staffel_ohne_stand"])
 
+        # Staffelgrenze im Lauf des Jahres: 3450 vor dem Jahr, 73 dazu —
+        # 50 zum alten, 23 zum neuen Satz. Kein Buch der Altmappe tut das
+        # 2025, deshalb ein gebautes. Bei genau 3500 gehört das nächste
+        # Exemplar schon zur höheren Stufe.
+        test = core.Buch(kennung="B9999", titel="Staffeltest", kondition=(
+            core.Kondition(ladenpreis=17.9, mwst_im_preis=7.0,
+                           rabatt_anwenden=True, verlagsrabatt=40.0,
+                           satz=12.0, staffel=[(3500, 12.0), (None, 13.0)])))
+        test.jahr(JAHR - 1).vortrag = 3450
+        test.jahr(JAHR).verkauft = 73
+        posten = core.betrag_zeile(test, JAHR)
+        p.gleich("Staffel im Jahr: Stufen",
+                 [(m, pr) for m, _, pr, _ in posten.stufen],
+                 [(50, 12.0), (23, 13.0)])
+        p.gleich("Staffel im Jahr: Betrag", posten.netto, 89.90, 0.005)
+        test.jahr(JAHR - 1).vortrag = 3500
+        p.gleich("Staffel genau an der Grenze",
+                 core.betrag_zeile(test, JAHR).satz_prozent, 13.0)
+
         print("\n4. Gegenprobe gegen die Altmappe")
         abweichungen = core.pruefe_gegen_excel(geladen, ALTMAPPE, JAHR, cfg)
         ohne = [a for a in abweichungen if not a.grund]
