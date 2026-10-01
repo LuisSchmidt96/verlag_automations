@@ -21,7 +21,8 @@ import traceback
 from datetime import date
 from pathlib import Path
 from tkinter import (Tk, StringVar, BooleanVar, IntVar, END, NORMAL, DISABLED,
-                     TclError, filedialog, messagebox, ttk, Text, Toplevel)
+                     TclError, filedialog, messagebox, ttk, Text, Toplevel,
+                     Listbox)
 
 from honorar_abrechner import core
 
@@ -66,6 +67,11 @@ SPALTEN_STAMM = [("name", "Empfänger", 300), ("ort", "PLZ / Ort", 170),
                  ("iban", "Bankverbindung", 230), ("buecher", "Bücher", 70),
                  ("hinweis", "Hinweis", 240)]
 
+SPALTEN_BUECHER = [("isbn", "ISBN", 90), ("titel", "Buchtitel", 330),
+                   ("autor", "Autor / Empfänger", 260),
+                   ("art", "Art der Zahlung", 130), ("satz", "€ je Ex.", 90),
+                   ("bes", "Besonderheit", 320)]
+
 SPALTEN_ERFASSUNG = [("isbn", "ISBN", 90), ("titel", "Buchtitel", 300),
                      ("empf", "Empfänger", 200), ("art", "Vergütungsart", 120),
                      ("verkauft", "verkaufte Ex. ✎", 110),
@@ -97,15 +103,18 @@ SPALTEN_SONDERFAELLE = [("name", "Empfänger", 260), ("titel", "Buchtitel", 300)
                         ("quelle", "in der Altmappe", 170)]
 
 
-# Die vier Schritte in der Reihenfolge, in der gearbeitet wird. Die
-# Beschriftung sagt, was zu TUN ist, nicht wie der Programmteil heißt.
+# Die Schritte in der Reihenfolge, in der gearbeitet wird. Die Beschriftung
+# sagt, was zu TUN ist, nicht wie der Programmteil heißt. Autoren und Bücher
+# waren ein Reiter; Bücher fand man dann nur über den Doppelklick auf ihren
+# Autor — wer ein Buch sucht, weiß aber oft nicht, wem es gehört.
 REITER_MELDUNGEN = "Meldungen"
 
 SCHRITTE = [
-    ("stamm", "1. Autoren und Bücher"),
-    ("zahlen", "2. Zahlen eintragen"),
-    ("rechnen", "3. Nachrechnen"),
-    ("ausgeben", "4. Briefe und Listen"),
+    ("stamm", "1. Autoren"),
+    ("buecher", "2. Bücher"),
+    ("zahlen", "3. Zahlen eintragen"),
+    ("rechnen", "4. Nachrechnen"),
+    ("ausgeben", "5. Briefe und Listen"),
 ]
 
 
@@ -155,6 +164,8 @@ class App(Tk):
         self.status = StringVar(value="Bereit.")
         self.nur_offene = BooleanVar(value=False)
         self.suche_stamm = StringVar()
+        self.suche_buecher = StringVar()
+        self.zeige_stillgelegte = BooleanVar(value=False)
         self.suche_erfassung = StringVar()
 
         # Arbeitsthreads legen hier ab, der Hauptthread holt heraus. Ein
@@ -205,6 +216,7 @@ class App(Tk):
         self.reiter = ttk.Notebook(self)
         self.reiter.pack(fill="both", expand=True, padx=12, pady=(0, 6))
         self._baue_stammdaten()
+        self._baue_buecher()
         self._baue_erfassung()
         self._baue_durchlauf()
         self._baue_ausgaben()
@@ -229,6 +241,7 @@ class App(Tk):
         veraltet = getattr(self, "_rechnung_veraltet", False)
         zeichen = [
             "✓" if self.bestand.empfaenger else "·",
+            "✓" if gesamt else "·",
             ("·" if not gesamt else "✓" if offen == 0
              else "◐" if offen < gesamt else "·"),
             "✓" if self.abrechnungen and not veraltet else
@@ -243,13 +256,13 @@ class App(Tk):
             satz = ("Als Nächstes: auf Reiter 1 die Daten aus der alten "
                     "Excel-Tabelle holen.")
         elif offen:
-            satz = (f"Als Nächstes: auf Reiter 2 noch {offen} Bücher "
+            satz = (f"Als Nächstes: auf Reiter 3 noch {offen} Bücher "
                     f"eintragen.")
         elif not self.abrechnungen or veraltet:
-            satz = ("Als Nächstes: auf Reiter 3 die Beträge berechnen.")
+            satz = ("Als Nächstes: auf Reiter 4 die Beträge berechnen.")
         elif not getattr(self, "_etwas_erzeugt", False):
-            satz = ("Als Nächstes: das Ergebnis auf Reiter 3 durchsehen, "
-                    "dann auf Reiter 4 die Briefe erzeugen.")
+            satz = ("Als Nächstes: das Ergebnis auf Reiter 4 durchsehen, "
+                    "dann auf Reiter 5 die Briefe erzeugen.")
         elif self.geaendert:
             satz = ("Als Nächstes: die Eingaben speichern — Reiter 1, "
                     "Knopf oben rechts.")
@@ -382,10 +395,11 @@ class App(Tk):
 
     def _neues_buch(self, e, eltern=None):
         buch = core.Buch(kennung=self.bestand.naechste_kennung("B"))
-        if not self._buchfenster(f"Neues Buch für {e.anzeigename}", buch,
-                                 eltern):
+        # Angehängt wird erst beim „Übernehmen“ — das erledigt der Dialog,
+        # weil dort auch Mitautoren dazukommen können.
+        if not self._buchfenster(f"Neues Buch für {e.anzeigename}",
+                                 [(e, buch)], eltern):
             return
-        e.buecher.append(buch)
         self.geaendert = True
         self._rechnung_veraltet = bool(self.abrechnungen)
         self._zeige_stammdaten()
@@ -394,14 +408,38 @@ class App(Tk):
         self.status.set(f"„{buch.titel}“ angelegt — noch nicht gespeichert.")
 
     def _aendere_buch(self, e, buch, eltern=None):
-        """Ein bestehendes Buch ändern."""
-        if not self._buchfenster(f"Buch ändern — {buch.titel}", buch, eltern):
+        """Ein bestehendes Buch ändern — mit allen seinen Autoren."""
+        gruppe = self._buchgruppe(e, buch)
+        if not self._buchfenster(f"Buch ändern — {buch.titel}", gruppe,
+                                 eltern):
             return
         self.geaendert = True
         self._rechnung_veraltet = bool(self.abrechnungen)
         self._zeige_stammdaten()
         self._zeige_erfassung()
         self.status.set(f"„{buch.titel}“ geändert — noch nicht gespeichert.")
+
+    @staticmethod
+    def _buchschluessel(b) -> str:
+        """Was zwei Einträge zum selben Buch macht: die ISBN, sonst der Titel."""
+        return b.isbn.strip() or b.titel.strip().lower()
+
+    def _buchgruppe(self, e, buch) -> list:
+        """Das Buch samt den Einträgen seiner Mitautoren.
+
+        Ein Buch mit zwei Autoren steht im Bestand zweimal, einmal je Autor
+        — so rechnet und schreibt jeder Brief für sich. Bearbeitet wird es
+        trotzdem als EIN Buch: der Ladenpreis ist für alle derselbe, nur der
+        Anteil unterscheidet sich.
+        """
+        gruppe = [(e, buch)]
+        schluessel = self._buchschluessel(buch)
+        if not schluessel:
+            return gruppe
+        for x, b in self.bestand.buecher():
+            if b is not buch and self._buchschluessel(b) == schluessel:
+                gruppe.append((x, b))
+        return gruppe
 
     # --- Entfernen ----------------------------------------------------
     # Loeschen ist hier fast nie das Richtige: ein Titel, der nicht mehr
@@ -475,21 +513,24 @@ class App(Tk):
         if e is not None:
             self._entferne_empfaenger(e)
 
-    def _buchfenster(self, titel: str, buch, eltern=None) -> bool:
+    def _buchfenster(self, titel: str, gruppe: list, eltern=None) -> bool:
         """Buchangaben erfassen. True, wenn übernommen wurde.
+
+        ``gruppe`` ist das Buch mit allen Autoren: [(Empfänger, Buch), …],
+        das zuerst genannte ist das, von dem aus geöffnet wurde. Ein Buch,
+        das noch in keinem Empfänger steht, wird beim Übernehmen angehängt.
 
         ``eltern`` ist das Fenster, aus dem heraus geöffnet wird — meist das
         Autorenfenster. Hinge der Dialog am Hauptfenster, holte der
         Fenstermanager beim Schließen das Hauptfenster nach vorn, und das
         Autorenfenster verschwände dahinter, als wäre es mit zugegangen.
         """
-        k = buch.kondition
         fenster = Toplevel(eltern or self)
         fenster.title(titel)
         fenster.transient(eltern or self)
         _sperre_eingabe(fenster)
         try:
-            return self._baue_buchfenster(fenster, buch, k)
+            return self._baue_buchfenster(fenster, gruppe)
         except Exception:
             # Sonst bliebe ein leeres Fenster mit Titel stehen und hielte
             # die Eingabesperre — der Fehler selbst landete nur im Terminal.
@@ -497,7 +538,15 @@ class App(Tk):
                 fenster.destroy()
             raise
 
-    def _baue_buchfenster(self, fenster, buch, k) -> bool:
+    # Wie ein Autor seinen Anteil bekommt. „gestaffelt“ heißt: die Staffel
+    # unten gilt, und der Wert sagt, durch wie viele sie geteilt wird.
+    ANTEILSARTEN = ["% vom VAP", "Festbetrag", "gestaffelt"]
+    EINHEIT = {"% vom VAP": "%", "Festbetrag": "€", "gestaffelt": "÷"}
+
+    def _baue_buchfenster(self, fenster, gruppe: list) -> bool:
+        erster_e, buch = gruppe[0]
+        k = buch.kondition
+        jahr = self.jahr.get()
 
         def feld(eltern, zeile, beschriftung, var, breite=26, werte=None):
             ttk.Label(eltern, text=beschriftung).grid(
@@ -509,6 +558,44 @@ class App(Tk):
                 w = ttk.Entry(eltern, textvariable=var, width=breite)
             w.grid(row=zeile, column=1, sticky="w", pady=3)
             return w
+
+        def name(e):
+            return " · ".join(e.anzeigename.split("\n"))
+
+        def stueck(var):
+            """Ganze Stückzahl; „1.000“ ist tausend, nicht eins."""
+            return core._ganzzahl(var.get().strip().replace(".", ""))
+
+        def zeige(person):
+            w = self._zeige_empfaenger(e=person, eltern=fenster)
+            if w is None:
+                return
+            _sperre_eingabe(w)
+            fenster.wait_window(w)
+            if fenster.winfo_exists():
+                _sperre_eingabe(fenster)
+
+        # --- Hinweise aus dem Import ------------------------------------
+        # „bitte prüfen“ stand in der Liste, aber WAS zu prüfen ist, stand
+        # nur in einer Spalte der Excel-Datei. Hier steht es, und mit dem
+        # Haken verschwindet es — Infos ohne Handlungsbedarf bleiben stehen.
+        v_erledigt = BooleanVar(value=False)
+        hinweise = [(e, b, h) for e, b in gruppe for h in b.nachpflege]
+        if hinweise:
+            hinw = ttk.LabelFrame(fenster, text="Hinweise aus dem Import")
+            hinw.pack(fill="x", **PAD)
+            irgendwas_pruefen = False
+            for e, b, h in hinweise:
+                pruefen = h in core.pruefhinweise(b)
+                irgendwas_pruefen |= pruefen
+                wer = f"{name(e)}: " if len(gruppe) > 1 else ""
+                ttk.Label(hinw, text=("⚠ " if pruefen else "ℹ ") + wer + h,
+                          wraplength=900, justify="left").pack(
+                              anchor="w", padx=8, pady=1)
+            if irgendwas_pruefen:
+                ttk.Checkbutton(hinw, text="geprüft — die ⚠-Hinweise "
+                                           "entfernen", variable=v_erledigt
+                                ).pack(anchor="w", padx=8, pady=(4, 6))
 
         # --- Das Buch ---------------------------------------------------
         oben = ttk.LabelFrame(fenster, text="Das Buch")
@@ -523,71 +610,126 @@ class App(Tk):
              werte=list(core.VERGUETUNGSARTEN))
         feld(oben, 3, "Notizen", v_notiz, 46)
 
-        # --- Was je Exemplar gezahlt wird -------------------------------
-        geld = ttk.LabelFrame(fenster, text="Was der Autor je Exemplar bekommt")
-        geld.pack(fill="x", **PAD)
-        v_weg = StringVar(value="fest" if k.betrag_je_ex is not None
-                          else "anteil")
+        # --- Der Verlagsabgabepreis — für alle Autoren derselbe ----------
+        preis = ttk.LabelFrame(fenster, text="Verlagsabgabepreis — gilt für "
+                                             "alle Autoren mit Anteil in %")
+        preis.pack(fill="x", **PAD)
+        # Der Preis steht nur bei Anteilen im Bestand. Ist der geöffnete
+        # Eintrag ein Festbetrag, kann ein Mitautor ihn trotzdem haben.
+        mit_preis = next((b.kondition for _, b in gruppe
+                          if b.kondition.ladenpreis is not None), k)
+        v_preis = StringVar(value="" if mit_preis.ladenpreis is None
+                            else dez(mit_preis.ladenpreis))
+        v_mwst = StringVar(value="keine" if not mit_preis.mwst_im_preis
+                           else dez(mit_preis.mwst_im_preis) + " %")
+        v_rabatt = StringVar(value=dez(mit_preis.verlagsrabatt)
+                             if mit_preis.rabatt_anwenden else "")
+        w_preis = [feld(preis, 0, "Ladenpreis in €", v_preis, 12),
+                   feld(preis, 1, "darin enthaltene MwSt", v_mwst, 12,
+                        werte=["keine", "7 %", "19 %"]),
+                   feld(preis, 2, "Verlagsrabatt in % (meist 40)", v_rabatt,
+                        12)]
 
-        fest = ttk.Frame(geld)
-        ttk.Radiobutton(geld, text="Ein fester Betrag je Exemplar",
-                        variable=v_weg, value="fest",
-                        command=lambda: umschalten()).grid(
-                            row=0, column=0, sticky="w", padx=8, pady=(6, 0))
-        fest.grid(row=1, column=0, sticky="w", padx=32)
-        v_fest = StringVar(value="" if k.betrag_je_ex is None
-                           else dez(k.betrag_je_ex))
-        feld(fest, 0, "Betrag in €", v_fest, 12)
+        # --- Wer bekommt was --------------------------------------------
+        # Je Autor eine Zeile. Drei Verlagsgewohnheiten stehen so
+        # nebeneinander — geteilter Satz, eigener Satz je Person, voller
+        # Betrag für jeden —, und die Summe darunter zeigt, was der Verlag
+        # je Exemplar insgesamt zahlt. Bei „Worte für Orte“ (Notiz: „erhalten
+        # zusammen“, aber jede 0,84 €) fällt erst so auf, dass doppelt
+        # gezahlt würde.
+        anteile = ttk.LabelFrame(fenster, text="Wer bekommt was je Exemplar")
+        anteile.pack(fill="x", **PAD)
+        tabelle = ttk.Frame(anteile)
+        tabelle.pack(fill="x", padx=8, pady=(4, 0))
+        for i, kopf in enumerate(["Autor", "Art", "Wert", "", "je Exemplar",
+                                  "MwSt-pflichtig",
+                                  "offene Vorauszahlung (€)", ""]):
+            ttk.Label(tabelle, text=kopf, font=("Segoe UI", 9, "bold")).grid(
+                row=0, column=i, sticky="w", padx=(0, 10))
 
-        ttk.Radiobutton(geld, text="Ein Anteil am Verlagsabgabepreis",
-                        variable=v_weg, value="anteil",
-                        command=lambda: umschalten()).grid(
-                            row=2, column=0, sticky="w", padx=8, pady=(10, 0))
-        anteil = ttk.Frame(geld)
-        anteil.grid(row=3, column=0, sticky="w", padx=32)
-        v_preis = StringVar(value="" if k.ladenpreis is None
-                            else dez(k.ladenpreis))
-        v_mwst = StringVar(value="keine" if not k.mwst_im_preis
-                           else dez(k.mwst_im_preis) + " %")
-        v_rabatt = StringVar(value=dez(k.verlagsrabatt)
-                             if k.rabatt_anwenden else "")
-        v_teiler = StringVar(value=str(k.teiler or 1))
-        feld(anteil, 0, "Ladenpreis in €", v_preis, 12)
-        feld(anteil, 1, "darin enthaltene MwSt", v_mwst, 12,
-             werte=["keine", "7 %", "19 %"])
-        feld(anteil, 2, "Verlagsrabatt in % (meist 40)", v_rabatt, 12)
-        feld(anteil, 3, "geteilt durch (Mitautoren)", v_teiler, 12)
+        zeilen: list[dict] = []
 
-        # --- Der Honorarsatz, gleich ob fest oder gestaffelt ------------
-        # Er gehört zum Anteil am Verlagsabgabepreis und steht deshalb im
-        # selben Kasten darunter. Als eigener Kasten sah es aus, als gälte
-        # bei einem festen Betrag zusätzlich noch ein Prozentsatz — zumal
-        # „Immer derselbe Satz“ dort angewählt erschien.
-        satzrahmen = ttk.Frame(geld)
-        satzrahmen.grid(row=4, column=0, sticky="w", padx=32, pady=(6, 0))
-        ttk.Label(satzrahmen, text="Honorarsatz — gleichbleibend oder nach "
-                                   "Menge gestaffelt").grid(
-                                       row=0, column=0, sticky="w", pady=(4, 0))
-        satz_gemerkt = "staffel" if k.staffel else "fest"
-        v_satzart = StringVar(value=satz_gemerkt)
-        r_einfach = ttk.Radiobutton(satzrahmen, text="Immer derselbe Satz",
-                                    variable=v_satzart, value="fest",
-                                    command=lambda: umschalten())
-        r_einfach.grid(row=1, column=0, sticky="w", padx=8, pady=(4, 0))
-        einfach = ttk.Frame(satzrahmen)
-        einfach.grid(row=2, column=0, sticky="w", padx=32)
-        v_satz = StringVar(value="" if k.satz is None else dez(k.satz))
-        feld(einfach, 0, "Satz in %", v_satz, 10)
+        def anfangswerte(b):
+            kb = b.kondition
+            if kb.betrag_je_ex is not None:
+                return "Festbetrag", dez(kb.betrag_je_ex)
+            if kb.staffel:
+                return "gestaffelt", str(kb.teiler or 1)
+            if kb.satz is None:
+                return "% vom VAP", ""
+            return "% vom VAP", dez(core.runde(kb.satz / (kb.teiler or 1), 4))
 
-        r_staffel = ttk.Radiobutton(
-            satzrahmen, text="Gestaffelt — der Satz steigt mit der Menge",
-            variable=v_satzart, value="staffel", command=lambda: umschalten())
-        r_staffel.grid(row=3, column=0, sticky="w", padx=8, pady=(10, 0))
-        stufen = ttk.Frame(satzrahmen)
-        stufen.grid(row=4, column=0, sticky="w", padx=32)
+        def zeile_anlegen(e, b, neu=False):
+            i = len(zeilen) + 1
+            art, wert = anfangswerte(b)
+            z = {"e": e, "buch": b, "neu": neu,
+                 "art": StringVar(value=art), "wert": StringVar(value=wert),
+                 "mwst": BooleanVar(value=b.mwst_pflichtig),
+                 "voraus": StringVar(value=dez(b.vorauszahlung)
+                                     if b.vorauszahlung else ""),
+                 "ergebnis": StringVar(), "einheit": StringVar()}
+            z["anfang"] = (art, wert)
+            schrift = ({"font": ("Segoe UI", 9, "bold")}
+                       if b is buch and len(gruppe) > 1 else {})
+            ttk.Label(tabelle, text=name(e), **schrift).grid(
+                row=i, column=0, sticky="w", padx=(0, 10), pady=2)
+            ttk.Combobox(tabelle, textvariable=z["art"], width=11,
+                         values=self.ANTEILSARTEN, state="readonly").grid(
+                             row=i, column=1, sticky="w", padx=(0, 6))
+            ttk.Entry(tabelle, textvariable=z["wert"], width=8,
+                      justify="right").grid(row=i, column=2, sticky="w")
+            ttk.Label(tabelle, textvariable=z["einheit"]).grid(
+                row=i, column=3, sticky="w", padx=(2, 10))
+            ttk.Label(tabelle, textvariable=z["ergebnis"]).grid(
+                row=i, column=4, sticky="e", padx=(0, 10))
+            ttk.Checkbutton(tabelle, variable=z["mwst"]).grid(
+                row=i, column=5)
+            ttk.Entry(tabelle, textvariable=z["voraus"], width=10,
+                      justify="right").grid(row=i, column=6, sticky="w")
+            if not neu and len(gruppe) > 1 or (neu and b is not buch):
+                ttk.Button(tabelle, text="öffnen", width=7,
+                           command=lambda x=e: zeige(x)).grid(
+                               row=i, column=7, padx=(10, 0))
+            for v in (z["art"], z["wert"]):
+                v.trace_add("write", lambda *_: vorschau())
+            zeilen.append(z)
+
+        for e, b in gruppe:
+            zeile_anlegen(e, b, neu=b not in e.buecher)
+
+        summe_text = StringVar()
+        unten = ttk.Frame(anteile)
+        unten.pack(fill="x", padx=8, pady=(6, 8))
+        ttk.Label(unten, textvariable=summe_text,
+                  font=("Segoe UI", 9, "bold")).pack(side="left")
+
+        def mitautor_hinzu():
+            dabei = {id(z["e"]) for z in zeilen}
+            e = self._waehle_empfaenger(eltern=fenster)
+            if e is None:
+                return
+            if id(e) in dabei:
+                messagebox.showinfo("Schon dabei",
+                                    f"{name(e)} steht schon bei diesem Buch.",
+                                    parent=fenster)
+                return
+            # Die Kennung erst beim Übernehmen: zwei neue Einträge bekämen
+            # sonst dieselbe, weil keiner von beiden schon im Bestand steht.
+            zeile_anlegen(e, core.Buch(kennung=""), neu=True)
+            zeilen[-1]["art"].set(zeilen[0]["art"].get())
+            vorschau()
+        ttk.Button(unten, text="+ Mitautor …",
+                   command=mitautor_hinzu).pack(side="right")
+
+        # --- Die Staffel — für alle Autoren mit „gestaffelt“ --------------
+        staffel = ttk.LabelFrame(
+            fenster, text="Staffel — für alle Autoren mit „gestaffelt“: der "
+                          "Satz steigt mit der Menge")
+        staffel.pack(fill="x", **PAD)
+        stufen = ttk.Frame(staffel)
+        stufen.pack(anchor="w", padx=8, pady=(4, 0))
         ttk.Label(stufen, text="bis … Exemplare").grid(row=0, column=1)
         ttk.Label(stufen, text="Satz in %").grid(row=0, column=2)
-
         stufenzeilen: list[tuple] = []
 
         def stufe_anlegen(grenze="", satz=""):
@@ -605,8 +747,9 @@ class App(Tk):
                 e_.bind("<KeyRelease>", lambda _e: vorschau())
             stufenzeilen.append((vg, vs))
 
-        vorhandene = list(k.staffel) or [(None, None)]
-        for grenze, satz in vorhandene:
+        mit_staffel = next((b.kondition for _, b in gruppe
+                            if b.kondition.staffel), k)
+        for grenze, satz in (list(mit_staffel.staffel) or [(None, None)]):
             stufe_anlegen("" if grenze is None else str(grenze),
                           "" if satz is None else dez(satz))
         while len(stufenzeilen) < 2:
@@ -614,22 +757,20 @@ class App(Tk):
         ttk.Button(stufen, text="+ Stufe",
                    command=lambda: (stufe_anlegen(), vorschau())).grid(
                        row=99, column=1, sticky="w", pady=(6, 0))
-        ttk.Label(satzrahmen, justify="left", foreground="#555555", text=(
-            "Die letzte Stufe ohne Mengenangabe gilt nach oben offen. Welche "
-            "Stufe in einem Jahr greift, entscheidet der Stand zu\n"
-            "Jahresbeginn (Spalte „Stand bis Vorjahr“).")
-        ).grid(row=5, column=0, sticky="w", padx=8, pady=(4, 8))
+        ttk.Label(staffel, justify="left", foreground="#555555", text=(
+            "Die letzte Stufe ohne Mengenangabe gilt nach oben offen. Wird im "
+            "Lauf des Jahres eine Grenze überschritten, gilt der höhere Satz "
+            "für die Exemplare darüber.")).pack(anchor="w", padx=8,
+                                                pady=(4, 8))
 
-        # --- Sonderregeln ------------------------------------------------
+        # --- Sonderregeln — für alle Autoren gleich ---------------------
         sonder = ttk.LabelFrame(fenster, text="Sonderregeln")
         sonder.pack(fill="x", **PAD)
-        v_mwstpflicht = BooleanVar(value=buch.mwst_pflichtig)
         v_schwelle = BooleanVar(value=k.schwelle_zehn)
         # Die Freimenge wird so eingegeben, wie sie im Vertrag steht: „ab dem
         # 201. Exemplar“. Dazu gehört der Stand — ohne ihn weiß das Werkzeug
         # nicht, wie weit es bis zur Schwelle noch ist, und zahlt im ersten
         # Jahr ab dem ersten Exemplar.
-        jahr = self.jahr.get()
         v_ab = StringVar(value=str(k.freimenge + 1) if k.freimenge else "")
         bisher_alt = core.freimenge_stand(buch, jahr)
         v_bisher = StringVar(
@@ -639,20 +780,12 @@ class App(Tk):
         # Ein Haken davor, damit sichtbar ist, OB die Regel gilt — ein leeres
         # Feld allein sieht aus wie „vergessen auszufüllen“.
         v_frei_an = BooleanVar(value=bool(k.freimenge))
-        v_voraus_an = BooleanVar(value=bool(buch.vorauszahlung))
-
-        def stueck(var):
-            """Ganze Stückzahl; „1.000“ ist tausend, nicht eins."""
-            return core._ganzzahl(var.get().strip().replace(".", ""))
-        ttk.Checkbutton(sonder, text="Autor ist mehrwertsteuerpflichtig",
-                        variable=v_mwstpflicht).grid(row=0, column=0,
-                                                     sticky="w", padx=8, pady=2)
         ttk.Checkbutton(sonder,
                         text="Kein Honorar unter zehn Exemplaren im Jahr",
-                        variable=v_schwelle).grid(row=1, column=0, sticky="w",
+                        variable=v_schwelle).grid(row=0, column=0, sticky="w",
                                                   padx=8, pady=2)
         frei = ttk.Frame(sonder)
-        frei.grid(row=2, column=0, sticky="w", padx=8, pady=2)
+        frei.grid(row=1, column=0, sticky="w", padx=8, pady=2)
         ttk.Checkbutton(frei, text="Honorar erst ab dem … verkauften Exemplar",
                         variable=v_frei_an,
                         command=lambda: vorschau()).grid(
@@ -673,53 +806,36 @@ class App(Tk):
         v_still = BooleanVar(value=buch.stillgelegt)
         v_grund = StringVar(value=buch.stillgelegt_grund)
         v_gesondert = BooleanVar(value=buch.gesondert)
-        # Eine Vorauszahlung schmilzt nicht von selbst ab: das Werkzeug
-        # verrechnet sie beim Rechnen und schreibt in den Hinweis, was
-        # danach noch offen ist — eingetragen wird der neue Restbetrag hier
-        # von Hand. Automatisch zurueckschreiben waere bequemer und falsch:
-        # zweimal rechnen wuerde die Vorauszahlung zweimal abziehen.
-        v_voraus = StringVar(value=dez(buch.vorauszahlung)
-                             if buch.vorauszahlung else "")
-        vor = ttk.Frame(sonder)
-        vor.grid(row=3, column=0, sticky="w", padx=8, pady=2)
-        ttk.Checkbutton(vor, text="noch offene Vorauszahlung (€) — wird "
-                                  "verrechnet, bevor ausgezahlt wird",
-                        variable=v_voraus_an,
-                        command=lambda: vorschau()).grid(
-                            row=0, column=0, sticky="w", pady=3)
-        w_voraus = ttk.Entry(vor, textvariable=v_voraus, width=10)
-        w_voraus.grid(row=0, column=1, sticky="w", padx=(8, 0), pady=3)
-
         ttk.Separator(sonder, orient="horizontal").grid(
-            row=4, column=0, sticky="ew", padx=8, pady=(8, 4))
+            row=2, column=0, sticky="ew", padx=8, pady=(8, 4))
         ttk.Checkbutton(
             sonder, text="Wird nicht mehr abgerechnet (vergriffen, "
                          "verstorben, kein Honorar mehr)",
             variable=v_still, command=lambda: grund_umschalten()).grid(
-                row=5, column=0, sticky="w", padx=8, pady=2)
+                row=3, column=0, sticky="w", padx=8, pady=2)
         grundrahmen = ttk.Frame(sonder)
-        grundrahmen.grid(row=6, column=0, sticky="w", padx=32, pady=2)
+        grundrahmen.grid(row=4, column=0, sticky="w", padx=32, pady=2)
         w_grund = feld(grundrahmen, 0, "Grund", v_grund, 40)
         ttk.Checkbutton(
             sonder, text="Sonderfall: Honorar entscheidet der Verlag von "
                          "Hand — die Zahlen laufen mit, ausgezahlt wird "
                          "nichts automatisch",
-            variable=v_gesondert).grid(row=7, column=0, sticky="w",
+            variable=v_gesondert).grid(row=5, column=0, sticky="w",
                                        padx=8, pady=2)
 
         def grund_umschalten():
             w_grund.configure(state="normal" if v_still.get() else "disabled")
         grund_umschalten()
 
-        # --- Vorschau ----------------------------------------------------
-        ergebnis = StringVar()
-        ttk.Label(fenster, textvariable=ergebnis, font=("Segoe UI", 10, "bold"),
-                  foreground="#1a5c1a", wraplength=620, justify="left"
+        meldung = StringVar()
+        ttk.Label(fenster, textvariable=meldung, font=("Segoe UI", 10, "bold"),
+                  foreground="#8a1c1c", wraplength=900, justify="left"
                   ).pack(anchor="w", padx=12, pady=(0, 4))
 
+        # --- Lesen und prüfen -------------------------------------------
         def lies() -> tuple:
-            """Die Eingaben übersetzen. (Kondition, Vorauszahlung, Fehler)"""
-            kond = core.Kondition()
+            """Die Eingaben übersetzen: ([(Zeile, Kondition, Vorauszahlung)],
+            Fehler)."""
             fehler = []
 
             def zahl(var, feldname, vorgabe=None):
@@ -740,65 +856,40 @@ class App(Tk):
                     return vorgabe
                 return wert
 
-            if v_weg.get() == "fest":
-                betrag = core._komma(v_fest.get())
-                if betrag is None:
-                    fehler.append("Es fehlt der Betrag je Exemplar.")
-                kond.betrag_je_ex = betrag
-            else:
-                preis = core._komma(v_preis.get())
-                if preis is None:
-                    fehler.append("Es fehlt der Ladenpreis.")
-                kond.ladenpreis = preis
-                kond.mwst_im_preis = ({"7 %": 7.0, "19 %": 19.0}
-                                      .get(v_mwst.get()))
-                rabatt = zahl(v_rabatt, "Verlagsrabatt")
-                kond.rabatt_anwenden = rabatt is not None
-                kond.verlagsrabatt = rabatt if rabatt is not None else 40.0
-                kond.teiler = int(zahl(v_teiler, "Mitautoren-Teiler", 1) or 1)
-                if v_satzart.get() == "fest":
-                    satz = core._komma(v_satz.get())
+            arten = {z["art"].get() for z in zeilen}
+            braucht_preis = arten & {"% vom VAP", "gestaffelt"}
+            ladenpreis = zahl(v_preis, "Ladenpreis")
+            if braucht_preis and ladenpreis is None:
+                fehler.append("Es fehlt der Ladenpreis.")
+            mwst = {"7 %": 7.0, "19 %": 19.0}.get(v_mwst.get())
+            rabatt = zahl(v_rabatt, "Verlagsrabatt")
+
+            stufenliste = []
+            if "gestaffelt" in arten:
+                staffel_roh = []
+                for vg, vs in stufenzeilen:
+                    satz = core._komma(vs.get())
                     if satz is None:
-                        fehler.append("Es fehlt der Honorarsatz.")
-                    kond.satz = satz
-                else:
-                    staffel, letzte = [], None
-                    for vg, vs in stufenzeilen:
-                        satz = core._komma(vs.get())
-                        if satz is None:
-                            continue
-                        grenze = core._ganzzahl(vg.get())
-                        staffel.append((grenze, satz))
-                    offen = [s for s in staffel if s[0] is None]
-                    begrenzt = sorted((s for s in staffel if s[0] is not None),
-                                      key=lambda s: s[0])
-                    if len(offen) > 1:
-                        fehler.append("Nur EINE Stufe darf ohne Mengenangabe "
-                                      "bleiben — sie gilt nach oben offen.")
-                    if not staffel:
-                        fehler.append("Es ist keine Stufe ausgefüllt.")
-                    elif not offen:
-                        fehler.append("Die oberste Stufe braucht keine "
-                                      "Mengenangabe — sie gilt für alles "
-                                      "darüber. Bitte dort die Menge leeren.")
-                    grenzen = [s[0] for s in begrenzt]
-                    if len(set(grenzen)) != len(grenzen):
-                        fehler.append("Zwei Stufen haben dieselbe Menge.")
-                    kond.staffel = begrenzt + offen[:1]
-                    # Welche Stufe gilt, entscheidet der kumulierte Stand.
-                    # Ist der unbekannt — bei den meisten Büchern der Fall —,
-                    # greift `satz` als Rückfall. Den darf das Formular NICHT
-                    # überschreiben: bei einem importierten Buch steht dort
-                    # der Satz, den der Verlag tatsächlich angewandt hat.
-                    # Auf die erste Stufe zu setzen machte aus 14 % 12 % und
-                    # damit aus 1,33 € 1,14 €.
-                    kond.satz = (k.satz if k.satz is not None
-                                 else (begrenzt or offen)[0][1]
-                                 if (begrenzt or offen) else None)
-            kond.schwelle_zehn = v_schwelle.get()
-            # Ohne Haken gilt die Regel nicht — was im ausgegrauten Feld
-            # noch steht, wird ignoriert.
-            kond.freimenge = 0
+                        continue
+                    staffel_roh.append((core._ganzzahl(vg.get()), satz))
+                offen = [s for s in staffel_roh if s[0] is None]
+                begrenzt = sorted((s for s in staffel_roh if s[0] is not None),
+                                  key=lambda s: s[0])
+                if len(offen) > 1:
+                    fehler.append("Nur EINE Stufe darf ohne Mengenangabe "
+                                  "bleiben — sie gilt nach oben offen.")
+                if not staffel_roh:
+                    fehler.append("Es ist keine Stufe ausgefüllt.")
+                elif not offen:
+                    fehler.append("Die oberste Stufe braucht keine "
+                                  "Mengenangabe — sie gilt für alles "
+                                  "darüber. Bitte dort die Menge leeren.")
+                grenzen = [s[0] for s in begrenzt]
+                if len(set(grenzen)) != len(grenzen):
+                    fehler.append("Zwei Stufen haben dieselbe Menge.")
+                stufenliste = begrenzt + offen[:1]
+
+            freimenge = 0
             if v_frei_an.get():
                 ab = stueck(v_ab)
                 if ab is None or ab < 2:
@@ -806,36 +897,79 @@ class App(Tk):
                                   "Exemplar Honorar gezahlt wird (mindestens "
                                   "2) — oder den Haken davor entfernen.")
                 else:
-                    kond.freimenge = ab - 1
+                    freimenge = ab - 1
                     if stueck(v_bisher) is None:
                         fehler.append(
                             f"Bitte eintragen, wie viele Exemplare bis Ende "
                             f"{jahr - 1} schon verkauft waren — bei einem "
                             f"neuen Buch 0.")
-            voraus = 0.0
-            if v_voraus_an.get():
-                voraus = zahl(v_voraus, "Vorauszahlung", None)
-                if voraus is None:
-                    fehler.append("Bitte den offenen Betrag der Vorauszahlung "
-                                  "eintragen — oder den Haken davor "
-                                  "entfernen.")
-                    voraus = 0.0
-                elif voraus < 0:
+
+            ergebnis = []
+            for z in zeilen:
+                alt = z["buch"].kondition
+                art, wer = z["art"].get(), name(z["e"])
+                kond = core.Kondition(
+                    freimenge_ab_jahr=alt.freimenge_ab_jahr,
+                    satz_runden=alt.satz_runden,
+                    mwst_aufschlagen=alt.mwst_aufschlagen)
+                if art == "Festbetrag":
+                    kond.betrag_je_ex = zahl(z["wert"], f"„{wer}“")
+                    if kond.betrag_je_ex is None:
+                        fehler.append(f"Bei {wer} fehlt der Betrag je "
+                                      f"Exemplar.")
+                else:
+                    kond.ladenpreis = ladenpreis
+                    kond.mwst_im_preis = mwst
+                    kond.rabatt_anwenden = rabatt is not None
+                    kond.verlagsrabatt = rabatt if rabatt is not None else 40.0
+                    if art == "% vom VAP":
+                        kond.satz = zahl(z["wert"], f"„{wer}“")
+                        if kond.satz is None:
+                            fehler.append(f"Bei {wer} fehlt der Satz in %.")
+                    else:
+                        teiler = stueck(z["wert"]) if z["wert"].get().strip() \
+                            else 1
+                        if not teiler or teiler < 1:
+                            fehler.append(f"Bei {wer}: „geteilt durch“ muss "
+                                          f"eine ganze Zahl ab 1 sein.")
+                            teiler = 1
+                        kond.teiler = teiler
+                        kond.staffel = stufenliste
+                        # Ist der Stand unbekannt, greift `satz` als
+                        # Rückfall. Den darf das Formular NICHT überschreiben:
+                        # bei einem importierten Buch steht dort der Satz,
+                        # den der Verlag tatsächlich angewandt hat.
+                        kond.satz = (alt.satz if alt.staffel and
+                                     alt.satz is not None
+                                     else stufenliste[0][1] if stufenliste
+                                     else None)
+                kond.schwelle_zehn = v_schwelle.get()
+                kond.freimenge = freimenge
+                voraus = zahl(z["voraus"], f"der Vorauszahlung von {wer}", 0.0)
+                if voraus and voraus < 0:
                     fehler.append("Eine Vorauszahlung kann nicht negativ "
                                   "sein.")
-            return kond, voraus, fehler
+                ergebnis.append((z, kond, voraus or 0.0))
+            return ergebnis, fehler
 
-        def freimenge_zeigen():
+        def vorschau(*_):
+            # Einheit und Freimenge zuerst — sie hängen nicht an Fehlern.
+            for z in zeilen:
+                z["einheit"].set(self.EINHEIT.get(z["art"].get(), ""))
+            gestaffelt = any(z["art"].get() == "gestaffelt" for z in zeilen)
+            for w in stufen.winfo_children():
+                if w.winfo_class() in ("TEntry", "TButton"):
+                    w.configure(state="normal" if gestaffelt else "disabled")
+            anteilig = any(z["art"].get() != "Festbetrag" for z in zeilen)
+            for w in w_preis:
+                w.configure(state=("readonly" if w.winfo_class() == "TCombobox"
+                                   else "normal") if anteilig else "disabled")
             ab, bisher = stueck(v_ab), stueck(v_bisher)
             an = v_frei_an.get()
             w_ab.configure(state="normal" if an else "disabled")
             w_bisher.configure(
                 state="normal" if an and ab and ab > 1 else "disabled")
-            w_voraus.configure(
-                state="normal" if v_voraus_an.get() else "disabled")
-            if not an or not ab or ab < 2:
-                frei_info.set("")
-            elif bisher is None:
+            if not an or not ab or ab < 2 or bisher is None:
                 frei_info.set("")
             elif bisher >= ab - 1:
                 frei_info.set("→ Schwelle erreicht, jedes weitere Exemplar "
@@ -844,69 +978,65 @@ class App(Tk):
                 frei_info.set(f"→ noch {ab - 1 - bisher} Exemplare bis zum "
                               f"Honorar")
 
-        def vorschau(*_):
-            freimenge_zeigen()
-            kond, voraus, fehler = lies()
-            if fehler:
-                ergebnis.set("… " + fehler[0])
-                return
-            if kond.staffel:
-                teile = []
-                untere = 1
-                for grenze, satz in kond.staffel:
-                    kopie = core.Kondition(**{**kond.__dict__, "satz": satz,
-                                              "staffel": []})
-                    betrag = core.satz_aus_kondition(kopie)
-                    if grenze is None:
-                        teile.append(f"ab {untere}: {core.euro(betrag)}")
+            ergebnis, fehler = lies()
+            meldung.set("… " + fehler[0] if fehler else "")
+            summe = 0.0
+            for z, kond, _ in ergebnis:
+                try:
+                    if kond.staffel:
+                        # Angezeigt wird, was JETZT gerechnet wird. Ohne
+                        # bekannten Stand greift die Staffel nicht, sondern
+                        # der gespeicherte Satz — bei „D'accord mit de Welt“
+                        # 0,42 € statt der 0,84 € der untersten Stufe.
+                        stand = core.kumulierte_menge(z["buch"], jahr)
+                        if stand is None:
+                            jetzt = core.satz_aus_kondition(
+                                core.Kondition(**{**kond.__dict__,
+                                                  "staffel": []}))
+                            z["ergebnis"].set(f"{core.euro(jetzt)} (Stand "
+                                              f"unbekannt)")
+                        else:
+                            satz = next(s_ for g_, s_ in kond.staffel
+                                        if g_ is None or stand < g_)
+                            jetzt = core.satz_aus_kondition(kond, satz)
+                            z["ergebnis"].set(f"{core.euro(jetzt)} "
+                                              f"({core.pz(satz)} %-Stufe)")
+                        summe += jetzt
                     else:
-                        teile.append(f"{untere}–{grenze}: {core.euro(betrag)}")
-                        untere = grenze + 1
-                ergebnis.set("Ergibt je Exemplar — " + ", ".join(teile))
+                        betrag = core.satz_aus_kondition(kond)
+                        z["ergebnis"].set(core.euro(betrag))
+                        summe += betrag
+                except (TypeError, ValueError, ZeroDivisionError):
+                    z["ergebnis"].set("—")
+            # Bei einer Anthologie ist der Betrag ein Anteil am Topf, kein
+            # Preis je Exemplar — eine Summe „38,09 € je Exemplar“ wäre
+            # Unsinn.
+            anthologie = any(h.startswith("Anthologie:")
+                             for _, b in gruppe for h in b.nachpflege)
+            if len(zeilen) > 1 and not anthologie:
+                summe_text.set(f"zusammen je Exemplar: "
+                               f"{core.euro(core.runde(summe))}"
+                               )
             else:
-                ergebnis.set("Ergibt "
-                             + core.euro(core.satz_aus_kondition(kond))
-                             + " je Exemplar.")
+                summe_text.set("")
 
-        def umschalten():
-            nonlocal satz_gemerkt
-            anteilig = v_weg.get() == "anteil"
-            # Bei festem Betrag gibt es keinen Satz: dann ist auch keiner
-            # der beiden Knöpfe angewählt. Die Wahl wird gemerkt und kommt
-            # zurück, sobald wieder „Anteil“ gewählt ist.
-            if anteilig:
-                if not v_satzart.get():
-                    v_satzart.set(satz_gemerkt)
-            elif v_satzart.get():
-                satz_gemerkt = v_satzart.get()
-                v_satzart.set("")
-            for w in (r_einfach, r_staffel):
-                w.configure(state="normal" if anteilig else "disabled")
-            for w in fest.winfo_children():
-                w.configure(state="normal" if not anteilig else "disabled")
-            for rahmen in (anteil, einfach, stufen):
-                for w in rahmen.winfo_children():
-                    if w.winfo_class() in ("TEntry", "TCombobox", "TButton"):
-                        w.configure(state="disabled" if not anteilig else
-                                    ("readonly" if w.winfo_class() == "TCombobox"
-                                     else "normal"))
-            if anteilig:
-                gestaffelt = v_satzart.get() == "staffel"
-                for w in einfach.winfo_children():
-                    if w.winfo_class() in ("TEntry",):
-                        w.configure(state="disabled" if gestaffelt else "normal")
-                for w in stufen.winfo_children():
-                    if w.winfo_class() in ("TEntry", "TButton"):
-                        w.configure(state="normal" if gestaffelt else "disabled")
-            vorschau()
-
-        for var in (v_fest, v_preis, v_rabatt, v_satz, v_teiler, v_ab,
-                    v_bisher):
+        for var in (v_preis, v_rabatt, v_ab, v_bisher, v_mwst):
             var.trace_add("write", lambda *_: vorschau())
-        v_mwst.trace_add("write", lambda *_: vorschau())
-        umschalten()
+        vorschau()
 
-        # --- Knöpfe ------------------------------------------------------
+        # --- Übernehmen ---------------------------------------------------
+        # Was für alle gilt, wird nur geschrieben, wenn es hier geändert
+        # wurde. Sonst überschriebe das Öffnen eines Buchs still die Angaben
+        # eines Mitautors, die zufällig anders stehen — etwa eine eigene
+        # Notiz zu dessen Vertrag.
+        gemeinsam_anfang = {
+            "titel": v_titel.get(), "isbn": v_isbn.get(), "art": v_art.get(),
+            "notiz": v_notiz.get(), "still": v_still.get(),
+            "grund": v_grund.get(), "gesondert": v_gesondert.get()}
+        geld_anfang = (v_preis.get(), v_mwst.get(), v_rabatt.get(),
+                       tuple((a.get(), b.get()) for a, b in stufenzeilen),
+                       v_schwelle.get(), v_frei_an.get(), v_ab.get(),
+                       v_bisher.get())
         fertig = {"ok": False}
 
         def uebernehmen():
@@ -915,26 +1045,58 @@ class App(Tk):
                                        "Ohne Buchtitel geht es nicht.",
                                        parent=fenster)
                 return
-            kond, voraus, fehler = lies()
+            ergebnis, fehler = lies()
             if fehler:
                 messagebox.showwarning("Bitte noch ergänzen",
                                        "\n".join(fehler), parent=fenster)
                 return
-            buch.titel = v_titel.get().strip()
-            buch.isbn = v_isbn.get().strip()
-            buch.verguetungsart = v_art.get() or "Honorar"
-            buch.notizen = v_notiz.get().strip()
-            buch.mwst_pflichtig = v_mwstpflicht.get()
-            buch.vorauszahlung = voraus
-            buch.stillgelegt = v_still.get()
-            buch.stillgelegt_grund = (v_grund.get().strip()
-                                      if v_still.get() else "")
-            buch.gesondert = v_gesondert.get()
-            buch.kondition = kond
-            if kond.freimenge:
-                bisher = stueck(v_bisher)
-                if bisher != bisher_alt or kond.freimenge != k.freimenge:
-                    core.setze_freimenge_stand(buch, jahr, bisher)
+            jetzt = {
+                "titel": v_titel.get(), "isbn": v_isbn.get(),
+                "art": v_art.get(), "notiz": v_notiz.get(),
+                "still": v_still.get(), "grund": v_grund.get(),
+                "gesondert": v_gesondert.get()}
+            geld_jetzt = (v_preis.get(), v_mwst.get(), v_rabatt.get(),
+                          tuple((a.get(), b.get()) for a, b in stufenzeilen),
+                          v_schwelle.get(), v_frei_an.get(), v_ab.get(),
+                          v_bisher.get())
+
+            def geaendert(schluessel):
+                return jetzt[schluessel] != gemeinsam_anfang[schluessel]
+
+            for z, kond, voraus in ergebnis:
+                b, neu = z["buch"], z["neu"]
+                if neu or geaendert("titel"):
+                    b.titel = v_titel.get().strip()
+                if neu or geaendert("isbn"):
+                    b.isbn = v_isbn.get().strip()
+                if neu or geaendert("art"):
+                    b.verguetungsart = v_art.get() or "Honorar"
+                if neu or geaendert("notiz"):
+                    b.notizen = v_notiz.get().strip()
+                if neu or geaendert("still") or geaendert("grund"):
+                    b.stillgelegt = v_still.get()
+                    b.stillgelegt_grund = (v_grund.get().strip()
+                                           if v_still.get() else "")
+                if neu or geaendert("gesondert"):
+                    b.gesondert = v_gesondert.get()
+                b.mwst_pflichtig = z["mwst"].get()
+                b.vorauszahlung = voraus
+                eigene = (z["art"].get(), z["wert"].get()) != z["anfang"]
+                if neu or eigene or geld_jetzt != geld_anfang:
+                    alte_freimenge = b.kondition.freimenge
+                    b.kondition = kond
+                    if kond.freimenge:
+                        bisher = stueck(v_bisher)
+                        if (neu or bisher != bisher_alt
+                                or kond.freimenge != alte_freimenge):
+                            core.setze_freimenge_stand(b, jahr, bisher)
+                if v_erledigt.get():
+                    weg = set(core.pruefhinweise(b))
+                    b.nachpflege = [h for h in b.nachpflege if h not in weg]
+                if neu:
+                    if not b.kennung:
+                        b.kennung = self.bestand.naechste_kennung("B")
+                    z["e"].buecher.append(b)
             fertig["ok"] = True
             fenster.destroy()
 
@@ -1000,13 +1162,13 @@ class App(Tk):
 
     def _baue_stammdaten(self):
         seite = ttk.Frame(self.reiter)
-        self.reiter.add(seite, text="1. Autoren und Bücher")
+        self.reiter.add(seite, text="1. Autoren")
         self._anleitung(seite, (
-            "Hier stehen alle Autoren mit ihren Büchern, Anschriften und "
-            "Bankverbindungen. Beim allerersten Mal holen Sie die Daten mit "
-            "dem Knopf rechts aus der alten Excel-Tabelle. Danach müssen Sie "
-            "hier nur noch etwas tun, wenn ein Autor umzieht oder ein Buch "
-            "dazukommt."))
+            "Hier stehen alle Autoren mit Anschriften und Bankverbindungen. "
+            "Beim allerersten Mal holen Sie die Daten mit dem Knopf rechts "
+            "aus der alten Excel-Tabelle. Danach müssen Sie hier nur noch "
+            "etwas tun, wenn ein Autor umzieht oder dazukommt — Bücher "
+            "stehen auf Reiter 2."))
 
         oben = ttk.Frame(seite)
         oben.pack(fill="x", **PAD)
@@ -1031,13 +1193,54 @@ class App(Tk):
         ttk.Label(seite, text="Doppelklick auf eine Zeile zeigt Anschrift, "
                               "Bücher und die vereinbarte Vergütung."
                   ).pack(anchor="w", padx=12)
-        self._weiter(seite, 1, "Weiter zu Schritt 2: Zahlen eintragen  ▸")
+        self._weiter(seite, 1, "Weiter zu Schritt 2: Bücher  ▸")
 
-    # --- Reiter 2: Jahreserfassung ------------------------------------
+    # --- Reiter 2: Bücher ---------------------------------------------
+
+    def _baue_buecher(self):
+        seite = ttk.Frame(self.reiter)
+        self.reiter.add(seite, text="2. Bücher")
+        self._anleitung(seite, (
+            "Hier stehen alle Bücher mit der vereinbarten Vergütung. "
+            "Doppelklick auf ein Buch ändert seine Angaben — Preis, Satz, ab "
+            "dem wievielten Exemplar Honorar gezahlt wird. Ein neues Buch "
+            "legen Sie mit „Neues Buch …“ an; gefragt wird zuerst, zu "
+            "welchem Autor es gehört."))
+
+        oben = ttk.Frame(seite)
+        oben.pack(fill="x", **PAD)
+        ttk.Label(oben, text="Suchen:").pack(side="left")
+        feld = ttk.Entry(oben, textvariable=self.suche_buecher, width=36)
+        feld.pack(side="left", padx=6)
+        feld.bind("<KeyRelease>", lambda e: self._zeige_buecher())
+        ttk.Button(oben, text="Neues Buch …",
+                   command=self._neues_buch_waehlen).pack(side="left",
+                                                          padx=(16, 4))
+        ttk.Button(oben, text="Buch ändern …",
+                   command=self._aendere_gewaehltes_buch).pack(side="left")
+        ttk.Button(oben, text="Buch entfernen …",
+                   command=self._entferne_gewaehltes_buch).pack(
+                       side="left", padx=(12, 0))
+        # Gut hundert stillgelegte Titel: sichtbar nur auf Wunsch, sonst
+        # gehen die laufenden darin unter.
+        ttk.Checkbutton(oben, text="auch Bücher zeigen, die nicht mehr "
+                                   "abgerechnet werden",
+                        variable=self.zeige_stillgelegte,
+                        command=self._zeige_buecher).pack(side="right")
+
+        self.baum_buecher = self._liste(
+            seite, SPALTEN_BUECHER,
+            doppelklick=lambda _e: self._aendere_gewaehltes_buch())
+        self.baum_buecher.tag_configure("still", foreground="#888888")
+        ttk.Label(seite, text="Doppelklick auf ein Buch ändert seine "
+                              "Angaben.").pack(anchor="w", padx=12)
+        self._weiter(seite, 2, "Weiter zu Schritt 3: Zahlen eintragen  ▸")
+
+    # --- Reiter 3: Jahreserfassung ------------------------------------
 
     def _baue_erfassung(self):
         seite = ttk.Frame(self.reiter)
-        self.reiter.add(seite, text="2. Zahlen eintragen")
+        self.reiter.add(seite, text="3. Zahlen eintragen")
         self._anleitung(seite, (
             "Das ist die eigentliche Arbeit: Tragen Sie für jedes Buch ein, "
             "wie viele Exemplare im Abrechnungsjahr verkauft wurden und wie "
@@ -1082,13 +1285,13 @@ class App(Tk):
             "für Staffel und Freimenge mit, lösen aber keine Auszahlung aus. "
             "Was an einem Buch sonst besonders ist, steht rechts.")
         ).pack(anchor="w")
-        self._weiter(seite, 2, "Weiter zu Schritt 3: Nachrechnen  ▸")
+        self._weiter(seite, 3, "Weiter zu Schritt 4: Nachrechnen  ▸")
 
-    # --- Reiter 3: Durchlauf ------------------------------------------
+    # --- Reiter 4: Durchlauf ------------------------------------------
 
     def _baue_durchlauf(self):
         seite = ttk.Frame(self.reiter)
-        self.reiter.add(seite, text="3. Nachrechnen")
+        self.reiter.add(seite, text="4. Nachrechnen")
         self._anleitung(seite, (
             "Hier sehen Sie, was jeder Autor bekommt, bevor ein einziger "
             "Brief geschrieben wird. Grau heißt: bekommt keinen Brief, weil "
@@ -1127,13 +1330,13 @@ class App(Tk):
                   foreground="#8a5a00").pack(side="left")
         ttk.Label(legende, text="  ·  Doppelklick auf eine Zeile zeigt, wie der "
                                 "Betrag zustande kommt").pack(side="left")
-        self._weiter(seite, 3, "Weiter zu Schritt 4: Briefe und Listen  ▸")
+        self._weiter(seite, 4, "Weiter zu Schritt 5: Briefe und Listen  ▸")
 
-    # --- Reiter 4: Ausgaben -------------------------------------------
+    # --- Reiter 5: Ausgaben -------------------------------------------
 
     def _baue_ausgaben(self):
         seite = ttk.Frame(self.reiter)
-        self.reiter.add(seite, text="4. Briefe und Listen")
+        self.reiter.add(seite, text="5. Briefe und Listen")
         self._anleitung(seite, (
             "Zum Schluss werden die Briefe und die beiden Listen geschrieben. "
             "Alles landet in einem Ordner, den Sie unten öffnen können. "
@@ -1161,7 +1364,7 @@ class App(Tk):
             "Einzelheiten zu jedem Schritt stehen im Reiter „Meldungen“.")
         ).pack(anchor="w", padx=12, pady=(2, 0))
 
-    # --- Reiter 5: Meldungen ------------------------------------------
+    # --- Reiter 6: Meldungen ------------------------------------------
 
     def _baue_meldungen(self):
         """Ein eigener Reiter für alles, was das Werkzeug zu sagen hat.
@@ -1193,7 +1396,7 @@ class App(Tk):
         self._zaehle_meldungen()
 
     def _zeige_meldungen(self):
-        """Zum Meldungsreiter wechseln (Index 4)."""
+        """Zum Meldungsreiter wechseln (der Reiter nach den Schritten)."""
         self.reiter.select(len(SCHRITTE))
 
     def _zaehle_meldungen(self):
@@ -1411,7 +1614,7 @@ class App(Tk):
                 hinweise.append(f"{gesondert} wartet auf Entscheidung"
                                 if gesondert == 1 else
                                 f"{gesondert} warten auf Entscheidung")
-            offen = sum(1 for b in e.buecher if b.nachpflege)
+            offen = sum(1 for b in e.buecher if core.pruefhinweise(b))
             if offen:
                 hinweise.append("1 Buch bitte prüfen" if offen == 1
                                 else f"{offen} Bücher bitte prüfen")
@@ -1419,6 +1622,182 @@ class App(Tk):
             baum.insert("", "end", iid=e.kennung, values=(
                 e.anzeigename, f"{e.plz} {e.ort}".strip(), e.iban,
                 len(e.buecher), hinweis))
+        # Jede Änderung an Autoren oder Büchern zeichnet diese Liste neu —
+        # die Bücherliste hängt sich daran, statt an zehn Stellen gerufen
+        # zu werden.
+        if hasattr(self, "baum_buecher"):
+            self._zeige_buecher()
+
+    # -----------------------------------------------------------------
+    # Reiter 2: Bücher anzeigen
+    # -----------------------------------------------------------------
+
+    def _zeige_buecher(self):
+        baum = self.baum_buecher
+        auswahl = baum.selection()
+        for k in baum.get_children(""):
+            baum.delete(k)
+        suche = self.suche_buecher.get().strip().lower()
+        alle = self.zeige_stillgelegte.get()
+        # Ein Buch mit mehreren Autoren steht im Bestand einmal je Autor —
+        # in der Liste aber nur einmal, mit allen Namen. Die Zeile trägt die
+        # Kennung des ersten Eintrags; der Dialog holt die übrigen dazu.
+        gruppen: dict[str, list] = {}
+        for e, b in self.bestand.buecher():
+            gruppen.setdefault(self._buchschluessel(b) or b.kennung,
+                               []).append((e, b))
+        for gruppe in gruppen.values():
+            still = all(b.stillgelegt for _, b in gruppe)
+            if still and not alle:
+                continue
+            e, b = gruppe[0]
+            namen = " / ".join(" · ".join(x.anzeigename.split("\n"))
+                               for x, _ in gruppe)
+            if suche and suche not in (b.titel + " " + b.isbn + " "
+                                       + namen).lower():
+                continue
+            betraege = " / ".join(core.euro(core.satz_aus_kondition(
+                y.kondition)) for _, y in gruppe)
+            baum.insert("", "end", iid=b.kennung, values=(
+                b.isbn, b.titel, namen, b.verguetungsart, betraege,
+                core.besonderheit(b)),
+                tags=("still",) if still else ())
+        # Nach dem Ändern steht die Liste neu da; ohne das hier wäre das
+        # gerade bearbeitete Buch aus dem Blick.
+        if auswahl and baum.exists(auswahl[0]):
+            baum.selection_set(auswahl[0])
+            baum.see(auswahl[0])
+
+    def _gewaehltes_buch(self):
+        auswahl = self.baum_buecher.selection()
+        if not auswahl:
+            messagebox.showinfo(
+                "Erst ein Buch auswählen",
+                "Bitte in der Liste die Zeile anklicken, um die es geht.")
+            return None
+        return next(((e, b) for e, b in self.bestand.buecher()
+                     if b.kennung == auswahl[0]), None)
+
+    def _aendere_gewaehltes_buch(self):
+        paar = self._gewaehltes_buch()
+        if paar is not None:
+            self._aendere_buch(*paar)
+
+    def _entferne_gewaehltes_buch(self):
+        paar = self._gewaehltes_buch()
+        if paar is None:
+            return
+        gruppe = self._buchgruppe(*paar)
+        if len(gruppe) == 1:
+            self._entferne_buch(*paar)
+            return
+        # Für ein Buch mit mehreren Autoren EINE Rückfrage, nicht drei.
+        namen = "\n".join(f"  · {e.anzeigename}" for e, _ in gruppe)
+        jahre = sorted({j for _, b in gruppe for j, w in b.jahre.items()
+                        if w.erfasst})
+        verlust = (f"\n\nDamit gehen die erfassten Zahlen aus {len(jahre)} "
+                   f"Jahren unwiderruflich verloren." if jahre else "")
+        if not messagebox.askokcancel(
+                "Buch entfernen",
+                f"„{paar[1].titel}“ gehört {len(gruppe)} Autoren:\n{namen}"
+                f"\n\nBei allen entfernen?{verlust}\n\nSoll der Titel nur "
+                f"nicht mehr abgerechnet werden, ist „Buch ändern“ → „Wird "
+                f"nicht mehr abgerechnet“ der richtige Weg.",
+                icon="warning", default="cancel"):
+            return
+        for e, b in gruppe:
+            e.buecher.remove(b)
+        self.geaendert = True
+        self._rechnung_veraltet = bool(self.abrechnungen)
+        self._zeige_stammdaten()
+        self._zeige_erfassung()
+        self._male_schrittleiste()
+        self.status.set(f"„{paar[1].titel}“ entfernt — noch nicht "
+                        f"gespeichert.")
+
+    def _neues_buch_waehlen(self):
+        """Neues Buch: erst den Autor wählen, dann die Angaben."""
+        auswahl = self.baum_buecher.selection()
+        vorschlag = next((e for e, b in self.bestand.buecher()
+                          if auswahl and b.kennung == auswahl[0]), None)
+        e = self._waehle_empfaenger(vorschlag)
+        if e is None:
+            return
+        vorher = len(e.buecher)
+        self._neues_buch(e)
+        if len(e.buecher) > vorher:
+            neu = e.buecher[-1].kennung
+            if self.baum_buecher.exists(neu):
+                self.baum_buecher.selection_set(neu)
+                self.baum_buecher.see(neu)
+
+    def _waehle_empfaenger(self, vorschlag=None, eltern=None):
+        """Ein kleines Fenster: zu welchem Autor gehört das neue Buch?
+
+        Eine Liste mit Suchfeld statt einer Klappliste — bei 250 Namen
+        findet man in einer Klappliste niemanden.
+        """
+        fenster = Toplevel(eltern or self)
+        fenster.title("Zu welchem Autor gehört das Buch?")
+        fenster.transient(eltern or self)
+        _sperre_eingabe(fenster)
+        rahmen = ttk.Frame(fenster)
+        rahmen.pack(fill="both", expand=True, **PAD)
+        such = StringVar()
+        ttk.Label(rahmen, text="Suchen:").grid(row=0, column=0, sticky="w")
+        eingabe = ttk.Entry(rahmen, textvariable=such, width=40)
+        eingabe.grid(row=0, column=1, sticky="ew", padx=(6, 0))
+        liste = Listbox(rahmen, width=60, height=18, exportselection=False)
+        liste.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=(8, 0))
+        rahmen.rowconfigure(1, weight=1)
+        rahmen.columnconfigure(1, weight=1)
+        ttk.Label(rahmen, foreground="#555555", text=(
+            "Steht der Autor noch nicht in der Liste, legen Sie ihn zuerst "
+            "auf Reiter 1 mit „Neuer Autor …“ an.")).grid(
+                row=2, column=0, columnspan=2, sticky="w", pady=(6, 0))
+
+        alle = sorted(self.bestand.empfaenger,
+                      key=lambda x: x.anzeigename.lower())
+        sichtbar: list = []
+
+        def fuelle(*_):
+            text = such.get().strip().lower()
+            sichtbar[:] = [x for x in alle
+                           if not text or text in x.anzeigename.lower()]
+            liste.delete(0, END)
+            for x in sichtbar:
+                # Mehrzeilige Institutionen zeigt die Listbox sonst als
+                # Kästchen mitten im Namen.
+                liste.insert(END, " · ".join(x.anzeigename.split("\n")))
+            if sichtbar:
+                i = sichtbar.index(vorschlag) if vorschlag in sichtbar else 0
+                liste.selection_set(i)
+                liste.see(i)
+        such.trace_add("write", fuelle)
+        fuelle()
+
+        gewaehlt = {"e": None}
+
+        def nehmen(_e=None):
+            i = liste.curselection()
+            if not i:
+                return
+            gewaehlt["e"] = sichtbar[i[0]]
+            fenster.destroy()
+
+        liste.bind("<Double-1>", nehmen)
+        leiste = ttk.Frame(fenster)
+        leiste.pack(fill="x", padx=12, pady=(0, 12))
+        ttk.Button(leiste, text="Weiter", command=nehmen).pack(side="right")
+        ttk.Button(leiste, text="Abbrechen",
+                   command=fenster.destroy).pack(side="right", padx=6)
+        fenster.bind("<Return>", nehmen)
+        fenster.bind("<Escape>", lambda _e: fenster.destroy())
+        eingabe.focus_set()
+        self.wait_window(fenster)
+        if eltern is not None and eltern.winfo_exists():
+            _sperre_eingabe(eltern)     # die Sperre ging an dieses Fenster
+        return gewaehlt["e"]
 
     def _gewaehlter_empfaenger(self):
         auswahl = self.baum_stamm.selection()
@@ -1435,15 +1814,19 @@ class App(Tk):
         if e is not None:
             self._neues_buch(e)
 
-    def _zeige_empfaenger(self, ereignis=None):
-        auswahl = self.baum_stamm.selection()
-        if not auswahl:
-            return
-        e = next((x for x in self.bestand.empfaenger
-                  if x.kennung == auswahl[0]), None)
+    def _zeige_empfaenger(self, ereignis=None, e=None, eltern=None):
+        """Das Fenster eines Autors. Ohne ``e`` der in der Liste gewählte."""
         if e is None:
-            return
-        fenster = Toplevel(self)
+            auswahl = self.baum_stamm.selection()
+            if not auswahl:
+                return None
+            e = next((x for x in self.bestand.empfaenger
+                      if x.kennung == auswahl[0]), None)
+        if e is None:
+            return None
+        fenster = Toplevel(eltern or self)
+        if eltern is not None:
+            fenster.transient(eltern)
         fenster.title(e.anzeigename)
         fenster.geometry("900x620")
         kopf = ttk.LabelFrame(fenster, text="Anschrift")
@@ -1533,9 +1916,10 @@ class App(Tk):
 
         ttk.Button(buchknoepfe, text="Buch entfernen …",
                    command=entfernen).pack(side="left", padx=(12, 0))
+        return fenster
 
     # -----------------------------------------------------------------
-    # Reiter 2: Jahreserfassung
+    # Reiter 3: Jahreserfassung
     # -----------------------------------------------------------------
 
     def _erfassungszeilen(self):
@@ -1735,7 +2119,7 @@ class App(Tk):
         return None
 
     # -----------------------------------------------------------------
-    # Reiter 3: Durchlauf
+    # Reiter 4: Durchlauf
     # -----------------------------------------------------------------
 
     def _rechnen(self):
@@ -1972,24 +2356,24 @@ class App(Tk):
             feld.insert(END, zeile + "\n", marke)
 
     # -----------------------------------------------------------------
-    # Reiter 4: Ausgaben
+    # Reiter 5: Ausgaben
     # -----------------------------------------------------------------
 
     def _bereit(self) -> bool:
         if not self.abrechnungen:
             messagebox.showinfo(
                 "Erst die Beträge berechnen",
-                "Bitte zuerst auf Reiter „3. Nachrechnen“ den Knopf "
+                "Bitte zuerst auf Reiter „4. Nachrechnen“ den Knopf "
                 "„Beträge berechnen“ drücken.")
             return False
         if getattr(self, "_rechnung_veraltet", False):
             messagebox.showwarning(
                 "Die Zahlen haben sich geändert",
                 "Seit dem letzten Rechnen wurden Stückzahlen geändert.\n\n"
-                "Bitte auf Reiter „3. Nachrechnen“ noch einmal „Beträge "
+                "Bitte auf Reiter „4. Nachrechnen“ noch einmal „Beträge "
                 "berechnen“ drücken — sonst stünden in den Briefen die alten "
                 "Beträge.")
-            self.reiter.select(2)
+            self.reiter.select(3)
             return False
         return True
 

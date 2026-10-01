@@ -8,16 +8,16 @@ bisher in von Hand getippten Zellformeln steckte.
 
 ## Ablauf
 
-Die vier Reiter sind die vier Schritte, und ihre Beschriftung zeigt den
+Die fünf Reiter sind die fünf Schritte, und ihre Beschriftung zeigt den
 Stand: ✓ fertig, ◐ angefangen, · noch nichts. Darunter steht immer **eine**
-Zeile „Als Nächstes: …". Ein fünfter Reiter *Meldungen* sammelt alles, was
+Zeile „Als Nächstes: …". Ein sechster Reiter *Meldungen* sammelt alles, was
 das Werkzeug zu sagen hat.
 
-1. **Einmalig:** *1. Autoren und Bücher → Daten aus der alten Excel-Tabelle
+1. **Einmalig:** *1. Autoren → Daten aus der alten Excel-Tabelle
    holen* — liest `Honorare_2025.xlsx` mit allen Blättern ein, inklusive der
    Jahreshistorie ab 2003. Danach ist die Altmappe Archiv.
 2. **Jeden Januar:**
-   1. *2. Zahlen eintragen* — verkaufte Exemplare, Eigenkauf und Korrektur
+   1. *3. Zahlen eintragen* — verkaufte Exemplare, Eigenkauf und Korrektur
       je Buch. Wer lieber in Excel tippt, nimmt das Blatt
       `Abrechnung <Jahr>` im Bestand; das Werkzeug liest die Zahlen beim
       Laden von dort. Doppelklick öffnet das Feld, die Eingabetaste
@@ -29,30 +29,49 @@ das Werkzeug zu sagen hat.
       ein Fehlbetrag aus mehr Rückgaben als Verkäufen (dann negativ), oder
       eine Menge, die schon abgerechnet wurde. Sie geht direkt in die
       Vergütungsexemplare ein und darf negativ sein.
-   2. *3. Nachrechnen → Beträge berechnen* — zeigt je Empfänger den Betrag.
+   2. *4. Nachrechnen → Beträge berechnen* — zeigt je Empfänger den Betrag.
       Grau = kein Brief, rot = bitte ansehen. **Doppelklick auf eine Zeile
       zeigt in ganzen Sätzen, wie der Betrag zustande kommt.**
-   3. *4. Briefe und Listen* — Briefe, dann (unter Windows) PDF, dann die
+   3. *5. Briefe und Listen* — Briefe, dann (unter Windows) PDF, dann die
       beiden Listen.
-   4. *1. Autoren und Bücher → Speichern.* Beim Schließen wird gefragt, falls
+   4. *1. Autoren → Speichern.* Beim Schließen wird gefragt, falls
       es vergessen wurde.
 
-Neue Autoren und Bücher legt man auf Reiter 1 an („Neuer Autor …", „Neues
-Buch …"). Das Detailfenster eines Autors — Doppelklick auf seine Zeile —
-zeigt seine Bücher als Liste; Doppelklick auf ein Buch ändert dessen
-Angaben, „Angaben ändern …" die Anschrift.
+Neue Autoren legt man auf Reiter *1. Autoren* an („Neuer Autor …"),
+„Angaben ändern …" im Detailfenster (Doppelklick auf die Zeile) ändert die
+Anschrift. Reiter *2. Bücher* listet jedes Buch einmal, bei mehreren
+Autoren mit „ / " getrennt; Doppelklick oder „Buch ändern …" öffnet den
+Buchdialog, „Neues Buch …" fragt zuerst, zu welchem Autor es gehört.
+
+Der Buchdialog bearbeitet ein Buch mit **allen** seinen Autoren. Im Bestand
+steht es weiter einmal je Autor (jeder bekommt seinen eigenen Brief), aber
+Titel, Ladenpreis, Staffel und Sonderregeln gelten für alle. Unter „Wer
+bekommt was je Exemplar" hat jeder Autor eine Zeile: *% vom VAP*,
+*Festbetrag* oder *gestaffelt* (dann mit „geteilt durch"), dazu
+MwSt-Pflicht und offene Vorauszahlung; darunter steht, was der Verlag je
+Exemplar insgesamt zahlt. „+ Mitautor …" fügt einen weiteren Autor an.
+Gemeinsame Angaben werden nur geschrieben, wenn sie im Dialog geändert
+wurden — eine abweichende Notiz eines Mitautors bleibt sonst stehen.
+
+**Honorar erst ab einer Stückzahl** („ab dem 201. Exemplar") ist im
+Buchdialog ein Haken mit zwei Feldern: ab dem wievielten Exemplar, und wie
+viele bis Ende des Vorjahres schon verkauft waren. Daneben steht, wie viele
+noch fehlen. Gezahlt wird automatisch, sobald die Schwelle überschritten ist
+— nur das, was darüber liegt, und nur einmal.
 
 **Ein Titel, der nicht mehr abgerechnet wird**, gehört *stillgelegt*, nicht
 gelöscht: im Buchdialog der Haken „Wird nicht mehr abgerechnet" plus ein
 Grund („Titel vergriffen", „verstorben"). Das Buch verschwindet dann aus
-Reiter 2 und aus jeder Berechnung, aber die erfassten Jahre bleiben — in
+Reiter 3 und aus jeder Berechnung, aber die erfassten Jahre bleiben — in
 fünf Jahren lässt sich noch nachsehen, was 2025 gezahlt wurde. Der zweite
-Haken, „Wird gesondert abgerechnet", ist für die Verträge aus
-`Zahlung ab XX Ex.`: sie zählen für Staffel und Freimenge mit, lösen aber
-keine Auszahlung aus und erscheinen im Blatt `Offene Sonderfälle`.
+Haken, „Sonderfall: Honorar entscheidet der Verlag von Hand", ist für
+Verträge, deren Schwelle keine Zahl ist (ab der zweiten Auflage,
+Garantiehonorar, E-Book erst mit dem gedruckten Buch): sie zählen mit,
+lösen aber keine Auszahlung aus und erscheinen im Blatt
+`Offene Sonderfälle`.
 
 **Wirklich entfernen** — „Autor entfernen …" auf Reiter 1, „Buch entfernen …"
-im Detailfenster — ist nur für das, was versehentlich angelegt wurde. Die
+auf Reiter 2 oder im Detailfenster — ist nur für das, was versehentlich angelegt wurde. Die
 Rückfrage zählt auf, wie viele Jahre dabei verloren gehen, und nennt das
 Stilllegen als Alternative.
 
@@ -357,20 +376,14 @@ einen einzigen Brief; das Werkzeug weist das bei ihnen aus.
 
 ## Offene Punkte für den Verlag
 
-1. **Die Verträge aus „Zahlung ab XX Ex." (68 Bücher, 741,67 € an 20
-   Empfänger).** Zu finden sind sie an drei Stellen: im Reiter *3.
-   Nachrechnen* über das Häkchen **„nur die offenen Sonderfälle"** (braun
-   markiert), im Blatt `Offene Sonderfälle <Jahr>` der Listendatei — dort
-   mit Buch, Betrag, Bankverbindung und Herkunftszeile — und im Blatt
-   `Regeln` des Bestands. Das ist nötig, weil **19 der 20 gar keinen Brief
-   bekommen** und sonst zwischen 250 grauen Zeilen verschwänden. Sie sind als
-   „Gesondert abrechnen" übernommen und lösen derzeit **keine** Zahlung aus —
-   die sichere Annahme, weil die Altmappe dort nur einen Stand führt und fast
-   niemand davon in der Zahlungsliste auftaucht. Wie diese Verträge wirklich
-   abgerechnet werden, muss der Verlag sagen; danach den Haken in der Spalte
-   „Gesondert abrechnen" entfernen. **Das Werkzeug weist den Betrag bei
-   jedem Durchlauf aus** („20 Empfänger bekommen zusammen 741,67 € NICHT"),
-   damit die offene Entscheidung nicht in einem Protokoll versandet.
+1. **Die Verträge aus „Zahlung ab XX Ex.".** Geklärt für 56 der 68
+   Bücher (Oktober 2026): das Blatt ist der Laufzettel für Verträge, die erst
+   ab einer Stückzahl zahlen, und die steht in der Notiz. Diese Bücher laufen
+   als gewöhnliche Schwelle mit; 2025 erreicht keines sie. **Offen bleiben
+   12**, deren Schwelle keine Zahl ist (ab der zweiten Auflage,
+   Garantiehonorar, E-Book erst mit dem Buch). Sie stehen auf „Sonderfall"
+   und sind zu finden im Reiter *4. Nachrechnen* über das Häkchen **„nur die
+   offenen Sonderfälle"** und im Blatt `Offene Sonderfälle <Jahr>`.
 2. **Staffel — ein Satz oder tranchenweise?** Wird beim Überschreiten der
    Grenze der höhere Satz nur auf die darüberliegenden Exemplare angewandt
    oder auf die ganze Jahresmenge? Umgesetzt ist derzeit „ein Satz je Jahr“.
