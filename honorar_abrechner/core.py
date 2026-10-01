@@ -1867,9 +1867,19 @@ def _lies_buch(bestand: Bestand, zeile: tuple, zeile_f: tuple, idx: dict,
         # Kein Vertrag herauszulesen — dann wenigstens der Betrag, damit die
         # Abrechnung auf den Cent stimmt. Die Kondition holt der Verlag nach.
         kond = Kondition(betrag_je_ex=wert)
-        if isinstance(roh, str) and roh.startswith("="):
+        # „=ROUND(0.6,2)“ ist kein Rätsel, sondern ein fester Betrag in
+        # Formelgestalt — dafür braucht es keinen Hinweis. Gemeldet wird
+        # nur, was wirklich rechnet und sich nicht zerlegen ließ, etwa ein
+        # Betrag mit wieder aufgeschlagener MwSt.
+        konstante = isinstance(roh, str) and re.fullmatch(
+            r"=\s*(ROUND\(\s*)?[\d.]+\s*(,\s*\d+\s*\))?\s*", roh, re.I)
+        if isinstance(roh, str) and roh.startswith("=") and not konstante:
             hinweis = grund
-            buch.nachpflege.append(f"Satzformel nicht gedeutet: {roh}")
+            buch.nachpflege.append(
+                f"Die alte Excel rechnet hier {roh} — das ließ sich nicht in "
+                f"Ladenpreis und Satz zerlegen. Übernommen ist das Ergebnis, "
+                f"{euro(wert or 0)} je Exemplar, als fester Betrag. Bitte "
+                f"prüfen, ob das der Vertrag ist.")
     else:
         # Gegenprobe: erst wenn der zerlegte Vertrag den Zellwert trifft,
         # wird er übernommen. Sonst gilt wieder der nackte Betrag.
