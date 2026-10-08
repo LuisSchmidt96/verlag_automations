@@ -57,7 +57,9 @@ CONFIG_PFAD = APP_DIR / "config.json"
 # Config mehr: sie werden je Buch in der Oberfläche gewählt.
 DEFAULT_UMGEBUNG = {
     # --- Zugang (Admin -> Einstellungen -> System -> Integrationen) ----------
-    "shop_url": "",                 # z. B. https://shop.verlag-regionalkultur.de
+    # Leer — die Adresse steht JE UMGEBUNG in DEFAULT_CONFIG["umgebungen"].
+    # Ohne /api und ohne Schrägstrich am Ende.
+    "shop_url": "",
     "access_key_id": "",            # wie ein Benutzername — nicht geheim
     # Das Secret liegt NIE im Klartext auf der Platte: es wird mit einem
     # Schlüssel verschlüsselt, der aus dem Master-Passwort abgeleitet wird
@@ -90,9 +92,24 @@ DEFAULT_CONFIG = {
 
     # --- Umgebungen ---------------------------------------------------------
     "aktive_umgebung": "dev",
+    # Die Shop-Adresse steht hier je Umgebung und bewusst NICHT in
+    # DEFAULT_UMGEBUNG: von dort bekämen dev und prod dieselbe, und ein
+    # Dev-Lauf schriebe in den Livesystem-Shop. Dieselbe Trennung wie bei der
+    # Web-Wurzel im Buchdurchgang.
     "umgebungen": {
-        "dev": dict(DEFAULT_UMGEBUNG),
-        "prod": dict(DEFAULT_UMGEBUNG),
+        # Dev-Store und Livesystem liegen auf DEMSELBEN Server, nur in
+        # verschiedenen Verzeichnissen (/var/www/dev-shopware/public gegen
+        # /var/www/shopware/public). Die beiden Adressen unterscheiden sich
+        # deshalb nur um das "dev." — wer sie verwechselt, schreibt in den
+        # echten Bestand. Vor dem Anlegen zeigt das Werkzeug die Ziel-URL an;
+        # dieser Hinweis ist der Grund dafür.
+        # Der Dev-Store steht hinter Basic-Auth — siehe README,
+        # "Dev-Store hinter Caddy": die blockt die Admin-API, solange die
+        # eigene IP nicht durchgelassen ist.
+        "dev": dict(DEFAULT_UMGEBUNG,
+                    shop_url="https://dev.verlag-regionalkultur.de"),
+        "prod": dict(DEFAULT_UMGEBUNG,
+                     shop_url="https://verlag-regionalkultur.de"),
     },
 
     # --- Produkt-Voreinstellungen (shop-unabhängig) --------------------------
@@ -233,6 +250,15 @@ def _migriere(cfg: dict) -> dict:
         for umg in (cfg.get("umgebungen") or {}).values():
             umg.pop("category_id", None)
         cfg["config_version"] = DEFAULT_CONFIG["config_version"]
+
+    # Shop-Adresse nachtragen, wo noch keine steht. Nur FÜLLEN, nie
+    # überschreiben: eine eingetragene Adresse gehört dem Anwender — sonst
+    # zöge ein Update ihm den Shop unter den Füßen weg.
+    for name, umg in (cfg.get("umgebungen") or {}).items():
+        if not (umg.get("shop_url") or "").strip():
+            vorgabe = DEFAULT_CONFIG["umgebungen"].get(name) or {}
+            if vorgabe.get("shop_url"):
+                umg["shop_url"] = vorgabe["shop_url"]
     return cfg
 
 
@@ -246,10 +272,14 @@ def lade_config() -> dict:
         for name, umg in cfg.get("umgebungen", {}).items():
             for k, v in DEFAULT_UMGEBUNG.items():
                 umg.setdefault(k, v)
-        return cfg
-    with open(CONFIG_PFAD, "w", encoding="utf-8") as f:
-        json.dump(DEFAULT_CONFIG, f, indent=2, ensure_ascii=False)
-    return json.loads(json.dumps(DEFAULT_CONFIG))     # tiefe Kopie
+    else:
+        with open(CONFIG_PFAD, "w", encoding="utf-8") as f:
+            json.dump(DEFAULT_CONFIG, f, indent=2, ensure_ascii=False)
+        cfg = json.loads(json.dumps(DEFAULT_CONFIG))     # tiefe Kopie
+    # Zuletzt: der geteilte Zugang vom Share. Er füllt nur, was örtlich leer
+    # ist — und wird beim Speichern wieder herausgenommen, damit er nicht in
+    # die config.json jedes Anwenders sickert.
+    return uebernimm_zugang(cfg)
 
 
 # ---------------------------------------------------------------------
@@ -289,8 +319,14 @@ def effektiv(cfg: dict) -> dict:
 
 
 def speichere_config(cfg: dict) -> None:
+    # Was vom Share kam, gehört nicht in die örtliche Datei — sonst hätte
+    # jeder Anwender nach dem ersten „Verbinden“ seine eigene Kopie des
+    # Zugangs, und ein gewechseltes Secret erreichte ihn nie wieder.
+    hinaus = json.loads(json.dumps(cfg))
+    for name, umg in (hinaus.get("umgebungen") or {}).items():
+        entferne_share_felder(umg, f"umgebung:{name}")
     with open(CONFIG_PFAD, "w", encoding="utf-8") as f:
-        json.dump(cfg, f, indent=2, ensure_ascii=False)
+        json.dump(hinaus, f, indent=2, ensure_ascii=False)
 
 
 # ---------------------------------------------------------------------
@@ -355,6 +391,200 @@ def klartext_secret_vorhanden(umg: dict) -> str:
     """Altlast: Secret aus einer früheren Version, das noch im Klartext steht.
     Wird beim ersten Start mit Passwort verschlüsselt."""
     return umg.get("secret_access_key") or ""
+
+
+# ---------------------------------------------------------------------
+# Geteilter Zugang: eine Datei auf dem Share, sonst nichts
+# ---------------------------------------------------------------------
+#
+# Niemand tippt Zugangsdaten mehr ein. Die Werkzeuge lesen sie beim Start von
+# einer Datei auf dem Share; abgefragt wird nur noch das Master-Passwort, und
+# das erst, wenn jemand den Shop oder SFTP wirklich benutzt.
+#
+# Aufbau — eine Zeile je Abschnitt, mit Strichpunkt getrennt:
+#
+#     prod;SWIA...;<blob>
+#     dev;SWIA...;<blob>
+#     sftp;sftpuser;<blob>
+#
+#   1. Abschnitt: Name einer Umgebung ("dev"/"prod") oder "sftp".
+#   2. Kennung:   Zugriffsschlüssel-ID bzw. SFTP-Benutzer. Beides ist ein
+#                 Benutzername, kein Geheimnis.
+#   3. Blob:      base64(salt + nonce + ciphertext), siehe unten.
+#
+# Leerzeilen und Zeilen ab "#" werden übersprungen.
+#
+# WARUM DAS SALT IM BLOB STECKT: aus dem Master-Passwort wird der Schlüssel
+# per scrypt abgeleitet, und scrypt braucht dabei dasselbe Salt wie beim
+# Verschlüsseln. Ein Chiffretext ohne Salt lässt sich nicht öffnen. Statt
+# einer vierten Spalte, die man beim Weiterreichen verlieren kann, steht
+# deshalb alles in einem Feld: die ersten 16 Byte sind das Salt, die nächsten
+# 12 die Nonce, der Rest der Chiffretext.
+#
+# IN DER DATEI STEHT NUR, WOMIT man sich anmeldet — nie, WOHIN. Die Adressen
+# stehen fest im Code (siehe DEFAULT_CONFIG["umgebungen"]). Stünde shop_url
+# hier, könnte jeder, der die Datei beschreiben darf, sie auf einen eigenen
+# Server zeigen lassen und bekäme beim nächsten Verbinden die Schlüssel-ID
+# und das ENTSCHLÜSSELTE Secret zugeschickt — der Token-Aufruf geht an
+# shop_url. Diese Trennung ist der Grund für den Zuschnitt der Datei.
+#
+# Die Verschlüsselung ist die zweite Verteidigungslinie, nicht die erste: der
+# eigentliche Schutz sind die Zugriffsrechte auf der Datei.
+
+SHARE_ZUGANG = r"\\VR-Archiv\VR-Austausch\VR-Tools\zugang.txt"
+
+ZUGANG_TRENNER = ";"
+SALT_LEN, NONCE_LEN = 16, 12
+
+# Was aus der geteilten Datei kam, gemerkt je Abschnitt — im Speicher, nicht
+# in der Konfiguration. `entferne_share_felder` nimmt es vor dem Speichern
+# wieder heraus: sonst schriebe das erste Verbinden den Zugang in die örtliche
+# config.json jedes Anwenders. Die Kopien wären zurück, und ein gewechseltes
+# Secret erreichte sie nie wieder.
+#
+# Gemerkt wird der WERT, nicht bloß der Feldname: sonst verlöre jemand, der
+# sich örtlich etwas anderes setzt, es beim Speichern wieder.
+_AUS_SHARE: dict[str, dict[str, str]] = {}
+
+
+def zugang_pfad() -> Path:
+    """Wo die geteilte Zugangsdatei liegt.
+
+    Über die Umgebungsvariable VR_TOOLS_ZUGANG umstellbar — für Tests, für
+    einen Umzug des Shares und für den Knopf, mit dem man die Datei von Hand
+    aussucht, wenn sie am gewohnten Ort fehlt.
+    """
+    return Path(os.environ.get("VR_TOOLS_ZUGANG") or SHARE_ZUGANG)
+
+
+def blob_bauen(klartext: str, passwort: str) -> str:
+    """Ein Geheimnis zu EINEM Feld verschlüsseln: salt + nonce + ciphertext.
+
+    Selbsttragend — mehr als das Master-Passwort braucht es zum Öffnen nicht.
+    """
+    if not passwort:
+        raise PasswortFehler("Master-Passwort darf nicht leer sein.")
+    salt = os.urandom(SALT_LEN)
+    nonce = os.urandom(NONCE_LEN)
+    ct = _aesgcm(_kdf(passwort, salt)).encrypt(nonce, klartext.encode("utf-8"),
+                                               None)
+    return base64.b64encode(salt + nonce + ct).decode()
+
+
+def blob_teilen(blob: str) -> tuple[str, str]:
+    """Blob in die beiden Felder zerlegen, mit denen der Rest des Werkzeugs
+    ohnehin arbeitet: (secret_enc, kdf_salt).
+
+    So bleibt `hole_secret` unverändert — das Dateiformat ist nur eine Frage
+    der Schreibweise, nicht der Verschlüsselung.
+    """
+    roh = base64.b64decode(blob, validate=True)
+    if len(roh) <= SALT_LEN + NONCE_LEN:
+        raise ValueError("Blob zu kurz")
+    return (base64.b64encode(roh[SALT_LEN:]).decode(),
+            base64.b64encode(roh[:SALT_LEN]).decode())
+
+
+def zugang_zeile(abschnitt: str, kennung: str, klartext: str,
+                 passwort: str) -> str:
+    """Eine fertige Zeile für die Zugangsdatei bauen."""
+    for feld, name in ((abschnitt, "Abschnitt"), (kennung, "Kennung")):
+        if ZUGANG_TRENNER in feld:
+            raise ValueError(f"{name} darf kein {ZUGANG_TRENNER!r} enthalten.")
+    return ZUGANG_TRENNER.join(
+        (abschnitt.strip(), kennung.strip(), blob_bauen(klartext, passwort)))
+
+
+def lade_zugang(pfad=None) -> dict:
+    """Die geteilte Zugangsdatei lesen -> {abschnitt: (kennung, blob)}.
+
+    Fehlt sie, ist sie unlesbar oder der Share nicht erreichbar, ist das KEIN
+    Fehler: dann fehlt eben der Zugang. Ein Werkzeug, das ohne Share nicht
+    mehr startet, wäre schlimmer als eines ohne Shop-Schritt.
+    """
+    p = Path(pfad) if pfad else zugang_pfad()
+    try:
+        text = p.read_text(encoding="utf-8")
+    except OSError:
+        return {}
+    daten: dict[str, tuple[str, str]] = {}
+    for zeile in text.splitlines():
+        zeile = zeile.strip()
+        if not zeile or zeile.startswith("#"):
+            continue
+        teile = [s.strip() for s in zeile.split(ZUGANG_TRENNER)]
+        if len(teile) != 3 or not all(teile):
+            continue                      # unvollständige Zeile: überlesen
+        abschnitt, kennung, blob = teile
+        try:
+            blob_teilen(blob)             # nur prüfen, ob er brauchbar ist
+        except Exception:                 # base64-Müll fällt hier auf
+            continue
+        daten[abschnitt.lower()] = (kennung, blob)
+    return daten
+
+
+def zugang_bericht(pfad=None) -> str:
+    """Eine Zeile fürs Protokoll: was wurde gefunden, was nicht.
+
+    Ohne das steht bei einer vertippten Datei nur "kein Secret hinterlegt" da,
+    und niemand weiß, ob die Datei fehlt, leer ist oder krumm.
+    """
+    p = Path(pfad) if pfad else zugang_pfad()
+    if not p.exists():
+        return f"Zugangsdatei nicht gefunden: {p}"
+    daten = lade_zugang(p)
+    if not daten:
+        return f"Zugangsdatei ohne brauchbare Zeilen: {p}"
+    return f"Zugang gelesen ({', '.join(sorted(daten))}) aus {p}"
+
+
+def _uebernimm(ziel: dict, kennung_feld: str, kennung: str, blob: str,
+               merker: str) -> None:
+    """Nur FÜLLEN, nie überschreiben."""
+    try:
+        secret_enc, kdf_salt = blob_teilen(blob)
+    except Exception:
+        return
+    for feld, wert in ((kennung_feld, kennung), ("secret_enc", secret_enc),
+                       ("kdf_salt", kdf_salt)):
+        if wert and not (ziel.get(feld) or "").strip():
+            ziel[feld] = wert
+            _AUS_SHARE.setdefault(merker, {})[feld] = wert
+
+
+def uebernimm_zugang(cfg: dict, zugang: dict | None = None) -> dict:
+    """Den geteilten Zugang über die Umgebungen einer Shop-Konfiguration legen."""
+    z = lade_zugang() if zugang is None else zugang
+    for name, umg in (cfg.get("umgebungen") or {}).items():
+        eintrag = z.get(name.lower())
+        if eintrag:
+            _uebernimm(umg, "access_key_id", eintrag[0], eintrag[1],
+                       f"umgebung:{name}")
+    return cfg
+
+
+def uebernimm_sftp_zugang(ziel: dict, zugang: dict | None = None) -> dict:
+    """Dasselbe für das SFTP-Passwort (nur der Buchdurchgang benutzt es).
+
+    Der Benutzername steht auch in der Vorgabe; aus der Datei kommt er nur,
+    wenn dort noch nichts steht.
+    """
+    z = lade_zugang() if zugang is None else zugang
+    eintrag = z.get("sftp")
+    if eintrag:
+        _uebernimm(ziel, "benutzer", eintrag[0], eintrag[1], "sftp")
+    return ziel
+
+
+def entferne_share_felder(ziel: dict, merker: str) -> None:
+    """Vor dem Speichern: heraus mit allem, was UNVERÄNDERT vom Share kam.
+
+    Ein örtlich gesetztes Secret hat einen anderen Wert und bleibt stehen.
+    """
+    for feld, wert in _AUS_SHARE.get(merker, {}).items():
+        if (ziel.get(feld) or "").strip() == wert:
+            ziel.pop(feld, None)
 
 
 # ---------------------------------------------------------------------
@@ -778,6 +1008,15 @@ def finde_artikel_ordner(sc: str, cfg: dict) -> Path | None:
     return None
 
 
+def _erstes_bild(ordner: Path, muster: str, sc: str, dpis) -> Path | None:
+    """Erste vorhandene Datei für ein Namensmuster über mehrere DPI-Stufen."""
+    for dpi in dpis:
+        p = ordner / muster.format(dpi=dpi, sc=sc)
+        if p.exists():
+            return p
+    return None
+
+
 def finde_bilder(sc: str, cfg: dict, ordner: Path | None = None,
                  xml_pfad=None) -> dict:
     """Sucht die Bilder zum Kurzcode — an mehreren Orten.
@@ -808,44 +1047,48 @@ def finde_bilder(sc: str, cfg: dict, ordner: Path | None = None,
     m3d = cfg.get("muster_3d", DEFAULT_CONFIG["muster_3d"])
     dpi_web = int(cfg.get("dpi_web", 72))
     dpi_print = int(cfg.get("dpi_print", 300))
+    dpis = (dpi_web, dpi_print)                 # Web bevorzugt, Druck als Rückfall
 
     # -- Quelle 1: Artikeldaten-Share --------------------------------------
+    # Cover ist das 3D-Mockup — dasselbe Bild wie in der PI/BI und auf der
+    # Produktseite —, die flache 2D-Vorderseite kommt als Galeriebild dahinter.
+    # Fehlt das 3D (der 3D-Haken war beim Cover-Schritt aus), wird die
+    # 2D-Vorderseite zum Cover, damit ein Buch nie ganz ohne Cover dasteht.
     ordner = ordner or finde_artikel_ordner(sc, cfg)
     if ordner and ordner.is_dir():
         ergebnis["ordner"] = ordner
-        for dpi in (dpi_web, dpi_print):        # Web bevorzugt, Druck als Rückfall
-            p = ordner / m2d.format(dpi=dpi, sc=sc)
-            if p.exists():
-                ergebnis["cover"] = p
-                break
-        for dpi in (dpi_web, dpi_print):
-            p3 = ordner / m3d.format(dpi=dpi, sc=sc)
-            if p3.exists():
-                ergebnis["galerie"].append(p3)
-                break
+        c3d = _erstes_bild(ordner, m3d, sc, dpis)
+        c2d = _erstes_bild(ordner, m2d, sc, dpis)
+        if c3d:
+            ergebnis["cover"] = c3d
+            if c2d:
+                ergebnis["galerie"].append(c2d)
+        elif c2d:
+            ergebnis["cover"] = c2d
         if ergebnis["cover"]:
             ergebnis["quelle"] = "Artikeldaten-Share"
             return ergebnis
 
     # -- Quelle 2: neben der ONIX-Datei ------------------------------------
+    # Gleiche Regel wie oben: 3D-Mockup als Cover, 2D-Vorderseite dahinter.
     if xml_pfad:
         nachbar = Path(xml_pfad).parent
-        kandidaten = [m2d.format(dpi=dpi_print, sc=sc),
-                      m2d.format(dpi=dpi_web, sc=sc),
-                      f"{sc}.jpg", f"{sc}.png"]
-        for name in kandidaten:
+        c3d = _erstes_bild(nachbar, m3d, sc, (dpi_print, dpi_web))
+        c2d = None
+        for name in (m2d.format(dpi=dpi_print, sc=sc),
+                     m2d.format(dpi=dpi_web, sc=sc),
+                     f"{sc}.jpg", f"{sc}.png"):
             p = nachbar / name
             if p.exists():
-                ergebnis["cover"] = p
-                ergebnis["ordner"] = ergebnis["ordner"] or nachbar
-                ergebnis["quelle"] = "neben der ONIX-Datei"
+                c2d = p
                 break
-        if ergebnis["cover"] and not ergebnis["galerie"]:
-            for dpi in (dpi_print, dpi_web):
-                p3 = nachbar / m3d.format(dpi=dpi, sc=sc)
-                if p3.exists():
-                    ergebnis["galerie"].append(p3)
-                    break
+        cover = c3d or c2d
+        if cover:
+            ergebnis["cover"] = cover
+            ergebnis["ordner"] = ergebnis["ordner"] or nachbar
+            ergebnis["quelle"] = "neben der ONIX-Datei"
+            if c3d and c2d and not ergebnis["galerie"]:
+                ergebnis["galerie"].append(c2d)
 
     return ergebnis
 

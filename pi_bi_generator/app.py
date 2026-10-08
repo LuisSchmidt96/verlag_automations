@@ -207,7 +207,9 @@ class App(Tk):
         if not self.buch:
             return
         sc, isbn = self.buch.shortcode, self.buch.isbn13
-        kandidaten = [f"2D_300_{sc}.jpg", f"3D_300_{sc}.jpg",
+        # Ins .docx gehört das 3D-Mockup (wie auf der Produktseite), darum
+        # zuerst danach suchen; die flache 2D-Vorderseite nur als Rückfall.
+        kandidaten = [f"3D_300_{sc}.jpg", f"2D_300_{sc}.jpg",
                       f"{isbn}.jpg", f"{sc}.jpg", f"{sc}.png"]
         for name in kandidaten:
             p = xml_pfad.parent / name

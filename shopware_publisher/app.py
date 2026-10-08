@@ -13,7 +13,8 @@ Ablauf in der GUI:
 3. "Als Entwurf anlegen" -> Bilder hochladen + Produkt anlegen/aktualisieren.
 
 Die Bilder kommen vom cover_previews-Tool: sie werden anhand des Kurzcodes im
-Artikeldaten-Ordner des Buchs gesucht (2D_72_<sc>.jpg als Cover, 3D als Galerie).
+Artikeldaten-Ordner des Buchs gesucht (3D_<dpi>_<sc>.jpg als Cover, die flache
+2D-Vorderseite als Galeriebild dahinter).
 
 Ein zweiter Lauf zum selben Buch **aktualisiert** das Produkt (gleiche ISBN =
 gleiche Produkt-ID), es entsteht kein Duplikat.

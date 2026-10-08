@@ -319,8 +319,6 @@ class App(Tk):
         ttk.Label(r2, text="Benutzer:", width=13).pack(side="left")
         ttk.Entry(r2, textvariable=self.sftp_user).pack(
             side="left", fill="x", expand=True)
-        ttk.Button(r2, text="Passwort setzen…",
-                   command=self._sftp_passwort_setzen).pack(side="left", padx=(6, 0))
 
         # DATEISYSTEM-Pfad, nicht der URL-Pfad — und je Umgebung ein anderer:
         # dev und prod liegen auf demselben Server nebeneinander.
@@ -377,23 +375,6 @@ class App(Tk):
             self.presse_liste.insert(
                 END, f"\n Fehlt im Buchordner: {', '.join(fehlt)}")
         self.presse_liste.configure(state=DISABLED)
-
-    def _sftp_passwort_setzen(self):
-        pw = simpledialog.askstring("SFTP-Passwort",
-                                    f"Passwort für {self.sftp_user.get()}:",
-                                    show="*", parent=self)
-        if not pw:
-            return
-        master = simpledialog.askstring("Master-Passwort",
-                                        "Passwort zum Verschlüsseln:",
-                                        show="*", parent=self)
-        if not master:
-            return
-        self._merke_sftp()
-        sw.setze_secret(core.sftp_zugang(self.cfg), pw, master)
-        core.speichere_config(self.cfg)
-        self._sftp_pw = pw
-        messagebox.showinfo("Gesetzt", "SFTP-Passwort verschlüsselt gespeichert.")
 
     def _merke_sftp(self):
         z = core.sftp_zugang(self.cfg)
@@ -452,8 +433,10 @@ class App(Tk):
             return True
         z = core.sftp_zugang(self.cfg)
         if not sw.hat_secret(z):
-            messagebox.showwarning("Kein Passwort",
-                                   "Bitte zuerst „Passwort setzen…“ drücken.")
+            messagebox.showwarning(
+                "Kein SFTP-Passwort",
+                "In der Zugangsdatei fehlt die Zeile „sftp“.\n\n"
+                f"{sw.zugang_bericht()}")
             return False
         master = simpledialog.askstring("Master-Passwort", "Master-Passwort:",
                                         show="*", parent=self)
@@ -1115,15 +1098,20 @@ class App(Tk):
         ttk.Entry(r, textvariable=self.shop_url).pack(
             side="left", fill="x", expand=True, padx=(8, 0))
 
+        # Kein Eingabefeld für Schlüssel und Secret mehr: beides steht in der
+        # Zugangsdatei auf dem Share (sw.SHARE_ZUGANG). Hier steht nur, ob sie
+        # gefunden wurde — sonst sucht man bei einer vertippten Datei im
+        # Dunkeln und sieht bloß "kein Secret hinterlegt".
         r2 = ttk.Frame(f); r2.pack(fill="x", padx=8, pady=4)
-        ttk.Label(r2, text="Schlüssel:", width=11).pack(side="left")
-        self.key_var = StringVar(value=umg.get("access_key_id", ""))
-        ttk.Entry(r2, textvariable=self.key_var).pack(
+        ttk.Label(r2, text="Zugang:", width=11).pack(side="left")
+        self.zugang_var = StringVar(value="")
+        ttk.Label(r2, textvariable=self.zugang_var).pack(
             side="left", fill="x", expand=True)
-        ttk.Button(r2, text="Secret setzen…", command=self._secret_setzen).pack(
-            side="left", padx=(6, 0))
+        ttk.Button(r2, text="Zugangsdatei…",
+                   command=self._zugang_waehlen).pack(side="left", padx=(6, 0))
         ttk.Button(r2, text="Verbinden", command=self._verbinde).pack(
             side="left", padx=(6, 0))
+        self._zeige_zugang()
 
         # Kategorien werden beim Verbinden gesucht und ohne Rückfrage gesetzt.
         # Nachsehen und ergänzen tut man ohnehin im Shopware-Backend — das
@@ -1155,39 +1143,54 @@ class App(Tk):
         core.speichere_config(self.cfg)
         umg = sw.umgebung(scfg)
         self.shop_url.set(umg.get("shop_url", ""))
-        self.key_var.set(umg.get("access_key_id", ""))
+        self._zeige_zugang()
         self._client = None
         self._secret = None
         self._kat_gewaehlt = {}      # gehören zur alten Umgebung
 
     def _merke_zugang(self):
+        # Nur noch die Adresse: Schlüssel und Secret stehen in der
+        # Zugangsdatei und werden hier nie geschrieben.
         umg = sw.umgebung(core.cfg_shop(self.cfg))
         umg["shop_url"] = sw.normalisiere_url(self.shop_url.get())
-        umg["access_key_id"] = self.key_var.get().strip()
         self.shop_url.set(umg["shop_url"])
 
-    def _secret_setzen(self):
-        s = simpledialog.askstring("Geheimer Schlüssel",
-                                   "Shopware-Secret:", show="*", parent=self)
-        if not s:
+    def _zeige_zugang(self):
+        """Woher der Zugang kommt — oder warum er fehlt."""
+        if hasattr(self, "zugang_var"):
+            self.zugang_var.set(sw.zugang_bericht())
+
+    def _zugang_waehlen(self):
+        """Die Zugangsdatei von Hand aussuchen.
+
+        Normalerweise liegt sie am festen Ort auf dem Share; der Knopf ist für
+        den Fall, dass der Share umgezogen oder gerade nicht erreichbar ist.
+        Die Wahl gilt für diesen Lauf — sie wird bewusst nicht gespeichert,
+        damit nicht jeder Rechner am Ende auf eine andere Datei zeigt.
+        """
+        p = filedialog.askopenfilename(
+            title="Zugangsdatei wählen",
+            filetypes=[("Zugangsdatei", "*.txt"), ("Alle Dateien", "*.*")])
+        if not p:
             return
-        pw = simpledialog.askstring("Master-Passwort",
-                                    "Passwort zum Verschlüsseln:", show="*",
-                                    parent=self)
-        if not pw:
-            return
-        sw.setze_secret(sw.umgebung(core.cfg_shop(self.cfg)), s, pw)
-        core.speichere_config(self.cfg)
-        self._secret = s
-        messagebox.showinfo("Gesetzt", "Secret verschlüsselt gespeichert.")
+        os.environ["VR_TOOLS_ZUGANG"] = p
+        sw.uebernimm_zugang(core.cfg_shop(self.cfg))
+        sw.uebernimm_sftp_zugang(core.sftp_zugang(self.cfg))
+        # Was entsperrt war, gehört zur alten Datei.
+        self._client = None
+        self._secret = None
+        self._sftp_pw = None
+        self._zeige_zugang()
 
     def _entsperren(self) -> bool:
         if self._secret:
             return True
         umg = sw.umgebung(core.cfg_shop(self.cfg))
         if not sw.hat_secret(umg):
-            messagebox.showwarning("Kein Secret",
-                                   "Bitte zuerst „Secret setzen…“ drücken.")
+            messagebox.showwarning(
+                "Kein Zugang",
+                f"Für „{sw.aktive_umgebung(core.cfg_shop(self.cfg))}“ steht "
+                f"nichts in der Zugangsdatei.\n\n{sw.zugang_bericht()}")
             return False
         pw = simpledialog.askstring("Master-Passwort", "Master-Passwort:",
                                     show="*", parent=self)
