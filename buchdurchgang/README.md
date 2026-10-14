@@ -172,6 +172,13 @@ Ein **Dry-Run zählt nicht als Lauf**: er sendet nichts, also bleibt der Schritt
 offen und die Häkchen gesperrt. Sonst käme man durch den ganzen Durchgang, ohne
 je etwas zu veröffentlichen.
 
+**Gibt es das Buch im Shop schon**, lässt sich Schritt 3 mit „Gibt es schon —
+überspringen" auslassen — anlegen hieße überschreiben. Der Knopf sieht vorher
+in der gewählten Umgebung nach (dieselbe, in die Schritt 4 hochlädt) und
+öffnet das vorhandene Produkt im Admin. Findet er nichts, fragt er nach,
+Vorgabe „Nein". Der Schritt zählt dann ohne Häkchen als erledigt (`↷`), der
+Grund steht in `durchgang.json`.
+
 Schritt 5 hat **keine** Checkliste: er vergleicht selbst die Dateigröße am
 Ziel und meldet jede Abweichung. Ein Mensch soll nicht bestätigen, was das
 Werkzeug schon bewiesen hat — solche Häkchen setzt man irgendwann ungelesen,

@@ -165,16 +165,18 @@ class App(Tk):
         for sid, lbl in self.schritt_labels.items():
             if sid == "buch":
                 zeichen = "✓" if self.paar else "·"
+            elif core.ist_uebersprungen(self.stand, sid):
+                zeichen = "↷"          # bewusst ausgelassen
             elif core.ist_fertig(self.stand, sid):
                 zeichen = "✓"
             elif core.ist_gelaufen(self.stand, sid):
                 zeichen = "◐"          # gelaufen, aber nicht abgehakt
             else:
                 zeichen = "·"
-            titel = lbl.cget("text").strip()[2:] if lbl.cget("text")[:1] in "✓◐·" \
+            titel = lbl.cget("text").strip()[2:] if lbl.cget("text")[:1] in "✓◐·↷" \
                 else lbl.cget("text").strip()
             lbl.configure(text=f"{zeichen} {titel}",
-                          foreground="#060" if zeichen == "✓" else
+                          foreground="#060" if zeichen in "✓↷" else
                           ("#960" if zeichen == "◐" else "black"))
 
     def _log_feld(self, eltern, sid: str) -> Text:
@@ -553,6 +555,8 @@ class App(Tk):
                     self._vorschlag(*rest)
                 elif art == "shop_bereit":
                     self._shop_bereit(*rest)
+                elif art == "shop_vorhanden":
+                    self._shop_vorhanden(*rest)
                 elif art == "oeffnen_fehler":
                     self._oeffnen_fehler(*rest)
                 elif art == "sftp_bericht":
@@ -1127,7 +1131,19 @@ class App(Tk):
         self.btn_shop = ttk.Button(r3, text="Als Entwurf anlegen",
                                    command=self._lauf_shop)
         self.btn_shop.pack(side="right")
+        # Für das Buch, das es im Shop schon gibt: anlegen hieße überschreiben.
+        # Der Knopf sieht erst nach, statt es einem einfach zu glauben — die
+        # Presse-Knöpfe in Schritt 4 führen sonst auf eine Seite, die fehlt.
+        self.btn_shop_weiter = ttk.Button(
+            r3, text="Gibt es schon — überspringen",
+            command=self._shop_ueberspringen)
+        self.btn_shop_weiter.pack(side="right", padx=(0, 6))
 
+        if core.ist_uebersprungen(self.stand, "shop"):
+            ttk.Label(f, foreground="#060", padding=(8, 2),
+                      text="↷ Übersprungen — das Buch gab es im Shop schon. "
+                           "„Als Entwurf anlegen“ würde es überschreiben."
+                      ).pack(anchor="w")
         self._baue_checkliste(f, "shop")
 
         # Wer schon verbunden ist und erst jetzt hier ankommt, bekam bisher
@@ -1379,6 +1395,79 @@ class App(Tk):
                     ("shop_bereit", None, None, None, None, e))
 
         threading.Thread(target=arbeite, daemon=True).start()
+
+    def _shop_ueberspringen(self):
+        """Schritt 3 auslassen, weil es das Buch im Shop schon gibt.
+
+        Vorher wird nachgesehen — in der Umgebung, die oben gewählt ist. Das
+        ist dieselbe, in die Schritt 4 die Presse-Dateien legt; wer hier auf
+        dev nachsieht, lädt dort auch hoch.
+        """
+        if not self._entsperren():
+            return
+        self._merke_zugang()
+        core.speichere_config(self.cfg)
+        self.btn_shop_weiter.configure(state="disabled")
+        self.status.set("Sehe im Shop nach …")
+        nummer = self.paar["felder"]["isbn13_formatiert"]
+
+        def arbeite():
+            try:
+                if self._client is None:
+                    version, _ = self._verbinden_jetzt()
+                    self._nachrichten.put(
+                        ("log", "shop", f"✓ Verbunden mit Shopware {version}"))
+                pid = self._client.produkt_id_zu_nummer(nummer)
+                self._nachrichten.put(("shop_vorhanden", pid, None))
+            except Exception as e:
+                _spur()
+                self._nachrichten.put(("shop_vorhanden", None, e))
+
+        threading.Thread(target=arbeite, daemon=True).start()
+
+    def _shop_vorhanden(self, pid, fehler):
+        (b := self._knopf("btn_shop_weiter")) and b.configure(state="normal")
+        log = self._logs.get("shop")
+        if fehler:
+            self._schreibe(log, f"✗ {fehler}")
+            self.status.set("Nachsehen fehlgeschlagen.")
+            messagebox.showerror("Shop", str(fehler))
+            return
+        scfg = core.cfg_shop(self.cfg)
+        name_umg = sw.aktive_umgebung(scfg)
+        nummer = self.paar["felder"]["isbn13_formatiert"]
+        if pid:
+            grund = f"übersprungen — {nummer} gab es in {name_umg} schon"
+        else:
+            # Nicht gefunden kann auch heißen: falsche Umgebung oder eine
+            # abweichende Artikelnummer im Altbestand. Deshalb kein Verbot,
+            # aber eine Frage mit „Nein“ als Vorgabe.
+            if not messagebox.askyesno(
+                    "Nicht gefunden",
+                    f"{nummer} gibt es in {name_umg} "
+                    f"({sw.umgebung(scfg).get('shop_url')}) nicht.\n\n"
+                    f"Stimmt die Umgebung? Schritt 4 lädt in dieselbe.\n\n"
+                    f"Trotzdem überspringen?", icon="warning", default="no"):
+                self._schreibe(log, f"{nummer} nicht im Shop — nicht übersprungen.")
+                self.status.set("Nicht übersprungen.")
+                return
+            grund = (f"übersprungen OHNE Treffer — {nummer} in {name_umg} "
+                     f"nicht gefunden")
+
+        self._schreibe(log, f"↷ {grund}")
+        if pid:
+            url = f"{self._client.base}/admin#/sw/product/detail/{pid}"
+            self._schreibe(log, f"   {url}")
+            try:
+                webbrowser.open(url)
+            except Exception:
+                pass
+        core.vermerke_uebersprungen(self.stand, "shop", grund=grund,
+                                    quelle=self.paar["xml_pfad"])
+        core.speichere_stand(self.ordner, self.stand)
+        self.status.set("Schritt 3 übersprungen — weiter mit den Presse-Dateien.")
+        self._male_schrittliste()
+        self._pruefe_tor()
 
     def _shop_bereit(self, kats, treffer, fehlend, vorhanden, fehler):
         """Alle Rückfragen, hintereinander weg — im Hauptthread."""

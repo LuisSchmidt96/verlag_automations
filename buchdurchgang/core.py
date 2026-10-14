@@ -584,7 +584,32 @@ def vermerke_lauf(stand: dict, schritt_id: str, *, quelle: str = "",
     eintrag["dateien"] = [Path(d).name for d in (dateien or [])]
     eintrag["hinweise"] = list(hinweise or [])
     eintrag.setdefault("haken", [])
+    eintrag.pop("uebersprungen", None)      # ein echter Lauf hebt das auf
     return stand
+
+
+def vermerke_uebersprungen(stand: dict, schritt_id: str, *, grund: str,
+                           quelle: str = "") -> dict:
+    """Festhalten, dass ein Schritt bewusst ausgelassen wurde.
+
+    Gedacht für das Buch, das es im Shop schon gibt: anlegen hieße
+    überschreiben, und dabei gingen dort gepflegte Angaben verloren. Die
+    Checkliste fragt dann nach Dingen, die dieser Lauf gar nicht getan hat —
+    deshalb zählt der Schritt ohne Häkchen als erledigt. Der Grund steht im
+    Stand, damit später niemand rätselt, warum hier nichts gesendet wurde.
+    """
+    eintrag = stand.setdefault("schritte", {}).setdefault(schritt_id, {})
+    eintrag["gelaufen_am"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    eintrag["quelle"] = str(quelle)
+    eintrag["dateien"] = []
+    eintrag["hinweise"] = [grund]
+    eintrag["uebersprungen"] = True
+    eintrag.setdefault("haken", [])
+    return stand
+
+
+def ist_uebersprungen(stand: dict, schritt_id: str) -> bool:
+    return bool(stand.get("schritte", {}).get(schritt_id, {}).get("uebersprungen"))
 
 
 def setze_haken(stand: dict, schritt_id: str, haken: list[str]) -> dict:
@@ -607,6 +632,8 @@ def ist_abgehakt(stand: dict, schritt_id: str) -> bool:
 
 
 def ist_fertig(stand: dict, schritt_id: str) -> bool:
+    if ist_uebersprungen(stand, schritt_id):
+        return True
     return ist_gelaufen(stand, schritt_id) and ist_abgehakt(stand, schritt_id)
 
 
