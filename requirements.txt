@@ -17,5 +17,6 @@ cryptography==49.0.0
 # bringt paramiko ohnehin schon mit.
 paramiko==5.0.0
 
-# cover_previews 3D-Schritt steuert Photoshop per COM — nur unter Windows.
+# cover_previews 3D-Schritt steuert Photoshop per COM, honorar_abrechner
+# wandelt die Briefe per Word nach PDF — beides nur unter Windows.
 pywin32==306 ; sys_platform == "win32"
