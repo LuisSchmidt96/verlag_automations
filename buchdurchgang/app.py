@@ -988,9 +988,9 @@ class App(Tk):
         # Die Checkliste fragt nach weißem Rand und heller Kante — beides
         # sieht man nur im Bild. Also gleich anbieten.
         #
-        # Die Web-Fassung ist pixelgleich mit der Druckfassung, nur der
-        # eingebettete DPI-Wert unterscheidet sich (siehe speichere_2d in
-        # cover_previews). Zum Ansehen genügt eine je Paar.
+        # Die Web-Fassung ist dasselbe Bild, nur auf 72 dpi heruntergerechnet
+        # (siehe speichere_2d in cover_previews). Zum Ansehen genügt eine je
+        # Paar — die Druckfassung, weil man Kanten dort besser sieht.
         ccfg = core.cfg_cover(self.cfg)
         web, druck = (str(int(ccfg.get("dpi_web", 72))),
                       str(int(ccfg.get("dpi_print", 300))))
@@ -1009,8 +1009,8 @@ class App(Tk):
                 "Bilder ansehen?",
                 "Jetzt öffnen, um Rand und Kanten zu prüfen?\n\n"
                 + "\n".join(f"• {Path(b).name}" for b in bilder)
-                + ("\n\n(Die 72-dpi-Fassungen sind pixelgleich und deshalb "
-                   "nicht dabei.)" if len(bilder) < len(erg["erzeugt"]) else "")):
+                + ("\n\n(Die 72-dpi-Fassungen zeigen dasselbe Bild "
+                   "und sind deshalb nicht dabei.)" if len(bilder) < len(erg["erzeugt"]) else "")):
             self._oeffne_alle(bilder)
         self._male_schrittliste()
         self._pruefe_tor()

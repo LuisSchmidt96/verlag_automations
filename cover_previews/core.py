@@ -499,13 +499,17 @@ def ist_weisser_umschlag(front: Image.Image, cfg: dict | None = None) -> bool:
 
 
 # ---------------------------------------------------------------------
-# 2D-Ausgabe (JPEG; 300 & 72 dpi = gleiche Pixel, nur DPI-Eintrag)
+# 2D-Ausgabe (JPEG; 72 dpi = gleiche Druckgröße, also weniger Pixel)
 # ---------------------------------------------------------------------
 
 def speichere_2d(front: Image.Image, out_dir: Path, sc: str, cfg: dict) -> list[Path]:
-    """Speichert die 2D-Vorderseite als JPEG in Druck- und Web-DPI. Wie im
-    manuellen Ablauf ('neu berechnen aus') sind beide Dateien pixelgleich —
-    nur der eingebettete DPI-Wert unterscheidet sich."""
+    """Speichert die 2D-Vorderseite als JPEG in Druck- und Web-DPI.
+
+    ``front`` ist bei ``dpi_print`` gerastert. Die Web-Fassung wird auf
+    dieselbe physische Größe heruntergerechnet (Pixel × dpi_web/dpi_print).
+    Früher waren beide pixelgleich und nur der DPI-Eintrag anders — dann ist
+    die 72-dpi-Datei genauso schwer wie die Druckfassung und erscheint in
+    jedem Programm, das die DPI ernst nimmt, gut viermal so groß."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     # Rückfallwert MUSS zu DEFAULT_CONFIG["muster_2d"] passen: der
@@ -515,10 +519,16 @@ def speichere_2d(front: Image.Image, out_dir: Path, sc: str, cfg: dict) -> list[
     muster = cfg.get("muster_2d", DEFAULT_CONFIG["muster_2d"])
     q = int(cfg.get("jpeg_qualitaet", 95))
     rgb = front.convert("RGB")
+    dpi_print = int(cfg.get("dpi_print", 300))
     pfade = []
-    for dpi in (int(cfg.get("dpi_print", 300)), int(cfg.get("dpi_web", 72))):
+    for dpi in (dpi_print, int(cfg.get("dpi_web", 72))):
         p = out_dir / muster.format(dpi=dpi, sc=sc)
-        rgb.save(p, "JPEG", quality=q, dpi=(dpi, dpi))
+        bild = rgb
+        if dpi < dpi_print:
+            f = dpi / dpi_print
+            bild = rgb.resize((max(1, round(rgb.width * f)),
+                               max(1, round(rgb.height * f))), Image.LANCZOS)
+        bild.save(p, "JPEG", quality=q, dpi=(dpi, dpi))
         pfade.append(p)
     return pfade
 
@@ -853,7 +863,8 @@ def _baue_jsx(psd_pfad, eintrag: dict, slot_pngs: list[tuple[int, Path]],
     - Falz-Ebenen (Rille am Buchdeckel) nur beim Hardcover einblenden;
     - optional Weiß-Korrektur (Selektive Farbkorrektur: Weiß +10 % Schwarz);
     - Hintergrund ausblenden, transparent zuschneiden -> PNG;
-    - Hintergrund wieder ein, flach, JPEG in 300 & 72 dpi (nur DPI-Tag);
+    - Hintergrund wieder ein, flach, JPEG in 300 dpi (nur DPI-Tag) und
+      72 dpi (heruntergerechnet auf dieselbe Druckgröße);
     - optional das freigestellte CMYK-TIF (siehe _tif_block).
 
     Die Vorlage wird direkt geöffnet (nicht kopiert) und im ``finally`` immer
@@ -869,8 +880,12 @@ def _baue_jsx(psd_pfad, eintrag: dict, slot_pngs: list[tuple[int, Path]],
     falz_ids = ", ".join(str(i) for i in eintrag.get("falz", []))
     spiegel_an = ", ".join(str(i) for i in (eintrag.get("spiegelung") or []))
     hide_ids = ", ".join(str(i) for i in eintrag.get("hide_bg", []))
+    # Reihenfolge zählt: die erste Fassung setzt nur den DPI-Tag (Druck), jede
+    # weitere wird von DORT aus heruntergerechnet. Käme die Web-Fassung zuerst,
+    # bezöge sie sich auf die Vorlagen-Auflösung (162–310 dpi) statt auf 300.
     jpg_zeilen = "\n".join(
-        f'    saveJpg(fertig, "{_jp(p)}", {dpi});' for dpi, p in jpg_pfade)
+        f'    saveJpg(fertig, "{_jp(p)}", {dpi}, {str(i > 0).lower()});'
+        for i, (dpi, p) in enumerate(jpg_pfade))
     tif_zeilen = _tif_block(eintrag, tif_pfad, rand_cm, dpi_print)
 
     return f'''#target photoshop
@@ -909,8 +924,18 @@ app.preferences.rulerUnits = Units.PIXELS;
     desc.putObject(charIDToTypeID("Usng"), stringIDToTypeID("selectiveColor"), adj);
     executeAction(charIDToTypeID("Mk  "), desc, DialogModes.NO);
   }}
-  function saveJpg(d, path, dpi) {{
-    d.resizeImage(undefined, undefined, dpi, ResampleMethod.NONE);
+  // neuBerechnen=false: nur den DPI-Tag setzen (Pixel bleiben).
+  // neuBerechnen=true: gleiche Druckgröße bei neuer DPI -> weniger Pixel.
+  // Sonst wäre das 72-dpi-JPEG so schwer wie das 300er und viermal so groß.
+  function saveJpg(d, path, dpi, neuBerechnen) {{
+    if (neuBerechnen) {{
+      var f = dpi / d.resolution;
+      d.resizeImage(UnitValue(Math.round(d.width.value * f), "px"),
+                    UnitValue(Math.round(d.height.value * f), "px"),
+                    dpi, ResampleMethod.BICUBIC);
+    }} else {{
+      d.resizeImage(undefined, undefined, dpi, ResampleMethod.NONE);
+    }}
     var jo = new JPEGSaveOptions(); jo.quality = 12;
     d.saveAs(new File(path), jo, true, Extension.LOWERCASE);
   }}
@@ -976,7 +1001,8 @@ app.preferences.rulerUnits = Units.PIXELS;
     o.format = SaveDocumentType.PNG; o.PNG8 = false; o.transparency = true;
     fertig.exportDocument(new File("{_jp(png_transp)}"), ExportType.SAVEFORWEB, o);
 
-    // 4) Dieselben Pixel auf Weiß -> JPEG in 300 & 72 dpi (nur DPI-Tag anders).
+    // 4) Dieselben Pixel auf Weiß -> JPEG in 300 dpi, dann auf 72 dpi
+    // heruntergerechnet (gleiche Druckgröße, kleinere Datei).
     // Der Hintergrund der Vorlagen ist reines Weiß.
     var bg = fertig.artLayers.add();
     var weissF = new SolidColor();
