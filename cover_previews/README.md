@@ -5,9 +5,9 @@ plus Einschlag/Beschnitt) automatisch die Artikeldaten-Bilder – nach dem
 manuellen Photoshop-Ablauf des Verlags:
 
 - **2D-Vorderseite** — flach, auf die Buchkante beschnitten, als JPEG:
-  `2D_300_{sc}.jpg` und `2D_72_{sc}.jpg` (gleiche Druckgröße — die 72-dpi-Fassung
-  ist entsprechend heruntergerechnet und damit deutlich kleiner). Dasselbe gilt
-  für die 3D-JPEGs.
+  `2D_300_{sc}.jpg` und `2D_72_{sc}.jpg` (die 72-dpi-Fassung ist auf
+  `web_max_px` = 1040 px lange Kante heruntergerechnet, wie früher die von Hand
+  gemachten 709×1039). Dasselbe gilt für die 3D-JPEGs.
 - **3D-Mockup (Vorderseite + Rücken)** — über die zum **Buchformat** passende
   Mockup-Vorlage (`_NEU_Vorlage/…psd`): transparentes `{sc}.png` plus
   `3D_300_{sc}.jpg` / `3D_72_{sc}.jpg`. Gesteuert per Photoshop-COM.

@@ -72,7 +72,14 @@ DEFAULT_CONFIG = {
     # DPI-Ziele
     "dpi_print": 300,
     "dpi_web": 72,
-    "web_max_px": 800,
+    # Lange Kante der Web-Fassungen (2D_72/3D_72) in Pixeln. Feste Größe statt
+    # 72/300 der Druckfassung: so lange die Verlagsmitarbeiter die Web-Bilder
+    # von Hand gemacht haben, waren sie 709x1039 (40 % der Druckfassung) — mit
+    # 72/300 wären es nur 425 px, zu wenig für die Zoom-Ansicht im Shop. Und
+    # die Mockup-Vorlagen haben unterschiedliche Auflösungen (1772 bzw. 2171 px
+    # breit); mit fester Kante sind die Shop-Bilder trotzdem einheitlich.
+    # Vergrößert wird nie.
+    "web_max_px": 1040,
     # Reihenfolge des Spreads: "back_front" = Rückseite links, Vorderseite
     # rechts (deutscher Standard). "front_back" spiegelt die Zuordnung.
     "spread_reihenfolge": "back_front",
@@ -499,17 +506,17 @@ def ist_weisser_umschlag(front: Image.Image, cfg: dict | None = None) -> bool:
 
 
 # ---------------------------------------------------------------------
-# 2D-Ausgabe (JPEG; 72 dpi = gleiche Druckgröße, also weniger Pixel)
+# 2D-Ausgabe (JPEG; Web-Fassung auf feste Größe heruntergerechnet)
 # ---------------------------------------------------------------------
 
 def speichere_2d(front: Image.Image, out_dir: Path, sc: str, cfg: dict) -> list[Path]:
     """Speichert die 2D-Vorderseite als JPEG in Druck- und Web-DPI.
 
-    ``front`` ist bei ``dpi_print`` gerastert. Die Web-Fassung wird auf
-    dieselbe physische Größe heruntergerechnet (Pixel × dpi_web/dpi_print).
+    Die Web-Fassung wird auf ``web_max_px`` (lange Kante) heruntergerechnet.
     Früher waren beide pixelgleich und nur der DPI-Eintrag anders — dann ist
-    die 72-dpi-Datei genauso schwer wie die Druckfassung und erscheint in
-    jedem Programm, das die DPI ernst nimmt, gut viermal so groß."""
+    die 72-dpi-Datei genauso schwer wie die Druckfassung (im Shop lagen so
+    Originale bis 5 MB) und erscheint in jedem Programm, das die DPI ernst
+    nimmt, gut viermal so groß."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     # Rückfallwert MUSS zu DEFAULT_CONFIG["muster_2d"] passen: der
@@ -520,12 +527,13 @@ def speichere_2d(front: Image.Image, out_dir: Path, sc: str, cfg: dict) -> list[
     q = int(cfg.get("jpeg_qualitaet", 95))
     rgb = front.convert("RGB")
     dpi_print = int(cfg.get("dpi_print", 300))
+    kante = int(cfg.get("web_max_px", DEFAULT_CONFIG["web_max_px"]))
     pfade = []
     for dpi in (dpi_print, int(cfg.get("dpi_web", 72))):
         p = out_dir / muster.format(dpi=dpi, sc=sc)
         bild = rgb
-        if dpi < dpi_print:
-            f = dpi / dpi_print
+        f = kante / max(rgb.size)
+        if dpi < dpi_print and f < 1:
             bild = rgb.resize((max(1, round(rgb.width * f)),
                                max(1, round(rgb.height * f))), Image.LANCZOS)
         bild.save(p, "JPEG", quality=q, dpi=(dpi, dpi))
@@ -855,7 +863,8 @@ def _tif_block(eintrag: dict, tif_pfad, rand_cm: float, dpi_print: int) -> str:
 def _baue_jsx(psd_pfad, eintrag: dict, slot_pngs: list[tuple[int, Path]],
               weiss: bool, png_transp, jpg_pfade: list[tuple[int, Path]],
               rand_cm: float, rand_unten_cm: float = 0.0,
-              hardcover: bool = True, tif_pfad=None, dpi_print: int = 300) -> str:
+              hardcover: bool = True, tif_pfad=None, dpi_print: int = 300,
+              web_max_px: int = 1040) -> str:
     """ExtendScript für das 3D-Mockup:
     - Smart-Objekte per Layer-ID ersetzen; ``slot_pngs`` ist die Liste
       (layer_id, PNG) — jedes PNG exakt in der Größe seines Slots, sodass der
@@ -864,7 +873,7 @@ def _baue_jsx(psd_pfad, eintrag: dict, slot_pngs: list[tuple[int, Path]],
     - optional Weiß-Korrektur (Selektive Farbkorrektur: Weiß +10 % Schwarz);
     - Hintergrund ausblenden, transparent zuschneiden -> PNG;
     - Hintergrund wieder ein, flach, JPEG in 300 dpi (nur DPI-Tag) und
-      72 dpi (heruntergerechnet auf dieselbe Druckgröße);
+      72 dpi (heruntergerechnet auf ``web_max_px`` lange Kante);
     - optional das freigestellte CMYK-TIF (siehe _tif_block).
 
     Die Vorlage wird direkt geöffnet (nicht kopiert) und im ``finally`` immer
@@ -880,11 +889,10 @@ def _baue_jsx(psd_pfad, eintrag: dict, slot_pngs: list[tuple[int, Path]],
     falz_ids = ", ".join(str(i) for i in eintrag.get("falz", []))
     spiegel_an = ", ".join(str(i) for i in (eintrag.get("spiegelung") or []))
     hide_ids = ", ".join(str(i) for i in eintrag.get("hide_bg", []))
-    # Reihenfolge zählt: die erste Fassung setzt nur den DPI-Tag (Druck), jede
-    # weitere wird von DORT aus heruntergerechnet. Käme die Web-Fassung zuerst,
-    # bezöge sie sich auf die Vorlagen-Auflösung (162–310 dpi) statt auf 300.
+    # Reihenfolge zählt: die erste Fassung (Druck) behält alle Pixel, jede
+    # weitere wird heruntergerechnet — danach sind die Pixel weg.
     jpg_zeilen = "\n".join(
-        f'    saveJpg(fertig, "{_jp(p)}", {dpi}, {str(i > 0).lower()});'
+        f'    saveJpg(fertig, "{_jp(p)}", {dpi}, {web_max_px if i > 0 else 0});'
         for i, (dpi, p) in enumerate(jpg_pfade))
     tif_zeilen = _tif_block(eintrag, tif_pfad, rand_cm, dpi_print)
 
@@ -924,15 +932,15 @@ app.preferences.rulerUnits = Units.PIXELS;
     desc.putObject(charIDToTypeID("Usng"), stringIDToTypeID("selectiveColor"), adj);
     executeAction(charIDToTypeID("Mk  "), desc, DialogModes.NO);
   }}
-  // neuBerechnen=false: nur den DPI-Tag setzen (Pixel bleiben).
-  // neuBerechnen=true: gleiche Druckgröße bei neuer DPI -> weniger Pixel.
-  // Sonst wäre das 72-dpi-JPEG so schwer wie das 300er und viermal so groß.
-  function saveJpg(d, path, dpi, neuBerechnen) {{
-    if (neuBerechnen) {{
-      var f = dpi / d.resolution;
+  // kante=0: nur den DPI-Tag setzen (Pixel bleiben, Druckfassung).
+  // kante>0: auf diese lange Kante herunterrechnen (Web-Fassung). Sonst wäre
+  // das 72-dpi-JPEG so schwer wie das 300er — im Shop lagen so bis 5 MB.
+  function saveJpg(d, path, dpi, kante) {{
+    var f = kante / Math.max(d.width.value, d.height.value);
+    if (kante > 0 && f < 1) {{
       d.resizeImage(UnitValue(Math.round(d.width.value * f), "px"),
                     UnitValue(Math.round(d.height.value * f), "px"),
-                    dpi, ResampleMethod.BICUBIC);
+                    dpi, ResampleMethod.BICUBICSHARPER);
     }} else {{
       d.resizeImage(undefined, undefined, dpi, ResampleMethod.NONE);
     }}
@@ -1001,8 +1009,8 @@ app.preferences.rulerUnits = Units.PIXELS;
     o.format = SaveDocumentType.PNG; o.PNG8 = false; o.transparency = true;
     fertig.exportDocument(new File("{_jp(png_transp)}"), ExportType.SAVEFORWEB, o);
 
-    // 4) Dieselben Pixel auf Weiß -> JPEG in 300 dpi, dann auf 72 dpi
-    // heruntergerechnet (gleiche Druckgröße, kleinere Datei).
+    // 4) Dieselben Pixel auf Weiß -> JPEG in 300 dpi, dann als Web-Fassung
+    // in 72 dpi auf feste Größe heruntergerechnet.
     // Der Hintergrund der Vorlagen ist reines Weiß.
     var bg = fertig.artLayers.add();
     var weissF = new SolidColor();
@@ -1094,7 +1102,9 @@ def erzeuge_3d_photoshop(reg: Regionen, bild_hi: Image.Image, cfg: dict,
     jsx = _baue_jsx(psd, eintrag, slot_pngs, bool(weiss), png_transp, jpg_pfade,
                     float(cfg.get("rand_cm", 1.5)),
                     float(cfg.get("rand_unten_cm", 0.0)), hardcover=hardcover,
-                    tif_pfad=tif_pfad, dpi_print=dpi_print)
+                    tif_pfad=tif_pfad, dpi_print=dpi_print,
+                    web_max_px=int(cfg.get("web_max_px",
+                                           DEFAULT_CONFIG["web_max_px"])))
     jsx_pfad = out_dir / f"_mockup_{sc}.jsx"
     jsx_pfad.write_text(jsx, encoding="utf-8")
 

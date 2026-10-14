@@ -992,7 +992,7 @@ class App(Tk):
         # Die Checkliste fragt nach weißem Rand und heller Kante — beides
         # sieht man nur im Bild. Also gleich anbieten.
         #
-        # Die Web-Fassung ist dasselbe Bild, nur auf 72 dpi heruntergerechnet
+        # Die Web-Fassung ist dasselbe Bild, nur kleiner heruntergerechnet
         # (siehe speichere_2d in cover_previews). Zum Ansehen genügt eine je
         # Paar — die Druckfassung, weil man Kanten dort besser sieht.
         ccfg = core.cfg_cover(self.cfg)
