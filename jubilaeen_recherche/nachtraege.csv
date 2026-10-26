@@ -5784,3 +5784,757 @@ Q23542481;Brenden;ortsteil;ersterwaehnung;1295;9;0;Brenden wird 1295 im Zürcher
 Q48975874;Hürrlingen;ortsteil;ersterwaehnung;1281;9;0;1281 gilt als ihre Ersterwähnung.;"Artikel nennt zusätzlich 1091 (Nogger de Hournelinga als Zeuge in Schaffhauser Chronik, Person); als Ersterwähnung des Ortes gilt laut Artikel 1281.";2026-10-21 claude-sonnet
 Q7333083;Riedern am Wald;ortsteil;ersterwaehnung;1214;9;1;Im Jahr 1214 wird in einer Urkunde von Papst Innozenz III. erstmals das Kloster Riedern am Wald genannt und damit auch die Ortschaft erwähnt.;"Ortserwähnung folgt aus der Klosternennung (laut Artikel); Klosterbestätigung 1152 betrifft die Gründung des Klosters in Detzeln, nicht den Ort.";2026-10-21 claude-sonnet
 Q18028960;Untermettingen;ortsteil;ersterwaehnung;855;9;1;Die Ersterwähnungszeit 855 fällt in die Anfangsphase des Ostfrankenreichs.;"855 gemeinsam als Mettingen (Klostergut Rheinau mit Endermettingen und Obermettingen) erwähnt; unter dem Namen Untermettingen (ze Nidren Mettingen) erst 1337.";2026-10-21 claude-sonnet
+Q90563562;Hugsweier;ortsteil;ersterwaehnung;1341;9;0;Hugsweier wurde 1341 als „Hugeswilre“ [...] erstmals erwähnt.;Beleg aus Artikel Lahr/Schwarzwald;claude-sonnet
+Q47501738;Mietersheim;ortsteil;ersterwaehnung;762;9;0;Mietersheim 762 als „Mutherisheim“ [...] erstmals erwähnt.;Beleg aus Artikel Lahr/Schwarzwald;claude-sonnet
+Q888900;Bobstadt;ortsteil;ersterwaehnung;776;9;0;Die erste Erwähnung Bobstadts findet sich im Lorscher Codex, einem Besitzverzeichnis des Klosters, als „Die gottgeweihte Eufemia, Tochter des Grafen Cancor“ am 1. Oktober 776 ihre Güter in Villa et marca Babestat dem Kloster Lorsch schenkte.;;claude-sonnet
+Q2152100;Riedrode;ortsteil;gruendung;1936;9;1;Am 1. Juli 1936 wurde Riedrode als erstes hessisches Erbhofdorf in Anwesenheit des Reichsbauernführers Walther Darré eingeweiht mit Namensgebung und Wappen.;"Gegründete Siedlung; Einweihung 1936 (Wikidata P571 ebenfalls 1936). Richtlinien zum Bau 6. September 1933, Baubeginn 1. Mai 1935, erste Siedler ab Oktober 1935 – Gründungsjahr daher je nach Lesart 1933/1935/1936.";claude-sonnet
+Q53596638;Caltex-Raffinerie Raunheim;unternehmen;gruendung;;;0;;"kein Beleg im Artikel; nur „Anfang der 1960er Jahre“ errichtet, kein Einzeljahr. Raffinerie ist stillgelegt.";claude-sonnet
+Q1558288;Gymnasium am Römerkastell;unternehmen;gruendung;1870;9;1;Das Gymnasium ist aus der am 1. Mai 1870 gegründeten höheren Töchterschule hervorgegangen;"Schule, kein Unternehmen/Verein; 1870 ist die Gründung der Vorgängerin (höhere Töchterschule), nicht des heutigen Gymnasiums. Ggf. aussortieren.";claude-sonnet
+Q1736106;Kreuznacher Kleinbahnen;unternehmen;gruendung;1896;9;1;Die Strecke nach Winterburg wurde am 3. August 1896 eröffnet, die Strecke nach Wallhausen am 15. August 1896.;"Streckeneröffnung 1896; ein Gründungsjahr der Gesellschaft nennt der Artikel nicht. Bahn bestand 40 Jahre (stillgelegt).";claude-sonnet
+Q334649;Abtsteinach;gemeinde;ersterwaehnung;;;0;;"Zusammenschluss (31.12.1971) aus Ober-Abtsteinach, Unter-Abtsteinach und Mackenheim; Ober-Abtsteinach 1012 („possesa Steinah, der heutige Ortsteil Oberabtsteinach, erstmals für das Jahr 1012 belegt“), Unter-Abtsteinach 1590 („erstmals 1590 als Teil der Zent Abtsteinach erwähnt“), Mackenheim kein Jahr im Artikel.";claude-sonnet
+Q334653;Abtweiler;gemeinde;ersterwaehnung;1128;9;0;Erstmals urkundlich erwähnt ist Abtweiler als „Apwilre in pago Nachgowe“ am 25. Dezember 1128.;;claude-sonnet
+Q567131;Albig;gemeinde;ersterwaehnung;767;9;0;Die älteste erhaltene Erwähnung von Albig – als Albucha im Wormsgau – stammt von 767.;Liebfrauenkirche 962 nicht gewertet.;claude-sonnet
+Q564002;Allenfeld;gemeinde;ersterwaehnung;1438;9;0;Der Ort wurde im Jahr 1438 als Aldenfeld erstmals urkundlich erwähnt.;;claude-sonnet
+Q552252;Alsbach-Hähnlein;gemeinde;ersterwaehnung;;;0;;"Zusammenschluss (1. Januar 1977 Alsbach + Hähnlein, Doppelname seit 1978); Alsbach 773, Hähnlein 1333, Sandwiese 1949 gegründet.";claude-sonnet
+Q43273982;Alsbach;ortsteil;ersterwaehnung;773;9;1;Alsbach trat erstmals im Codex des Klosters Lorsch in den Jahren 773, 779 und 795 urkundlich in Erscheinung, und zwar unter den Bezeichnungen Aldolvesbach (773), Altdolfesbach (779) und Aldolfesbach (795).;Beleg aus Artikel Alsbach-Hähnlein. Widerspruch: Ortsartikel Alsbach nennt „älteste erhaltene Erwähnung … für 779 im Lorscher Codex“.;claude-sonnet
+Q1641968;Hähnlein;ortsteil;ersterwaehnung;1333;9;1;Urkundlich erwähnt wurde Hähnlein das erste Mal 1333 im Lorscher Codex unter dem Namen Hennechen.;"Beide Artikel nennen 1333 „im Lorscher Codex“; die Kombination wirkt zeitlich auffällig, daher unsicher.";claude-sonnet
+Q2221410;Sandwiese;ortsteil;gruendung;1949;9;0;Gegründet wurde der kleinste Ortsteil von Alsbach-Hähnlein im Jahre 1949 auf einer alten Sanddüne.;"Gegründeter Ort; Gebiet bereits 1947 von sudetendeutschen Vertriebenen besiedelt.";claude-sonnet
+Q629109;Alsheim;gemeinde;ersterwaehnung;761;9;0;Die älteste erhaltene Erwähnung von Alsheim stammt von 761, als es in einer Urkunde des Klosters Lorsch als Alahesheim genannt wird.;;claude-sonnet
+Q14552151;Hangen-Wahlheim;ortsteil;ersterwaehnung;768;9;0;Die älteste erhaltene Erwähnung des Dorfes Hangen-Wahlheim, als „Walaheimberge“, (zeitweise war die Schreibweise Hangenwahlheim üblich) stammt von 768.;;claude-sonnet
+Q59619524;VR Bank Alsheim;unternehmen;gruendung;1891;9;1;Gründungsdatum = 1891;"Infobox 1891; Textteil nennt dagegen „Am 4. September 1982 gründeten 21 Mitglieder … die Spar- und Darlehenskasse Alsheim“ – widersprüchlich, bitte prüfen.";claude-sonnet
+Q97924152;VfR Alsheim;verein;gruendung;1928;9;0;gegründet = 1928;Jahr im Vereinsnamen (1928) bestätigt.;claude-sonnet
+Q436663;Altenbamberg;gemeinde;ersterwaehnung;;;0;;"kein Beleg im Artikel; aufgelistet sind nur Namensformen der Burg/des Ortes ab 1154 (Bomenburg), ohne Aussage zur Ersterwähnung des Ortes.";claude-sonnet
+Q450726;Alzey;gemeinde;ersterwaehnung;897;9;1;897 wurde Alzey erstmals als Reichslehen erwähnt.;"Daneben Satzfragment „… im Codex Theodosianus in Zusammenhang mit einem Besuch des Kaisers Valentinian I. 370 belegt“ (Bezug im Paket abgeschnitten, vermutlich römische Siedlung); Juden 1389, Feuerwehr 1799 nicht gewertet.";claude-sonnet
+Q1173052;Dautenheim;ortsteil;ersterwaehnung;781;9;0;Die älteste erhaltene Erwähnung von Dautenheim stammt von 781.;;claude-sonnet
+Q1369376;Heimersheim;ortsteil;ersterwaehnung;771;9;0;Die älteste erhaltene Erwähnung von Heimersheim stammt von 771, als es anlässlich einer Schenkung an das Kloster Lorsch genannt wird.;;claude-sonnet
+Q140172534;Kettenheimer Weg;ortsteil;ersterwaehnung;;;0;;"kein Beleg im Artikel; Gebäudegruppe/Gemeindeteil.";claude-sonnet
+Q450701;Schafhausen;ortsteil;ersterwaehnung;897;9;0;Gleichzeitig mit Alzey erfolgte in einer Urkunde von 897 die schriftliche Ersterwähnung in der Form Scafhuson;;claude-sonnet
+Q450705;Weinheim;ortsteil;ersterwaehnung;772;9;0;Weinheim ist der größte Stadtteil der Stadt Alzey mit über 1.900 Einwohnern, 772 bereits urkundlich erwähnt.;;claude-sonnet
+Q22674520;Bali Kino;unternehmen;gruendung;1954;9;1;Das Bali Kino in der rheinhessischen Stadt Alzey wurde 1954 als Bahnhofslichtspiele in der Nähe vom Bahnhof Alzey eröffnet.;"Eröffnung als Bahnhofslichtspiele 1954; kein Gründungsjahr im engeren Sinn genannt.";claude-sonnet
+Q572452;Appenheim;gemeinde;ersterwaehnung;882;9;0;Die älteste erhaltene Erwähnung von Appenheim findet sich im karolingischen goldenen Buch (Liber aureus) der Abtei Prüm und datiert auf das Jahr 882.;;claude-sonnet
+Q563992;Argenschwang;gemeinde;ersterwaehnung;1127;9;0;Der Ort wurde im Jahr 1127 als Hausen erstmals urkundlich erwähnt.;;claude-sonnet
+Q371728;Armsheim;gemeinde;ersterwaehnung;;;0;;"kein Beleg im Artikel; Geschichte beginnt mit Vor- und Frühgeschichte, Ersterwähnung im Paket nicht enthalten.";claude-sonnet
+Q565746;Aspisheim;gemeinde;ersterwaehnung;767;9;0;Der Ort wurde 767 erstmals urkundlich erwähnt.;;claude-sonnet
+Q565885;Auen;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q516552;Babenhausen;gemeinde;ersterwaehnung;1236;9;0;Die älteste bekannte schriftliche Erwähnung von Babenhausen erfolgte unter dem Namen Babenhausense im Jahr 1236.;"Gemeinde = Kernstadt; Pfarrkirche 1339 und Juden 1318 nicht gewertet.";claude-sonnet
+Q1586036;Harpertshausen;ortsteil;ersterwaehnung;1318;9;0;Die älteste erhaltene schriftliche Erwähnung des Orts stammt von 1318.;;claude-sonnet
+Q1586098;Harreshausen;ortsteil;ersterwaehnung;;7;0;;"Früheste Namensform „Hardirshusen (13. Jahrhundert)“, danach Hareshusen (1320); kein Einzeljahr für die Ersterwähnung.";claude-sonnet
+Q1609840;Hergershausen;ortsteil;ersterwaehnung;1260;9;0;Hergershausen wurde soweit bekannt infolge eines Tausches von Zinseinkünften im Jahr 1260 erstmals erwähnt.;1340 galt früher als Ersterwähnung.;claude-sonnet
+Q1767014;Langstadt;ortsteil;ersterwaehnung;1267;9;0;Die erste schriftliche Erwähnung von Langestad erfolgte 1267, als das Kloster Amorbach seine Güter an das Stift zu Aschaffenburg verkaufte.;1223 wird ein Adliger „Heinricius de Langenstad“ genannt (Person, nicht gewertet).;claude-sonnet
+Q2281534;Sickenhofen;ortsteil;ersterwaehnung;;7;0;;"Zinsregister-Nachtrag „gegen Ende des 10. Jahrhunderts“ (Cicgenhouon 11. Jh.); kein Einzeljahr.";claude-sonnet
+Q523273;Bacharach;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q15114668;Henschhausen (Bacharach);ortsteil;ersterwaehnung;1319;9;1;Erstmals wird der Ort 1319 als Hentzhusen erwähnt , zusammen mit Medenscheid und den Viertälern wohl auch schon um 1104 in einer Urkunde von Erzbischof Friedrich I. von Schwarzenburg.;1104 nur als „wohl auch schon“ (unsicher).;claude-sonnet
+Q66313147;Medenscheid;ortsteil;ersterwaehnung;1104;9;0;Urkundlich erstmals erwähnt wird Medenscheid in einem Schriftstück des Kölner Erzbischofs Friedrich I. von Schwarzenburg im Jahre 1104;;claude-sonnet
+Q66317893;Neurath;ortsteil;ersterwaehnung;1231;9;0;Der Ort, der erstmals 1231 in der schriftlichen Überlieferung auftaucht;;claude-sonnet
+Q2335725;Steeg;ortsteil;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q7047;Bad Kreuznach;gemeinde;ersterwaehnung;819;9;1;Einhard erwähnt einen Aufenthalt des Kaisers – gemeint ist Ludwig der Fromme, Sohn Karls des Großen († 814) – 819 in Cruciniacum.;"Gemeinde = Kernort. St.-Martins-Kirche um 741/42 (Kirche, nicht gewertet); Stadt (oppidum) 1203 nicht gewertet. Artikel im Paket gekürzt (16 Sätze abgeschnitten), Wikidata P571 1227 ohne Beleg.";claude-sonnet
+Q50894;Bad Münster am Stein-Ebernburg;ortsteil;ersterwaehnung;;;0;;"Zusammenschluss (Doppelname); Münster (am Stein) um 1200 („Die erste urkundliche Erwähnung von Münster erfolgte um das Jahr 1200“), Ebernburg 1212 („älteste erhaltene urkundliche Erwähnung stammt aus dem Jahr 1212“).";claude-sonnet
+Q894417;Bosenheim;ortsteil;ersterwaehnung;1124;9;0;Die erste gesicherte Nennung des Ortes datiert aus dem Jahr 1124;;claude-sonnet
+Q1672274;Ippesheim;ortsteil;ersterwaehnung;;;0;;"kein Beleg im Artikel; nur „zur Zeit Heinrichs des II.“ ohne Jahr.";claude-sonnet
+Q1802398;Planig;ortsteil;ersterwaehnung;1092;9;0;Die Schenkungsurkunde von 1092 ist die älteste schriftliche Erwähnung des Dorfes.;;claude-sonnet
+Q1748319;Winzenheim;ortsteil;ersterwaehnung;1056;9;0;Urkundlich erwähnt wird Winzenheim erstmals im Jahre 1056;;claude-sonnet
+Q18412491;Hotel Oranienhof;unternehmen;gruendung;1834;9;1;Das Hotel Oranienhof war ein Luxus- und Badehotel in Kreuznach, das von 1834/42 bis 1929 bestand.;"Angabe 1834/42 (frühere Zahl genommen); Hotel bestand nur bis 1929.";claude-sonnet
+Q114054725;Kommunalverkehr Rhein-Nahe;unternehmen;gruendung;2021;9;0;Gründung = 9. September 2021;;claude-sonnet
+Q15195862;Parkhotel Kurhaus;unternehmen;gruendung;;;0;;"kein Beleg im Artikel; nur Nutzung als Hauptquartier 1917/18 genannt.";claude-sonnet
+Q1321477;Sparkasse Rhein-Nahe;unternehmen;gruendung;1993;9;1;Gründungsdatum = 1. Januar 1993;"Fusion der Kreis-Sparkasse Bingen und der Sparkasse Bad Kreuznach; Vorgänger Spar- und Leihkasse im Kreise Bingen 1835, Spar- und Hülfskasse Kreuznach 1852. Der Artikel beruft sich nicht ausdrücklich auf ein Traditionsjahr.";claude-sonnet
+Q2516269;Verkehrsgesellschaft Bad Kreuznach;unternehmen;gruendung;1926;9;0;Gründung = 11. März 1926;"Hervorgegangen aus der 1926 gegründeten StBVG; Betrieb bis 2022 (Stadtbus Bad Kreuznach GmbH 2014 gegründet).";claude-sonnet
+Q379121;Bad König;gemeinde;ersterwaehnung;820;9;1;„Quinticha“ ist der Name, mit dem Bad König in den Jahren 820 bis 822 urkundlich erwähnt wurde.;Zeitraum 820–822, früheres Jahr genommen.;claude-sonnet
+Q1371995;Etzen-Gesäß;ortsteil;ersterwaehnung;1375;9;0;Die älteste erhaltene Erwähnung des Dorfes unter dem Namen Eczengesezz stammt von 1375.;;claude-sonnet
+Q1483259;Fürstengrund;ortsteil;ersterwaehnung;1032;9;0;Die älteste erhaltene Erwähnung datiert von 1032.;;claude-sonnet
+Q1741609;Kimbach;ortsteil;ersterwaehnung;1359;9;0;Die älteste erhaltene Erwähnung von Kimbach stammt von 1359 unter dem Ortsnamen Kuntebuch.;;claude-sonnet
+Q1943798;Momart;ortsteil;ersterwaehnung;1321;9;0;Die älteste erhaltene Erwähnung des Dorfes stammt von 1321.;819 nur als Flurname („a monte Mamenhart“), nicht gewertet.;claude-sonnet
+Q1987533;Nieder-Kinzig;ortsteil;ersterwaehnung;1408;9;0;Die älteste erhaltene Erwähnung des Ortes stammt von 1408.;;claude-sonnet
+Q1552717;Ober-Kinzig;ortsteil;ersterwaehnung;;7;0;;"„am Ende des 9. Jahrhunderts“ in einer Schenkungsurkunde an Seligenstadt als „Chinciheru marcu“ erwähnt; kein Einzeljahr.";claude-sonnet
+Q187575;Zell im Odenwald;ortsteil;ersterwaehnung;1095;9;0;Die älteste erhaltene Erwähnung von Zell als Cella stammt von 1095 und findet sich im Lorscher Codex.;;claude-sonnet
+Q520075;Bad Sobernheim;gemeinde;ersterwaehnung;1074;9;0;Sobernheim wird als „Soberenheim“ zum ersten Mal im Jahre 1074 in der Gründungsurkunde des Stifts Ravengiersburg erwähnt;Kirche um 1000 nicht gewertet.;claude-sonnet
+Q15130354;Steinhardt;ortsteil;ersterwaehnung;1148;9;0;Die älteste Erwähnung des Ortsnamens findet sich in einer Urkunde des Papstes Eugen III. vom 18. Februar 1148;;claude-sonnet
+Q553306;Badenheim;gemeinde;ersterwaehnung;835;9;0;Badenheim wurde 835 erstmals urkundlich erwähnt;;claude-sonnet
+Q561529;Bechenheim;gemeinde;ersterwaehnung;824;9;0;Die älteste erhaltene Erwähnung von Bechenheim stammt von 824 aus einer Urkunde des Klosters Fulda.;;claude-sonnet
+Q570882;Becherbach;gemeinde;ersterwaehnung;1363;9;1;Becherbach in einer undatierten Urkunde aus dem Zeitraum um 1363.;"Gemeinde = Kernort Becherbach, Datierung „um 1363“; Ortsteile: Roth 1336, Gangloff 1519.";claude-sonnet
+Q562869;Becherbach bei Kirn;gemeinde;ersterwaehnung;;;0;;"kein Beleg im Artikel; 1146 betrifft nur die Naumburg (Burg).";claude-sonnet
+Q569599;Bechtheim;gemeinde;ersterwaehnung;793;9;0;Zum ersten Mal lesen wir von Bechtheim in einem Güterverzeichnis des Klosters Fulda, dessen Eintrag auf 793 datiert ist (CDF Nr. 106).;;claude-sonnet
+Q554268;Bechtolsheim;gemeinde;ersterwaehnung;;;0;;"kein Beleg im Artikel; 1270 (Freiheitsbrief) nur als „weitere Erwähnung“, die erste ist im Paket nicht enthalten.";claude-sonnet
+Q14872;Bensheim;gemeinde;ersterwaehnung;;;0;;"kein Beleg im Artikel; nur Hospital 1370 und Walderdorffer Hof 1395 (Bauten).";claude-sonnet
+Q759201;Auerbach;ortsteil;ersterwaehnung;786;9;1;Im Jahr 781, wahrscheinlicher aber 786, wurde Auerbach erstmals in der Urkunde 1539 im Lorscher Codex als Urbach erwähnt.;781 oder (wahrscheinlicher) 786.;claude-sonnet
+Q1363978;Fehlheim;ortsteil;ersterwaehnung;782;9;0;Der Ort wurde am 6. Juni 782 erstmals urkundlich in einem Schenkungsbuch des Klosters Lorsch erwähnt.;;claude-sonnet
+Q1547298;Gronau;ortsteil;ersterwaehnung;1200;9;1;Urkundlich erwähnt als Grunouue um 1200, als Gruna 1443, als Gronau 1602 und als Grunaw 1640.;"„um 1200“; „nächste erhaltene Erwähnung“ Grunouue unter Ritter Rugger von Lindenfels 1210–1220. Kein ausdrücklicher Satz „erstmals“.";claude-sonnet
+Q1622377;Hochstädten;ortsteil;ersterwaehnung;1312;9;1;Das 1312 erstmals in einer katzenelnbogenschen Urkunde erwähnte Dorf entstand vermutlich aus einem Hof des „Adelhelm von Hovesteten“, der in einer nicht datierten Urkunde des Lorscher Codex genannt wird.;"Namensform Houesteten „um 1200“ in der Liste der Schreibweisen; Hof in undatierter Lorscher Urkunde.";claude-sonnet
+Q1805443;Langwaden;ortsteil;ersterwaehnung;773;9;1;Die erste schriftliche Erwähnung unter dem Namen Langwada findet sich für Langwaden in Lorscher Codex als Besitz des Klosters Lorsch unter dem Jahr 773.;Widerspruch im Artikel: Abschnitt Namensherkunft nennt „im Jahr 764 erstmals als Lancquata erwähnt“ (Reichsurbar Gernsheim).;claude-sonnet
+Q1349641;Schwanheim;ortsteil;ersterwaehnung;765;9;0;Die erste urkundliche Erwähnung Schwanheims erfolgte am 17. November 765 in einer Schenkungsurkunde im Lorscher Codex;;claude-sonnet
+Q2258748;Schönberg;ortsteil;ersterwaehnung;1303;9;1;Eine erste urkundliche Erwähnung erfolgte 1303 unter dem Namen castrum Schonenberg, in einem Schiedsspruch zwischen den Herren von Breuberg und den Schenken von Erbach wegen der Schlösser zu Erbach und Schönberg.;"Erwähnung bezieht sich auf die Burg (castrum); Ort selbst nicht getrennt belegt, daher unsicher.";claude-sonnet
+Q2582423;Wilmshausen;ortsteil;ersterwaehnung;1329;9;0;Die erste urkundliche Nennung des Ortes erfolgte 1329 unter dem Namen Wykelmshusen;;claude-sonnet
+Q187468;Zell;ortsteil;ersterwaehnung;805;9;0;Die erste Erwähnung des Ortes stammt aus dem Jahr 805;Erste Erwähnung im Lorscher Codex 1113.;claude-sonnet
+Q654131;Bermersheim;gemeinde;ersterwaehnung;780;9;0;Die älteste erhaltene Erwähnung von Bermersheim findet sich in einer Urkunde der Abtei Lorsch aus dem Jahr 780.;;claude-sonnet
+Q551617;Bermersheim vor der Höhe;gemeinde;ersterwaehnung;768;9;0;Im Jahr 768 wurde der Ortsname anlässlich eines Güterverkaufs an das Kloster Lorsch erstmals urkundlich erwähnt.;;claude-sonnet
+Q375875;Biblis;gemeinde;ersterwaehnung;836;9;0;Der Ort Biblis wurde im Jahre 836 unter dem Namen Bibifloz erstmals im Lorscher Codex, einem Besitzverzeichnis des Klosters, urkundlich erwähnt;"Gemeinde = Kernort; Ortsteile Nordheim (1129) und Wattenheim (836).";claude-sonnet
+Q1998041;Nordheim;ortsteil;ersterwaehnung;1129;9;0;Im Jahr 1979 feierte Nordheim sein 850-jähriges Bestehen anlässlich der Erwähnung des Ortes im Jahre 1129 in einer Schenkung Bischof Burgchard von Worms an den Probst des Stifts Neuhausen.;995 „Ort Stein“ (Burg/Marktrecht) nicht gewertet.;claude-sonnet
+Q1702058;Wattenheim;ortsteil;ersterwaehnung;836;9;0;Die belegte Geschichte von Wattenheim beginnt mit der Burg Stein, als am 26. Mai 836 König Ludwig II., der Deutsche, dem Grafen Werner (Werinher) seine Güter in Biblis, Wattenheim und in dem Dorf Zullestein (die zur Burg Stein gehörige Siedlung) schenkte;;claude-sonnet
+Q369649;Bickenbach;gemeinde;ersterwaehnung;874;9;0;Bickenbach wurde im Jahre 874 erstmals in einer Schenkungsurkunde des Lorscher Codex erwähnt;Burg 1130 nicht gewertet.;claude-sonnet
+Q630028;Biebelnheim;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q629005;Biebelsheim;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q636021;Biebesheim am Rhein;gemeinde;ersterwaehnung;1200;9;1;Bubenesheim (um 1200);"Frühester Namensbeleg „um 1200“; der Ort feierte laut Artikel 2009 seine „800-jährige urkundliche Erstnennung“ (Jahr nicht ausgerechnet übernommen). Wüstung Lochheim 770/771 nicht gewertet.";claude-sonnet
+Q285879;Bingen am Rhein;gemeinde;ersterwaehnung;;7;0;;"Ortsname erstmals bei Tacitus „Anfang des 2. Jahrhunderts“ bezeugt; kein Einzeljahr.";claude-sonnet
+Q863777;Bingerbrück;ortsteil;ersterwaehnung;1835;9;1;1835 tauchte erstmals der Name „Binger Brücke“ in zollamtlichen Verordnungen auf, und 1838 wurden in Bingerbrück neun Einwohner gezählt.;"Erstmals der Name „Binger Brücke“ 1835; Kloster Rupertsberg 1150 nicht gewertet.";claude-sonnet
+Q1020468;Büdesheim;ortsteil;ersterwaehnung;1158;9;1;1158 wird das Kloster Rupertsberg und 1190 auch das Kloster Eberbach als Eigentümer von Grundstücken in Büdesheim erwähnt.;"Kein ausdrücklicher Satz „erstmals“; frühester datierter Beleg für Büdesheim im Artikel.";claude-sonnet
+Q53889479;Dietersheim;ortsteil;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q1260129;Dromersheim;ortsteil;ersterwaehnung;754;9;0;Die älteste erhaltene Erwähnung des Ortes findet sich als Truhtmaresheim in einer von Edling Eggiolt von Worms am 15. Juni 754 ausgestellten Urkunde.;;claude-sonnet
+Q53889478;Gaulsheim;ortsteil;ersterwaehnung;770;9;0;Die älteste erhaltene Erwähnung von Gaulsheim, als Guileubisheim, stammt von 770;;claude-sonnet
+Q1702636;Kempten am Rhein;ortsteil;ersterwaehnung;;7;0;;"Älteste Erwähnung (Chamunder Mark) undatiert, „Ende des 8. oder Anfang des 9. Jahrhunderts“; Urkunde des Jahres 1032 nennt „Camutin“/„Chamunder Mark“.";claude-sonnet
+Q2312078;Sponsheim;ortsteil;ersterwaehnung;745;9;0;Die älteste erhaltene Erwähnung von Sponsheim stammt von 745.;;claude-sonnet
+Q1493823;Palais Bingen;unternehmen;gruendung;1989;9;1;Das Palazzo war ein von 1989 bis 2003 betriebener Techno-Club in Bingen am Rhein.;"Betriebsbeginn 1989, kein ausdrückliches Gründungsjahr; Club 2003 geschlossen.";claude-sonnet
+Q512538;Birkenau;gemeinde;ersterwaehnung;795;9;0;Die erste urkundliche Erwähnung von Birkenau erfolgte 795 im Dokument einer Grenzbereinigung zum Besitz des Klosters Lorsch  in der „Mark Heppenheim“;"Gemeinde = Kernort; „In der Grenzbeschreibung von 773 wird Birkenau noch nicht erwähnt.“";claude-sonnet
+Q998567;Buchklingen;ortsteil;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q1269823;Hornbach;ortsteil;ersterwaehnung;1366;9;0;Hornbach wurde erstmals 1366 als Hornbach oberhalb Birkenau erwähnt;;claude-sonnet
+Q972649;Löhrbach;ortsteil;ersterwaehnung;1071;9;0;Die erste Erwähnung des Ortes findet sich 1071 als Lerlebach im Lorscher Codex;;claude-sonnet
+Q1987540;Nieder-Liebersbach;ortsteil;ersterwaehnung;877;9;0;Die früheste urkundliche Erwähnung als Liberesbach stammt aus dem Jahr 877;;claude-sonnet
+Q2141900;Reisen;ortsteil;ersterwaehnung;877;9;0;Reisen wurde erstmals am 1. Oktober 877 im Lorscher Codex als Ruzondum erwähnt.;;claude-sonnet
+Q19964390;Schimbach;ortsteil;ersterwaehnung;1480;9;1;Die Schreibweise Schimpffenbach ist seit dem Jahr 1480 belegt.;"Nur früheste belegte Schreibweise, kein ausdrücklicher Satz „erstmals erwähnt“; Weiler in Gemarkung Reisen.";claude-sonnet
+Q624456;Bischofsheim;gemeinde;ersterwaehnung;1200;9;0;Die erste Erwähnung in historischen Dokumenten findet Bischofsheim im Jahr 1200 als Bissescheim circa Menum.;;claude-sonnet
+Q390399;Bockenau;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q178532;Bodenheim;gemeinde;ersterwaehnung;754;9;0;Seine erste urkundliche Erwähnung findet das auf eine fränkische Gründung zurückgehende Dorf durch die Schenkung eines Weinbergs an das Kloster Fulda durch den Bodenheimer Rantulf im Jahr 754.;Erste Lorscher Schenkung 767.;claude-sonnet
+Q647504;Boos;gemeinde;ersterwaehnung;1000;9;1;Der Name wird nach einer Erwähnung um das Jahr 1000 als Boys mit Buschgebiet erklärt.;„um das Jahr 1000“.;claude-sonnet
+Q675517;Bornheim;gemeinde;ersterwaehnung;767;9;1;Die älteste erhaltene Erwähnung von Bornheim findet sich für 767/768 im Lorscher Codex.;767/768, früheres Jahr genommen.;claude-sonnet
+Q551850;Braunweiler;gemeinde;ersterwaehnung;1271;9;0;Im Jahr 1271 wurde Braunweiler erstmals urkundlich in der Chronik des Klosters Sponheim durch Johannes Tritemus erwähnt.;;claude-sonnet
+Q656305;Brauweiler;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q2385408;TTC Brauweiler 1948;verein;gruendung;1948;9;0;Der Verein wurde 1948 als reiner Tischtennisverein gegründet.;Jahr im Vereinsnamen (1948) bestätigt. Brauweiler hier = Ortsteil von Pulheim (NRW), nicht die Gemeinde in Rheinland-Pfalz.;claude-sonnet
+Q567145;Breitenheim;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel (1387 nur Zugehörigkeit zur Grafschaft Veldenz);claude-sonnet
+Q685244;Breitscheid;gemeinde;ersterwaehnung;1273;9;0;Der Ort wurde 1273 erstmals als „Breitschedirbach“ urkundlich erwähnt.;;claude-sonnet
+Q640603;Brensbach;gemeinde;ersterwaehnung;1223;9;0;Die älteste erhaltene Erwähnung des Orts als Brendisbach stammt von 1223.;Gemeinde = Kernort Brensbach (seit 1972 mit Nieder-Kainsbach u. a. zusammengeschlossen);claude-sonnet
+Q382412;Affhöllerbach;ortsteil;ersterwaehnung;1450;9;0;Das Bestehen des Ortes ist unter dem Namen Effolderbach seit 1450 urkundlich bezeugt.;;claude-sonnet
+Q857723;Bierbach;ortsteil;ersterwaehnung;1314;9;0;Bierbach wird – gemeinsam mit Wersau – als Burbach im Jahre 1314 erstmals urkundlich erwähnt.;gemeinsame Erwähnung mit Wersau;claude-sonnet
+Q1419437;Höllerbach;ortsteil;ersterwaehnung;1408;9;0;Das Bestehen des Ortes ist unter dem Namen Holderbach seit 1408 urkundlich bezeugt.;;claude-sonnet
+Q1741438;Kilsbach;ortsteil;ersterwaehnung;1605;9;0;Das Bestehen des Weilers ist unter der Schreibweise Kilspach seit 1605 dokumentiert.;Weiler;claude-sonnet
+Q1952619;Mummenroth;ortsteil;ersterwaehnung;1829;9;0;Das Bestehen des Weilers ist unter der Schreibweise Mumetroth seit 1829 dokumentiert.;Weiler;claude-sonnet
+Q1987531;Nieder-Kainsbach;ortsteil;ersterwaehnung;1012;9;0;Die früheste, erhaltene Nennung des Ortes findet sich für 1012 im Lorscher Codex bei der Beschreibung einer Wildbanngrenze, bei der die Bezeichnung „Cuningesbach“ auftaucht.;"Nennung in Wildbanngrenze; 1455 erstmals „Nydern-Konspach“ in einer Urkunde";claude-sonnet
+Q1531660;Stierbach;ortsteil;ersterwaehnung;1454;9;0;Das Bestehen des Weilers ist unter der Schreibweise Stirbach seit 1454 dokumentiert.;Weiler;claude-sonnet
+Q2542576;Wallbach;ortsteil;ersterwaehnung;1426;9;0;Das Bestehen des Ortes ist unter dem Namen Walbach seit 1426 urkundlich bezeugt.;;claude-sonnet
+Q2563347;Wersau;ortsteil;ersterwaehnung;1314;9;0;Der Ort ist unter dem Namen „Wersauwe“ seit 1314 urkundlich bezeugt (ab 1538 „Wersaw“, später „Wersau“).;2014 wurde die 700-jährige Ersterwähnung gefeiert;claude-sonnet
+Q567288;Bretzenheim;gemeinde;ersterwaehnung;1057;9;0;Der Ort wurde im Jahr 1057 erstmals urkundlich erwähnt, als der damalige Erzbischof Anno II. von Köln die beiden Dörfer Winzenheim und Bretzenheim der polnischen Königin Richeza als Lehen übergab.;;claude-sonnet
+Q572075;Breuberg;gemeinde;ersterwaehnung;;;0;;"Zusammenschluss 1971 (Hainstadt, Neustadt, Rai-Breitenbach, Sandbach, Wald-Amorbach); Hainstadt um 800, Neustadt 1388, Rai-Breitenbach 798, Sandbach 770, Wald-Amorbach 1286, Mühlhausen (Weiler in Rai-Breitenbach) 1382";claude-sonnet
+Q1569546;Hainstadt;ortsteil;ersterwaehnung;800;9;1;Das Bestehen des Ortes ist unter dem Namen Heimstat seit der Zeit um das Jahr 800 urkundlich bezeugt.;„um das Jahr 800“;claude-sonnet
+Q1245200;Mühlhausen;ortsteil;ersterwaehnung;1382;9;0;Die früheste erhalten gebliebene urkundliche Erwähnung als Mulnhusen weist in das Jahr 1382.;Weiler im Stadtteil Rai-Breitenbach;claude-sonnet
+Q1981658;Neustadt;ortsteil;ersterwaehnung;1388;9;0;1388 wird der Ort als Nuwenstaat erstmals namentlich erwähnt.;"Ort entstand nach 1378 als Markt und Siedlung; eine Erwähnung 1113 bezieht sich laut Artikel auf den Neustädter Hof bei Eisenbach";claude-sonnet
+Q2127497;Rai-Breitenbach;ortsteil;ersterwaehnung;798;9;0;Raibach wurde bereits im Jahre 798 im Zusammenhang mit einer Schenkung an das Kloster Lorsch urkundlich erwähnt.;;claude-sonnet
+Q1446355;Sandbach;ortsteil;ersterwaehnung;770;9;0;Die älteste erhaltene Erwähnung von Sandbach stammt von 770. Es wird darin als Standort einer Kirche erwähnt.;;claude-sonnet
+Q1673394;Wald-Amorbach;ortsteil;ersterwaehnung;1286;9;0;Erstmals urkundlich erwähnt wurde das Dorf im Jahre 1286.;;claude-sonnet
+Q1011184;Burg Breuberg;unternehmen;gruendung;;;0;;"Kein Unternehmen, sondern eine Burg (Baudenkmal); Gründung nur als „wahrscheinlich um oder kurz nach 1200“ genannt";claude-sonnet
+Q625261;Brombachtal;gemeinde;ersterwaehnung;;;0;;"Zusammenschluss 1971 (Birkert, Böllstein, Hembach, Kirchbrombach, Langenbrombach); Birkert 1012, Böllstein 1300, Hembach 1408; Kirchbrombach und Langenbrombach ohne Jahr im Paket";claude-sonnet
+Q865626;Birkert;ortsteil;ersterwaehnung;1012;9;0;Das Bestehen des Ortes ist unter dem Namen Birkunhart seit 1012 urkundlich bezeugt.;;claude-sonnet
+Q1019873;Böllstein;ortsteil;ersterwaehnung;1300;9;0;Das Bestehen des Ortes ist unter dem Namen Bylstein seit 1300 urkundlich bezeugt.;;claude-sonnet
+Q1604692;Hembach;ortsteil;ersterwaehnung;1408;9;0;Das Bestehen des Ortes ist unter dem Namen Henebach seit 1408 urkundlich bezeugt.;;claude-sonnet
+Q560480;Bruschied;gemeinde;ersterwaehnung;1023;9;0;Bruschied bildete zusammen mit Schneppenbach eine Gemarkung und taucht erstmals im Jahr 1023 unter dem Namen „Prubesdervot“ in den Güterlisten auf.;;claude-sonnet
+Q2174335;Rudolfshaus;ortsteil;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q282270;Bubenheim;gemeinde;ersterwaehnung;766;9;0;Bubenheim wird als „Bubinheim“ (= Heim des Buobo) erstmals 766 in einer Lorscher Urkunde erwähnt.;;claude-sonnet
+Q818615;Budenheim;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel (Erwähnung als Butenheim im Lorscher Codex ausdrücklich ohne Jahresangabe, 8. Jahrhundert);claude-sonnet
+Q133895379;DJK SF Budenheim;verein;gruendung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q97924333;FV Budenheim;verein;gruendung;1919;9;0;Im Jahr 1919 gründeten die nach dem Krieg heimgekehrten Fußballspieler innerhalb der Turngemeinde eine neue Fußball-Abteilung.;"Infobox gegründet = 1919, bestätigt Jahr im Namen (FV 1919); Vorläufer „Olympia“ 1912 gescheitert; Neugründung August 1946";claude-sonnet
+Q549701;Burgsponheim;gemeinde;ersterwaehnung;;;0;;"kein Beleg im Artikel; 1127 nur Erwähnung der Burg Sponheim, nicht des Ortes";claude-sonnet
+Q654638;Bärenbach;gemeinde;ersterwaehnung;1108;9;1;Den Angaben von H. Kaufmann über die Ortsnamen des Kreises Bad Kreuznach zufolge, wird Bärenbach schon 1108 urkundlich erwähnt.;"Jahr nur nach Angabe von H. Kaufmann; 1146 Erwähnung der Burg";claude-sonnet
+Q553309;Bärweiler;gemeinde;ersterwaehnung;1363;9;0;Bärweiler wurde im Jahre 1363 erstmals urkundlich erwähnt.;;claude-sonnet
+Q628399;Büttelborn;gemeinde;ersterwaehnung;1211;9;0;Die älteste erhaltene Erwähnung stammt von 1211. Darin wird der Ort als Butelbrunne bezeichnet.;;claude-sonnet
+Q679430;Callbach;gemeinde;ersterwaehnung;1293;9;0;Callbach wurde erstmals erwähnt im Jahr 1293 in einer Urkunde des Grafen Heinrich I. von Veldenz.;;claude-sonnet
+Q640216;Dalberg;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q666198;Dalheim;gemeinde;ersterwaehnung;766;9;0;Dalheim wurde erstmals in einer im Lorscher Codex aufgeführten Urkunde vom 10. Juni 766 erwähnt.;;claude-sonnet
+Q277989;Daubach;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q570258;Daxweiler;gemeinde;ersterwaehnung;1190;9;0;In einem Lehenverzeichnis des Ritters Werner II. von Bolanden von 1190 findet sich die älteste erhaltene Erwähnung des Ortsnamens als Dahswilre.;;claude-sonnet
+Q567188;Desloch;gemeinde;ersterwaehnung;1184;9;0;Desloch wurde im Jahr 1184 erstmals urkundlich erwähnt.;;claude-sonnet
+Q630928;Dexheim;gemeinde;ersterwaehnung;774;9;0;Die älteste erhaltene Erwähnung von Dexheim steht in einer Urkunde von 774.;;claude-sonnet
+Q525493;Dieburg;gemeinde;ersterwaehnung;1207;9;0;Der Name Dieburg taucht erstmals auf einer Urkunde des Klosters Eberbach aus dem Jahre 1207 auf.;;claude-sonnet
+Q28791182;Organo Phon;unternehmen;gruendung;1992;9;0;Das Unternehmen Organo Phon ist ein deutsches Schallplattenlabel, das 1992 von der Orgelbaufirma Oberlinger in Windesheim bei Bad Kreuznach, einem der ältesten deutschen Orgelbauunternehmen, gegründet wurde.;Sitz laut Paket Windesheim, nicht Dieburg;claude-sonnet
+Q650305;Dienheim;gemeinde;ersterwaehnung;;;0;;"kein Beleg im Artikel; Text nennt nur eine Schenkung „nach dem 11. Juli 765“ ohne ausdrückliche Ersterwähnung des Ortes";claude-sonnet
+Q561616;Dintesheim;gemeinde;ersterwaehnung;778;9;0;Dintesheim lag im Wormsgau und wurde im Jahre 778 – es ist die älteste erhaltene Erwähnung – in den Lorscher Schenkungen als Tinesheim genannt.;Tidinesheim 791 „vermutlich die älteste Form“ des Namens;claude-sonnet
+Q567691;Dittelsheim-Heßloch;gemeinde;ersterwaehnung;;;0;;"Zusammenschluss (Doppelname); Heßloch 765 (Lorscher Schenkungen 765 bis 803), Dittelsheim ohne Jahr im Paket";claude-sonnet
+Q115545097;Heßloch;ortsteil;ersterwaehnung;765;9;1;In kaum einem anderen Ort erhielt das Kloster Lorsch so viele Schenkungen wie in Heßloch, nämlich zwölf, die sich auf die Jahre 765 bis 803 verteilten;"Beleg aus Artikel Dittelsheim-Heßloch; frühestes Jahr der Lorscher Schenkungen, keine ausdrückliche Ersterwähnung; 827 Kloster Hornbach, 871 Ludwig der Deutsche";claude-sonnet
+Q648448;Dolgesheim;gemeinde;ersterwaehnung;769;9;0;Die älteste erhaltene Erwähnung, als „Dulgisheim“, stammt vom 5. November 769;;claude-sonnet
+Q651370;Dorn-Dürkheim;gemeinde;ersterwaehnung;767;9;0;Die älteste erhaltene Erwähnung des Ortes stammt von 767 und stand in einer Urkunde des Klosters Lorsch.;;claude-sonnet
+Q567687;Dorsheim;gemeinde;ersterwaehnung;1349;9;0;Jedoch wurde der Ort erst vergleichsweise spät, in einer Urkunde von Pfalzgraf Ruprecht vom 30. März 1349 erstmals erwähnt.;;claude-sonnet
+Q561699;Duchroth;gemeinde;ersterwaehnung;1128;9;0;"Der Ort wurde im Jahr 1128 erstmals in einer Urkunde des Mainzer Erzbischofs Adalbert I. als Royde erwähnt; sie bezieht sich auf die Zeit des Erzbischofs Willigis (ab 975).";;claude-sonnet
+Q553568;Dörrebach;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q131567243;Ebernburg;gemeinde;ersterwaehnung;;;0;;"kein Beleg im Artikel; heute Stadtteil von Bad Kreuznach";claude-sonnet
+Q563199;Eckelsheim;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q563923;Eckenroth;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q567717;Eich;gemeinde;ersterwaehnung;781;9;1;Die älteste Erwähnung ist im Lorscher Codex erhalten und datiert im 14. Regierungsjahr König Karls in der Zeit zwischen Oktober 781 und Oktober 782.;"Zeitraum Oktober 781 bis Oktober 782; früheres Jahr genommen";claude-sonnet
+Q729819;Eimsheim;gemeinde;ersterwaehnung;762;9;0;Die älteste erhaltene schriftliche Erwähnung des im Wormsgau gelegenen Orts findet sich in einer Schenkungsurkunde von 762;;claude-sonnet
+Q2514978;Vereinigte Weingüter Krebs-Grode;unternehmen;gruendung;;;0;;"kein Beleg im Artikel für ein Gründungsjahr; 1854 beginnen zwei Weingüter (Grode, Krebs) mit Qualitätsweinanbau, seit 1966 gemeinsame Bewirtschaftung";claude-sonnet
+Q52247;Einhausen;gemeinde;ersterwaehnung;;;0;;"Zusammenschluss 1937 aus Klein-Hausen und Groß-Hausen; Klein-Hausen 768, Groß-Hausen 1139";claude-sonnet
+Q570666;Engelstadt;gemeinde;ersterwaehnung;941;9;0;Der Ort wurde 941 erstmals in einer Urkunde als Engilestat erwähnt.;;claude-sonnet
+Q563954;Ensheim;gemeinde;ersterwaehnung;769;9;0;Die älteste bis jetzt noch vorhandene schriftliche Nachricht aus fränkischer Zeit über Ensheim stammt vom 12. September 769.;;claude-sonnet
+Q569785;Eppelsheim;gemeinde;ersterwaehnung;782;9;0;Die älteste erhaltene Erwähnung von Eppelsheim als Ebbelesheim stammt von 782.;;claude-sonnet
+Q631184;Eppertshausen;gemeinde;ersterwaehnung;836;9;0;Die älteste erhaltene schriftliche Erwähnung von Eppertshausen stammt von 836.;;claude-sonnet
+Q571748;Erbach;gemeinde;ersterwaehnung;1095;9;0;Die älteste erhaltene Erwähnung von Erbach von 1095 findet sich im Lorscher Codex unter dem Namen „Ertbach“.;"Gemeinde = Kernort; laut Artikel Dorf-Erbach bezieht sich die Ersterwähnung 1095 möglicherweise auf Dorf-Erbach";claude-sonnet
+Q1004191;Bullau;ortsteil;ersterwaehnung;1095;9;0;Die älteste erhalten gebliebene urkundliche Erwähnung im Lorscher Codex als Buolaha datiert von 1095.;;claude-sonnet
+Q1243921;Dorf-Erbach;ortsteil;ersterwaehnung;1095;9;0;Die älteste erhaltene Erwähnung von Ertbach findet sich im Lorscher Codex und stammt von 1095.;Artikel hält Bezug der Ersterwähnung auf Dorf-Erbach (statt Kernstadt) für berechtigt;claude-sonnet
+Q1279736;Ebersberg;ortsteil;ersterwaehnung;1398;9;1;Die älteste bekannte schriftliche Erwähnung von Ebersberg wird in die Zeit 1398–1400 datiert.;"Zeitraum 1398–1400; früheres Jahr genommen";claude-sonnet
+Q1333562;Elsbach;ortsteil;ersterwaehnung;1095;9;0;Die älteste bekannte urkundlich Erwähnung erfolgte im Jahre 1095 im Lorscher Codex.;;claude-sonnet
+Q1352682;Erlenbach;ortsteil;ersterwaehnung;1388;9;0;Die älteste erhaltene Erwähnung des Dorfes stammt von 1388.;Erlenbach bei Erbach;claude-sonnet
+Q1307708;Ernsbach-Erbuch;ortsteil;ersterwaehnung;;;0;;"kein Beleg im Artikel; Doppelort aus Ernsbach und Erbuch (Gemeinde 1968–1971)";claude-sonnet
+Q1561262;Günterfürst;ortsteil;ersterwaehnung;1347;9;0;Das Bestehen des Ortes ist unter dem Namen Gundersfirst seit 1347 urkundlich bezeugt.;;claude-sonnet
+Q824032;Haisterbach;ortsteil;ersterwaehnung;1353;9;0;Die älteste erhaltene Erwähnung des Ortes stammt von 1353.;;claude-sonnet
+Q1630731;Lauerbach;ortsteil;ersterwaehnung;1290;9;0;Die älteste erhaltene Erwähnung des Dorfes als Lurbach stammt von 1290.;;claude-sonnet
+Q17048381;Roßbach;ortsteil;ersterwaehnung;1095;9;0;Die älteste erhaltene Erwähnung des Weilers Rossebuoch stammt von 1095 und steht im Lorscher Codex.;Weiler;claude-sonnet
+Q2259389;Schönnen;ortsteil;ersterwaehnung;1290;9;0;Die älteste erhaltene Erwähnung des Ortes stammt von 1290.;;claude-sonnet
+Q18334182;Sparkasse Odenwaldkreis;unternehmen;gruendung;;;0;;kein Beleg im Artikel (Infobox Gründungsdatum leer);claude-sonnet
+Q563950;Erbes-Büdesheim;gemeinde;ersterwaehnung;767;9;0;Die älteste erhaltene Erwähnung des Dorfes findet sich im Lorscher Codex und datiert auf Anfang Januar 767.;;claude-sonnet
+Q2106211;Postmuseum Rheinhessen;verein;gruendung;;;0;;"kein Beleg im Artikel für die Gründung des Vereins; das Museum wurde am 15. Juni 2002 eröffnet";claude-sonnet
+Q635503;Erzhausen;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q76528520;Lessingschule;unternehmen;gruendung;;;0;;"Kein Unternehmen, sondern ein Bauwerk (von Grundschule genutzt); kein Beleg im Artikel";claude-sonnet
+Q1510726;SV Erzhausen;verein;gruendung;1907;9;1;gegründet = 1907 oder 1913;"Infobox nennt 1907 oder 1913; früheres Jahr genommen; Artikel heißt SpVgg Erzhausen";claude-sonnet
+Q567172;Esselborn;gemeinde;ersterwaehnung;763;9;0;Die älteste erhaltene Erwähnung von Esselborn – als Escilebrunnin – stammt von 763 und stand in einer Schenkungsurkunde des Klosters Lorsch.;;claude-sonnet
+Q572400;Essenheim;gemeinde;ersterwaehnung;1023;9;0;Essenheim erscheint urkundlich unter den Namen Hesinesheim (1023), Heisinesheim (1026), Hesonesheim (1140);frühestes Jahr der Namensliste, keine ausdrückliche Ersterwähnung;claude-sonnet
+Q567663;Feilbingert;gemeinde;ersterwaehnung;;;0;;"Zusammenschluss aus Feil und Bingert; Bingert 1071, Feil 1237";claude-sonnet
+Q561110;Fischbachtal;gemeinde;ersterwaehnung;;;0;;"Zusammenschluss 1971; Billings 1430, Lichtenberg 1228, Meßbach 1384, Niedernhausen 1256, Nonrod 1384, Steinau 1347, Hottenbacher Hof 1379";claude-sonnet
+Q862882;Billings;ortsteil;ersterwaehnung;1430;9;1;"„Böllings“ (1430); „Böllings“ (1436); „Bul(l)inges“ (16. Jahrhundert); „Billinx“ (1558); „Billings“ (1671 und 1722).";frühestes Jahr der Namensliste, keine ausdrückliche Ersterwähnung;claude-sonnet
+Q1631230;Hottenbacher Hof;ortsteil;ersterwaehnung;1379;9;0;1379 wird der Hof Hottenbach erstmals erwähnt.;"Hofgut; Gründungsjahr nicht genannt, daher Ersterwähnung";claude-sonnet
+Q1823343;Lichtenberg;ortsteil;ersterwaehnung;1228;9;0;Die älteste bekannte urkundliche Erwähnung des Dorfes datiert in das Jahr 1228.;;claude-sonnet
+Q1926473;Meßbach;ortsteil;ersterwaehnung;1384;9;0;Die älteste urkundliche Erwähnung des Dorfs datiert in das Jahre 1384.;;claude-sonnet
+Q1988309;Niedernhausen;ortsteil;ersterwaehnung;1256;9;0;Erstmals urkundlich erwähnt wurde das Dorf im Jahre 1256 in einer Schenkungsurkunde an das Kloster Himmelthal.;;claude-sonnet
+Q1996362;Nonrod;ortsteil;ersterwaehnung;1384;9;0;Die älteste bekannte urkundliche Erwähnung des Dorfes erfolgte im Jahre 1384;;claude-sonnet
+Q1295060;Steinau;ortsteil;ersterwaehnung;1347;9;0;Erstmals urkundlich erwähnt wurde, soweit bekannt, das Dorf im Jahre 1347;;claude-sonnet
+Q566022;Flomborn;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel (1897 nur Gründungsversammlung eines Sportvereins);claude-sonnet
+Q553680;Flonheim;gemeinde;ersterwaehnung;765;9;1;Die älteste erhaltene schriftliche Erwähnung stammt aus dem Güterverzeichnis des Klosters Lorsch, dem „Lorscher Codex“ und wird auf 765–767 datiert;"Zeitraum 765–767; früheres Jahr genommen";claude-sonnet
+Q2473785;Uffhofen;ortsteil;ersterwaehnung;1240;9;0;Die älteste erhaltene Erwähnung von Uffhofen stammt von 1240.;;claude-sonnet
+Q567111;Flörsheim-Dalsheim;gemeinde;ersterwaehnung;;;0;;"Zusammenschluss (Doppelname Flörsheim und Dalsheim); kein Beleg für Ersterwähnung der Ortsteile im Artikel (1143 nur Gründung des Klosters Otterberg)";claude-sonnet
+Q553509;Framersheim;gemeinde;ersterwaehnung;769;9;1;Die älteste erhaltene Erwähnung findet sich in der Urkunde 1649, aus der Zeit vom Oktober 769 bis zum Oktober 770;"Zeitraum Oktober 769 bis Oktober 770; früheres Jahr genommen";claude-sonnet
+Q565120;Frei-Laubersheim;gemeinde;ersterwaehnung;767;9;0;Der Ort wurde im Jahr 767 als Liubherisheim im Lorscher Codex erstmals urkundlich erwähnt.;;claude-sonnet
+Q565094;Freimersheim;gemeinde;ersterwaehnung;763;9;0;Die älteste erhaltene Erwähnung des Ortes stammt von 763 in einer Urkunde des Klosters Lorsch.;;claude-sonnet
+Q564263;Frettenheim;gemeinde;ersterwaehnung;767;9;0;Die älteste erhaltene Erwähnung von Frettenheim, aus dem Jahr 767, findet sich im Lorscher Codex.;;claude-sonnet
+Q676753;Friesenheim;gemeinde;ersterwaehnung;803;9;0;Erstmals wird der Name Friesenheim im Jahre 803 im Codex Fuldensis erwähnt;;claude-sonnet
+Q622126;Fränkisch-Crumbach;gemeinde;ersterwaehnung;1148;9;0;die älteste erhalten gebliebene urkundliche Erwähnung als Crumbach datiert aus dem Jahr 1148.;;claude-sonnet
+Q564247;Fürfeld;gemeinde;ersterwaehnung;897;9;0;Der Ort wurde in einer Schenkungsurkunde König Zwentibolds von Lotharingien an das Kloster St. Maximin bei Trier 897 als Furnifeld erstmals urkundlich erwähnt.;;claude-sonnet
+Q1483706;Fürth;gemeinde;ersterwaehnung;795;9;0;Die erste urkundliche Erwähnung von Fürth erfolgte 795 unter dem Namen Furte in einem Dokument der Grenzbereinigung zum Besitz des Klosters Lorsch in der Mark Heppenheim.;"Gemeinde = Kernort Fürth; in der Grenzbeschreibung von 773 wird Fürth nicht erwähnt";claude-sonnet
+Q926251;Brombach;ortsteil;ersterwaehnung;1100;9;1;Das Dorf wird um das Jahr 1100 als Branbach superior et inferior im Lorscher Codex, einem Güterverzeichnis des Klosters, erstmals erwähnt.;„um das Jahr 1100“;claude-sonnet
+Q1331908;Ellenbach;ortsteil;ersterwaehnung;1359;9;0;Die früheste erhalten gebliebene urkundliche Erwähnung des Ortes als Ellenbach weist in das Jahr 1359;;claude-sonnet
+Q1355476;Erlenbach;ortsteil;ersterwaehnung;1094;9;0;Im Lorscher Codex wird 1094 Erlenbach als Erlebach in der Beschreibung der Huben und Zinsen des zum Kloster gehörigen Hofes Fürth (villicato Furde) erstmals erwähnt.;Erlenbach bei Fürth;claude-sonnet
+Q1392302;Fahrenbach;ortsteil;ersterwaehnung;1100;9;1;Das Dorf wird um das Jahr 1100 als Bahrenbach im Lorscher Codex, einem Güterverzeichnis des Klosters, erstmals erwähnt.;„um das Jahr 1100“;claude-sonnet
+Q1790138;Krumbach;ortsteil;ersterwaehnung;1100;9;1;Das Dorf wurde um das Jahr 1100 als „Crumbenbach“ im Lorscher Codex, einem Güterverzeichnis des Klosters, erstmals erwähnt.;„um das Jahr 1100“;claude-sonnet
+Q1790607;Kröckelbach;ortsteil;ersterwaehnung;1100;9;1;Die erste urkundliche Erwähnung von Kröckelbach befindet sich mit dem Namen „Creklenbach“ im Lorscher Codex, einem Güterverzeichnis der Abtei, um das Jahr 1100.;„um das Jahr 1100“;claude-sonnet
+Q1700050;Linnenbach;ortsteil;ersterwaehnung;1357;9;0;Die früheste erhalten gebliebene urkundliche Erwähnung des Ortes als Lindenbachbach weist in das Jahr 1357;;claude-sonnet
+Q1533478;Lörzenbach;ortsteil;ersterwaehnung;1426;9;0;Die erste bekannte urkundliche Erwähnung von Lörzenbach erfolgte mit dem Namen Lorezelnbach 1426;;claude-sonnet
+Q2266516;Seidenbach;ortsteil;ersterwaehnung;1357;9;0;Die früheste erhalten gebliebene urkundliche Erwähnung des Ortes als Sydenbach weist in das Jahr 1357;;claude-sonnet
+Q2339703;Steinbach;ortsteil;ersterwaehnung;1100;9;1;Die erste bekannte urkundliche Erwähnung von Steinbach erfolgte um 1100 im Lorscher Codex;„um 1100“;claude-sonnet
+Q1669932;Weschnitz;ortsteil;ersterwaehnung;1200;9;1;Die erste bekannte urkundliche Erwähnung von Weschnitz erfolgte mit dem Namen Wisgoz um 1200 im Lorscher Codex;„um 1200“;claude-sonnet
+Q18227970;Fürther Miniaturwelten;unternehmen;gruendung;;;0;;"kein Beleg im Artikel für ein Gründungsjahr; Anlagen 2008 erworben, Ausstellung im Mai 2009 eröffnet";claude-sonnet
+Q641778;Gabsheim;gemeinde;ersterwaehnung;767;9;0;Die älteste erhaltene schriftliche Erwähnung stammt vom 5. Mai 767 und nennt einen Stifter Giselbert.;;claude-sonnet
+Q570316;Gau-Algesheim;gemeinde;ersterwaehnung;766;9;0;Vor seiner ersten urkundlichen Erwähnung im Lorscher Codex im Jahr 766;;claude-sonnet
+Q15907118;Josef Schaberger & Co.;unternehmen;gruendung;;;0;;"kein exaktes Gründungsjahr im Artikel; nur „vermutlich vor 1956“";claude-sonnet
+Q610873;Gau-Bickelheim;gemeinde;ersterwaehnung;1128;9;0;Gau-Bickelheim kommt urkundlich erstmals im Jahr 1128 unter dem Namen „Beckelnheim“ vor.;;claude-sonnet
+Q112820113;Sutter;unternehmen;gruendung;1981;9;0;Die Sutter GmbH wurde 1981 gemeinsam mit den Söhnen Fritz und Hans-Joachim gegründet.;Jahr gilt für die Sutter GmbH;claude-sonnet
+Q678819;Gau-Bischofsheim;gemeinde;ersterwaehnung;769;9;0;Urkundlich erwähnt wurde Gau-Bischofsheim erstmals im Jahr 769.;;claude-sonnet
+Q630512;Gau-Heppenheim;gemeinde;ersterwaehnung;790;9;0;Die älteste erhaltene Erwähnung des Ortes als Hepfanheim stammt von 790;;claude-sonnet
+Q653864;Gau-Odernheim;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q1495880;Gau-Köngernheim;ortsteil;ersterwaehnung;804;9;0;Die erste bekannte Erwähnung von Gau-Köngernheim fand am 2. Juni 804 in einer im Lorscher Codex verzeichneten Schenkungsurkunde über Ackerland statt;Erwähnung von 782 bezieht sich laut Artikel auf das benachbarte Köngernheim;claude-sonnet
+Q644231;Gau-Weinheim;gemeinde;ersterwaehnung;767;9;0;Erstmals wurde der Ort 767 urkundlich mit Wigenheim erwähnt;;claude-sonnet
+Q203506;Gebroth;gemeinde;ersterwaehnung;;7;0;;nur Jahrhundert: „im 14. Jahrhundert erstmals erwähnt“;claude-sonnet
+Q678407;Gensingen;gemeinde;ersterwaehnung;768;9;0;Die älteste erhaltene Erwähnung des Ortes stammt aus einer Urkunde vom 1. November 768;;claude-sonnet
+Q625091;Gernsheim;gemeinde;ersterwaehnung;852;9;0;Gernsheim ein fränkischer Königshof (Ersterwähnung 852 in einer Urkunde Ludwig des Deutschen);Kirche 908 und Lorscher Codex 908 sind nicht die Ersterwähnung des Ortes;claude-sonnet
+Q1703637;Allmendfeld;ortsteil;gruendung;1937;9;0;Die Gründungsfeier für das Dorf fand am 31. Oktober 1937 im Alten Palais in Darmstadt statt.;"gegründeter Ort; 1971 in Gernsheim eingegliedert";claude-sonnet
+Q1746202;Klein-Rohrheim;ortsteil;ersterwaehnung;1200;9;1;Die älteste erhalten gebliebene urkundliche Erwähnung als Rorheim minor bezeugt um 1200 dortigen Grundbesitz des Klosters Lorsch.;"„um 1200“; Artikel schließt indirekt auf höheres Alter";claude-sonnet
+Q565408;Gimbsheim;gemeinde;ersterwaehnung;766;9;0;Zu diesem gehört eine auf den 13. Mai 766 datierte Urkunde, in der zwei Einwohner von Gimmenheim, wie es damals genannt wurde, dem Kloster Lorsch Ackerland und Weinberge für ihr Seelenheil schenken.;„vermutlich um das Jahr 500“ als Gründung ist nur Vermutung, nicht verwendet;claude-sonnet
+Q107530321;Schwimmverein Freibad Gimbsheim;verein;gruendung;2001;9;0;Der Verein wurde im Jahr 2001 aus einer Bürgerbewegung heraus gegründet;Trägerverein des Freibads;claude-sonnet
+Q639519;Ginsheim-Gustavsburg;gemeinde;ersterwaehnung;;;0;;"Zusammenschluss; Ginsheim 785 (Codex Eberhardi), Gustavsburg gegründet von Gustav II. Adolf, Jahr im Paket nicht belegt (1808 nur Gemarkungszuteilung)";claude-sonnet
+Q1010625;Burg-Lichtspiele;unternehmen;gruendung;1947;9;0;Schließlich eröffneten am Gründonnerstag des Jahres 1947, dem 3. April 1947, die Burg-Lichtspiele ihre Pforten.;"Eröffnung des Kinos; Gebäude 1899 als Kapelle errichtet";claude-sonnet
+Q1533661;Goddelau-Wolfskehlen;gemeinde;ersterwaehnung;;;0;;"Zusammenschluss 1973, 1977 in Riedstadt aufgegangen; kein Beleg für Ersterwähnung im Artikel";claude-sonnet
+Q1538518;Gorxheimertal;gemeinde;ersterwaehnung;;;0;;"Zusammenschluss; Unter-Flockenbach um 900, Trösel 1071, Gorxheim 1486";claude-sonnet
+Q1538440;Gorxheim;ortsteil;ersterwaehnung;1486;9;0;Die erste urkundliche Erwähnung des Ortes findet sich 1486 mit dem Namen Georgsheim;;claude-sonnet
+Q641482;Grasellenbach;gemeinde;ersterwaehnung;;;0;;"Zusammenschluss; Hammelbach 795, andere Ortsteile um 1300 (Scharbach 1359, Tromm 1829 laut eigenen Artikeln)";claude-sonnet
+Q2231195;Scharbach;ortsteil;ersterwaehnung;1359;9;0;Eine erste Erwähnung als „Scharpach“ ist aus dem Jahr 1359 überliefert.;Gemeindeartikel nennt für die übrigen Ortsteile pauschal „um 1300“;claude-sonnet
+Q1394683;Tromm;ortsteil;ersterwaehnung;1829;9;0;Erste Erwähnungen als Trumm, Dromm, oder Tromm sind aus dem Jahr 1829 überliefert.;;claude-sonnet
+Q569685;Griesheim;gemeinde;ersterwaehnung;1165;9;0;Griesheim wurde am 14. Juni 1165 erstmals mit eigenem Namen urkundlich erwähnt;ältere Urkunden nennen nur nicht namentlich bezeichnetes „Zubehör“;claude-sonnet
+Q15115488;Sankt Stephans-Siedlung;ortsteil;gruendung;1948;9;1;Das Gebiet, auf dem die Siedlung ab 1948 entstehen sollte;"gegründete Siedlung für vertriebene Ungarndeutsche; Jahr = Beginn der Anlage";claude-sonnet
+Q98690947;FriedWald;unternehmen;gruendung;;;0;;"Artikel behandelt den Bestattungswald allgemein, nicht das Unternehmen; kein Gründungsjahr der Firma";claude-sonnet
+Q688801;Grolsheim;gemeinde;ersterwaehnung;772;9;0;Die älteste erhaltene Erwähnung des Ortes stammt von 772 als „Grandfesheim“.;;claude-sonnet
+Q539579;Groß-Bieberau;gemeinde;ersterwaehnung;787;9;0;Im Jahre 787 wurde Groß-Bieberau erstmals urkundlich erwähnt.;"Geschichtsabschnitt nennt „Zeit 780–795“; Stadtrechte 1312 nicht relevant";claude-sonnet
+Q1710164;Rodau;ortsteil;ersterwaehnung;1392;9;0;Die älteste schriftliche Erwähnung des Dorfes datiert in das Jahr 1392.;;claude-sonnet
+Q251689;Groß-Gerau;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel (910 betrifft nur die Gerauer Mark);claude-sonnet
+Q828745;Berufliche Schulen Groß-Gerau;unternehmen;gruendung;;;0;;"Berufsschule, kein Unternehmen/Verein; kein Gründungsjahr im Artikel (1954 nur eigenes Schulgebäude)";claude-sonnet
+Q113485711;Helvetia Konservenfabrik Groß-Gerau;unternehmen;gruendung;1898;9;0;Das Unternehmen wurde 1898 als GmbH gegründet;Tochter der Conservenfabrik Lenzburg;claude-sonnet
+Q1903178;Martin-Buber-Schule (Groß-Gerau);unternehmen;gruendung;1972;9;0;Am 22. September 1972 wurde die Schule als Hauptschule mit Förderstufe eingeweiht;"öffentliche Schule, kein Unternehmen/Verein; Jahr = Einweihung";claude-sonnet
+Q970081;Groß-Rohrheim;gemeinde;ersterwaehnung;782;9;0;Die älteste erhaltene Erwähnung von Groß-Rohrheim aus dem Jahr 782 befindet sich im Lorscher Codex;;claude-sonnet
+Q516474;Groß-Umstadt;gemeinde;ersterwaehnung;741;9;0;Groß-Umstadt wurde im Jahre 741 erstmals urkundlich als Autmundisstat erwähnt.;;claude-sonnet
+Q1245655;Dorndiel;ortsteil;ersterwaehnung;;;0;;kein Beleg im Artikel (1390 betrifft nur die Burg Dorndiel);claude-sonnet
+Q874112;Heubach;ortsteil;ersterwaehnung;1303;9;0;Im Jahr 1303 wurde der Ort als Heipach erstmals schriftlich erwähnt;;claude-sonnet
+Q873841;Kleestadt;ortsteil;ersterwaehnung;1222;9;1;Die älteste bekannte Erwähnung von Cletstat datiert um 1222.;„um 1222“;claude-sonnet
+Q1746208;Klein-Umstadt;ortsteil;ersterwaehnung;1305;9;1;Der erste zweifelsfreie urkundliche Nachweis des ehemaligen Haufendorfes war um 1305.;"„um 1305“; frühere Nennungen 1229 (Omestad minor) und 1261 (Vnnestat) nicht zweifelsfrei zuzuweisen";claude-sonnet
+Q2090377;Raibach;ortsteil;ersterwaehnung;1392;9;1;Raibach wurde erstmals vor 1392 in einer Güterempfangsliste urkundlich erwähnt.;"„vor 1392“; Namensform Rippach (1392)";claude-sonnet
+Q2151093;Richen;ortsteil;ersterwaehnung;1350;9;0;Der Ort selbst wurde soweit bekannt erstmals 1350 als Rychen später als Ryechin, Rychen und Riechen erwähnt.;;claude-sonnet
+Q2161752;Semd;ortsteil;ersterwaehnung;1312;9;1;Der älteste bekannte urkundliche Nachweis datiert um 1312.;„um 1312“;claude-sonnet
+Q878199;Wiebelsbach;ortsteil;ersterwaehnung;1303;9;0;Die älteste bekannte schriftliche Erwähnung von Wiebelsbach erfolgte unter dem Namen Wubelspach im Jahr 1303.;;claude-sonnet
+Q622589;Groß-Zimmern;gemeinde;ersterwaehnung;1250;9;0;Erstmals erwähnt wird der Ort im Jahre 1250 als Cymmere in einer Katzenelnbogener Urkunde;;claude-sonnet
+Q15078593;Klein-Zimmern;ortsteil;ersterwaehnung;;;0;;"kein Beleg im Artikel; nur Namensformen ab Cleyntzymern (1338), ohne Aussage zur Ersterwähnung";claude-sonnet
+Q1421092;Grundelbachtal;gemeinde;ersterwaehnung;;;0;;"Zusammenschluss (Gorxheim und Unter-Flockenbach, 1970); Gorxheim 1486, Unter-Flockenbach um 900 laut Gorxheimertal-Artikel; kurzlebige Gemeinde";claude-sonnet
+Q680361;Guldental;gemeinde;ersterwaehnung;;;0;;"Artikel nennt nur Besitz Hetdenesheim (Heddesheim) 1163 urkundlich erwähnt, keine Ersterwähnung von Guldental selbst; kein Beleg";claude-sonnet
+Q641570;Gumbsheim;gemeinde;ersterwaehnung;738;9;0;Erstmals wurde der Ort 738 in einer Urkunde des Klosters Lorsch als Gimminsheim urkundlich erwähnt.;;claude-sonnet
+Q566919;Gundersheim;gemeinde;ersterwaehnung;769;9;0;Der Ort Gundersheim wurde am 18. September 769 in einer Schenkungsurkunde des Klosters Lorsch;;claude-sonnet
+Q561636;Gundheim;gemeinde;ersterwaehnung;774;9;0;Die älteste erhaltene Erwähnung von Gundheim, als Guntheim, stammt von 774;;claude-sonnet
+Q656289;Guntersblum;gemeinde;ersterwaehnung;830;9;1;Die früheste Erwähnung Guntersblums (Chunteres Frumere) findet sich im Lorscher Codex (Reichsurbar) zwischen den Jahren 830 und 850;"Zeitraum 830–850; weitere Erwähnung 13. Juni 897";claude-sonnet
+Q1206174;Deutschherrenhof;unternehmen;gruendung;;;0;;"Gutshof/Weingut, Kulturdenkmal; kein Gründungsjahr im Artikel";claude-sonnet
+Q1237388;Domhof;unternehmen;gruendung;;;0;;"ehemaliger Zehnthof/Weingut, Kulturdenkmal; kein Gründungsjahr im Artikel";claude-sonnet
+Q1625892;Homburger Hof;unternehmen;gruendung;;;0;;"Gutshof/Weingut, Kulturdenkmal; kein Gründungsjahr im Artikel (1462 nur Besitzernennung)";claude-sonnet
+Q1980386;Neues Schloss;unternehmen;gruendung;;;0;;"Schloss/Baudenkmal, kein Unternehmen; kein Jahr";claude-sonnet
+Q104621905;SV Guntersblum;verein;gruendung;1921;9;0;Der Verein wurde ursprünglich im Jahr 1921 gegründet.;Name SV 1921 bestätigt;claude-sonnet
+Q662105;Gutenberg;gemeinde;ersterwaehnung;1248;9;0;Die Burg Gutenburg wurde im Jahr 1213, der Ort selbst 1248 erstmals urkundlich erwähnt.;Burg 1213 nicht gewertet;claude-sonnet
+Q561674;Hackenheim;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q560487;Hahnenbach;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel (1357 betrifft Burg Wartenstein);claude-sonnet
+Q617192;Hahnheim;gemeinde;ersterwaehnung;764;9;0;Erstmals wurde Hahnhaim am 12. Juli 764 im Lorscher Codex urkundlich erwähnt als Hagenheim.;;claude-sonnet
+Q562812;Hallgarten;gemeinde;ersterwaehnung;1391;9;0;Der Ort wurde 1391 als Hargarten erstmals genannt.;Burg Montfort 1236 nicht gewertet;claude-sonnet
+Q140622121;Dreiweiherhof;ortsteil;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q566932;Hamm am Rhein;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q562905;Hangen-Weisheim;gemeinde;ersterwaehnung;773;9;0;Die älteste erhaltene Erwähnung des Dorfes stammt von 773.;;claude-sonnet
+Q567710;Hargesheim;gemeinde;ersterwaehnung;1158;9;0;Hargesheim wurde 1158 erstmals in einem Besitzverzeichnis des Klosters Rupertsberg erwähnt.;;claude-sonnet
+Q630902;Harxheim;gemeinde;ersterwaehnung;767;9;0;Die älteste erhaltene Erwähnung von Harxheim, als Harasheim, stammt von 767.;;claude-sonnet
+Q175746;Heidesheim am Rhein;gemeinde;ersterwaehnung;768;9;0;Die erste gesicherte Datierung lautet auf den 5. Juli 768.;"Lorscher Schenkung „aus dem Jahr 762“ ist laut Artikel zweifelhaft (tatsächlich 765–768); seit 2019 Ortsbezirk von Ingelheim";claude-sonnet
+Q2474151;Uhlerborn;ortsteil;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q562602;Heimweiler;gemeinde;ersterwaehnung;1375;9;1;Urkundlich erscheinen beide Dörfer im Jahr 1375 als „Krebeswilre“ und „Heymberch“.;"Ausnahme-Regel: beide Ortsteile (Krebsweiler, Heimberg) mit demselben Jahr; Zuordnung der Ortsteile aus Vereinsnamen erschlossen, daher unsicher";claude-sonnet
+Q560221;Heinzenberg;gemeinde;ersterwaehnung;;;0;;kein Beleg für den Ort im Artikel (1152 betrifft nur die Burg);claude-sonnet
+Q555047;Hennweiler;gemeinde;ersterwaehnung;992;9;0;Die erste urkundliche Erwähnung des Dorfes stammt aus dem Jahr 992;;claude-sonnet
+Q524407;Heppenheim;gemeinde;ersterwaehnung;755;9;0;Erstmals schriftlich erwähnt wurde der Ort im Jahr 755;Stadtrecht 1318 nicht gewertet;claude-sonnet
+Q1348190;Erbach (Heppenheim);ortsteil;ersterwaehnung;;;0;;kein Beleg im Artikel (1267 betrifft Burggraf der Starkenburg);claude-sonnet
+Q13580440;Hambach;ortsteil;ersterwaehnung;1165;9;0;Die früheste bekannte Erwähnung von Hambach als Heimbach ist eine Urkunde von 1165;;claude-sonnet
+Q1743604;Kirschhausen;ortsteil;ersterwaehnung;1130;9;0;Erstmals urkundlich erwähnt wurde Kirschhausen im Jahre 1130 als Kirzehusen im Lorscher Codex;;claude-sonnet
+Q1940618;Mittershausen-Scheuerberg;ortsteil;ersterwaehnung;;;0;;"Zusammenschluss; Mittershausen 1339, Scheuerberg 1371";claude-sonnet
+Q2300931;Sonderbach;ortsteil;ersterwaehnung;1200;9;1;Die früheste erhalten gebliebene urkundliche Erwähnung als Sunderenbach oder Sundrenbach findet sich um 1200 im Lorscher Codex;„um 1200“;claude-sonnet
+Q1286345;Wald-Erlenbach;ortsteil;ersterwaehnung;1409;9;0;Der früheste erhalten gebliebene urkundliche Nachweis belegt das Bestehen des Ortes Erlebach seit dem Jahr 1409;;claude-sonnet
+Q51844718;Halber Mond;unternehmen;gruendung;;;0;;"historisches Hotel/Baudenkmal; kein Gründungsjahr im Artikel (1617 nur erste Erwähnung des Lehenshofs)";claude-sonnet
+Q29019803;Haus am Maiberg;unternehmen;gruendung;1955;9;0;Gründungsdatum = 30. September 1955;"Akademie in Trägerschaft der Diözese Mainz; Schließung zum 31. Dezember 2022 beabsichtigt";claude-sonnet
+Q1667631;Internationaler Rat der Christen und Juden;verein;gruendung;1947;9;0;Er wurde 1947 im Anschluss an die Konferenz von Seelisberg von Everett R. Clinchy mit Büros in Genf und Paris gegründet, formell erst auf der Fribourg-Konferenz 1948.;formell erst 1948 (Fribourg-Konferenz);claude-sonnet
+Q562589;Hergenfeld;gemeinde;ersterwaehnung;969;9;0;Im Jahr 969 wurde der Ort als Königshof Hergiesfeld erstmals urkundlich erwähnt.;;claude-sonnet
+Q634718;Hesseneck;gemeinde;ersterwaehnung;;;0;;"kein Beleg im Artikel; ehemalige Gemeinde, 2018 in Oberzent aufgegangen";claude-sonnet
+Q180949;Hillesheim;gemeinde;ersterwaehnung;772;9;1;Die erste urkundliche Erwähnung kam mit der Schenkung des Erchenbert an das Kloster Lorsch am 18. August 772 oder 782 zustande;"772 oder 782; früheres Jahr genommen";claude-sonnet
+Q643634;Hirschhorn;gemeinde;ersterwaehnung;;;0;;"kein Beleg im Artikel für Hirschhorn selbst (Burg um 1200 und Stadtmauer 1391 sind keine Ortserwähnung); Ortsteil Ersheim 773";claude-sonnet
+Q1361797;Ersheim;ortsteil;ersterwaehnung;773;9;0;Der früheste erhalten gebliebene urkundliche Nachweis belegt im Lorscher Codex eine Schenkung an das Kloster Lorsch in villa Ersheim (im Dorf Ersheim) im Jahr 773.;;claude-sonnet
+Q553513;Hochborn;gemeinde;ersterwaehnung;782;9;0;Die erste urkundliche Erwähnung war am 23. April 782, im Urkundenbuch des Klosters Lorsch;bis 1971 Blödesheim (Blatmarsheim);claude-sonnet
+Q563032;Hochstetten-Dhaun;gemeinde;ersterwaehnung;;;0;;"Zusammenschluss (Doppelname); Hochstetten um 1100, Dhaun kein Jahr im Paket";claude-sonnet
+Q561805;Hochstätten;gemeinde;ersterwaehnung;1366;9;0;Die erste eindeutige urkundliche Erwähnung stammt aus dem Jahr 1366;„eindeutig“ deutet auf mögliche frühere unsichere Nennung hin;claude-sonnet
+Q540692;Hohen-Sülzen;gemeinde;ersterwaehnung;766;9;0;Die älteste erhaltene Erwähnung des Ortes, als „Sulzheim“, findet sich in einer Urkunde des Klosters Lorsch (Lorscher Codex) von 766.;;claude-sonnet
+Q705187;Horbach;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel (1340 nur Kurmainzer Rechte nachgewiesen);claude-sonnet
+Q647423;Horrweiler;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q567702;Hundsbach;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q634819;Höchst im Odenwald;gemeinde;ersterwaehnung;1156;9;0;Die älteste erhaltene schriftliche Erwähnung von Höchst datiert von 1156.;Gemeinde = Kernort Höchst;claude-sonnet
+Q566231;Annelsbach;ortsteil;ersterwaehnung;1314;9;0;Die älteste bekannte Erwähnung des damals aus nur einem Bauernhof bestehenden Dorfs erfolgte im Jahre 1314.;;claude-sonnet
+Q1267599;Dusenbach;ortsteil;ersterwaehnung;1305;9;0;Die älteste erhaltene Erwähnung des Ortes stammt von 1305.;;claude-sonnet
+Q1438264;Forstel;ortsteil;ersterwaehnung;1200;9;0;Die älteste erhaltene Erwähnung des Ortes stammt von 1200.;;claude-sonnet
+Q1306461;Hassenroth;ortsteil;ersterwaehnung;1408;9;0;Die älteste bekannte Erwähnung von Hassenroth datiert in das Jahre 1408.;;claude-sonnet
+Q1280930;Hetschbach;ortsteil;ersterwaehnung;1398;9;0;Die älteste erhaltene Erwähnung des Dorfes stammt von 1398.;;claude-sonnet
+Q1405506;Hummetroth;ortsteil;ersterwaehnung;1314;9;0;Der älteste erhalten gebliebene urkundliche Nachweis belegt das Bestehen des Ortes Humbrechtenrode seit dem Jahr 1314.;;claude-sonnet
+Q1958833;Mümling-Grumbach;ortsteil;ersterwaehnung;1305;9;0;Die frühest erhaltene Erwähnung des Ortsnamens Crumbach findet sich in einer Urkunde vom 29. September 1305;;claude-sonnet
+Q2083840;Pfirschbach;ortsteil;ersterwaehnung;1314;9;0;Die älteste erhaltene Erwähnung des Dorfes stammt von 1314.;;claude-sonnet
+Q2385033;TSV 1875 Höchst;verein;gruendung;1875;9;0;Der Verein wurde 1875 als fünfter Turnverein des Odenwaldkreises gegründet.;"Jahr im Namen bestätigt; Satzung/Name 1949";claude-sonnet
+Q561282;Hüffelsheim;gemeinde;ersterwaehnung;767;9;0;Die früheste Erwähnung des Ortes findet sich aus dem Jahre 767 als Uffiliubesheim;;claude-sonnet
+Q159548;Ingelheim am Rhein;gemeinde;ersterwaehnung;;;0;;"Zusammenschluss 1939 (Nieder-Ingelheim, Frei-Weinheim, Ober-Ingelheim, Sporkenheim); Frei-Weinheim 772, Großwinternheim 937; Stadtgründung 1939";claude-sonnet
+Q1453763;Frei-Weinheim;ortsteil;ersterwaehnung;772;9;0;Die erste urkundliche Erwähnung Frei-Weinheims datiert aus dem Jahre 772.;;claude-sonnet
+Q1549783;Großwinternheim;ortsteil;ersterwaehnung;937;9;0;Der Ort wurde als fränkische Siedlung im 6. Jahrhundert gegründet und 937 erstmals als Villa seu marca Winternheim ex fisco nostro Ingelisheim erwähnt.;;claude-sonnet
+Q1543220;Sporkenheim;ortsteil;ersterwaehnung;;7;0;;"nur Jahrhundert: Hof „im 12. Jahrhundert erwähnt“ (Spurchenheim); 1128 Erwerb des Hofs durch Erzbischof Adalbert, keine ausdrückliche Ersterwähnung";claude-sonnet
+Q1662965;West;ortsteil;gruendung;1963;9;1;Diese Siedlung wurde 1963 auf dem ehemaligen Gelände der Chemischen Fabrik Rhenania errichtet.;"Stadtteil Ingelheim-West entstand in den 1960ern aus Neubausiedlungen, nie eigenständig; Jahr der ersten Siedlung";claude-sonnet
+Q116868324;INGmobil;unternehmen;gruendung;;;0;;"kein Beleg im Artikel (Infobox Gründung leer; „fährt seit 2019“ ist Betriebsbeginn)";claude-sonnet
+Q112939748;Midas Pharma;unternehmen;gruendung;1988;9;0;Midas Pharma wurde 1988 von Karl-Heinz Schleicher gegründet.;gegründet in Gau-Algesheim, seit 1994 in Ingelheim;claude-sonnet
+Q139586391;Weingut Adamswein;unternehmen;gruendung;1882;9;0;Gründungsdatum = 1882;;claude-sonnet
+Q531286;Ippenschied;gemeinde;ersterwaehnung;1348;9;0;Der Ort wurde im Jahr 1348 erstmals urkundlich erwähnt.;;claude-sonnet
+Q569126;Jeckenbach;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q656255;Jugenheim in Rheinhessen;gemeinde;ersterwaehnung;767;9;1;Ob sich die Erwähnung eines Ortes „Gaginheim“ im Lorscher Codex von 767 auf Jugenheim bezieht, wird von der Forschung gelegentlich bestritten.;"Zuordnung zum Lorscher Codex 767 von der Forschung gelegentlich bestritten; Pfarrei erstmals 1299 (nicht der Ort)";claude-sonnet
+Q187584;Kellenbach;gemeinde;ersterwaehnung;1200;9;1;Der Ort Kellenbach wurde um das Jahr 1200 erstmals urkundlich erwähnt.;"um 1200; Kirche erstmals 1314 (nicht der Ort)";claude-sonnet
+Q635547;Kelsterbach;gemeinde;ersterwaehnung;850;9;1;Die älteste erhaltene schriftliche Erwähnung von Gelsterbach findet sich, wie für viele weitere Orte, im Lorscher Codex (ca. 850 n.;"ca. 850; Satz im Paket abgeschnitten";claude-sonnet
+Q238659;Kettenheim;gemeinde;ersterwaehnung;1171;9;0;Früher Kiedenheim (Ersterwähnung 1171) oder Kittenheim (1194) genannt;Kittenheim 1194 als spätere Namensform;claude-sonnet
+Q22470;Kirn;gemeinde;ersterwaehnung;841;9;0;Die erste urkundliche Erwähnung Kirns als Chira (ähnlich Kirchberg als Chiriperg) geht auf das Jahr 841 zurück;;claude-sonnet
+Q28531104;Berufsbildende Schule Kirn;unternehmen;gruendung;;;0;;"kein Beleg im Artikel; Schule, kein Gründungsjahr genannt (nur Außenstellen um 1970)";claude-sonnet
+Q1558150;Gymnasium Kirn;unternehmen;gruendung;1821;9;1;1815 wurden erstmals Initiativen zur Gründung einer höheren Schule in Kirn angestrebt, die 1821 durchgesetzt wurden.;"Schule; 1821 Durchsetzung der Gründung (Progymnasium), 1828 in Rektoratsschule umgewandelt; Initiativen ab 1815";claude-sonnet
+Q561228;Kirschroth;gemeinde;ersterwaehnung;1364;9;0;Kirschroth wurde im Jahr 1364 als Rodde erstmals urkundlich erwähnt.;;claude-sonnet
+Q630978;Klein-Winternheim;gemeinde;ersterwaehnung;1100;9;0;Die älteste erhaltene schriftliche Erwähnung des Ortes Klein-Winternheim findet sich als Eintrag zum 26. April 1100 im ältesten erhaltenen Mainzer Domnekrolog.;;claude-sonnet
+Q678804;Köngernheim;gemeinde;ersterwaehnung;782;9;0;Die erste bekannte Erwähnung findet sich im Lorscher Codex in einer Urkunde vom 27. Februar 782;Kirche erstmals 1299 (nicht der Ort);claude-sonnet
+Q561950;Königsau;gemeinde;ersterwaehnung;1325;9;0;Das Dorf Königsau im Kellenbachtal wird im Jahre 1325 als „Kunigesauwe“ erstmals urkundlich erwähnt.;;claude-sonnet
+Q16099;Lampertheim;gemeinde;ersterwaehnung;991;9;0;991 wurde Lampertheim erstmals im Codex Edelini des Klosters Weißenburg erwähnt.;Namensformen aus 832 überliefert (Langobardonheim/Langbardheim), aber nur als Namensdeutung genannt;claude-sonnet
+Q1623114;Hofheim;ortsteil;ersterwaehnung;991;9;0;Die erste urkundliche Erwähnung datiert aus dem Jahr 991, als das Dorf mit dem Namen Hovenheim in den Aufzeichnungen des Klosters Weißenburg auftaucht.;;claude-sonnet
+Q1652577;Hüttenfeld;ortsteil;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q1526582;Neuschloß;ortsteil;ersterwaehnung;;;0;;"kein Beleg für den Ort; 1472 ist nur das Jagdschloss Friedrichsburg erstmals erwähnt";claude-sonnet
+Q2167106;Rosengarten;ortsteil;ersterwaehnung;1422;9;0;Die älteste erhaltene urkundliche Erwähnung des Ortes stammt von 1422, als Kurfürst Ludwig III. diesen zusammen mit Kirschgartshausen vom Wormser Kloster Kirschgarten erwarb.;Wikidata P571 1937 bezieht sich auf das Erbhöfedorf, nicht auf die Ersterwähnung;claude-sonnet
+Q2023449;Omnibusbetriebe Beth;unternehmen;gruendung;;;0;;"kein Beleg im Artikel (Gründungsjahr nicht genannt; März 2006 Übernahme, Satz abgeschnitten)";claude-sonnet
+Q2123619;Quoka;unternehmen;gruendung;1983;9;0;Gründungsdatum = 1983;;claude-sonnet
+Q631783;Langenlonsheim;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel (nur Kirche um 1200);claude-sonnet
+Q665096;Langenthal;gemeinde;ersterwaehnung;1322;9;0;Langenthal wurde im Jahr 1322 erstmals urkundlich erwähnt.;;claude-sonnet
+Q656106;Laubenheim;gemeinde;ersterwaehnung;1316;9;1;Der in den Regesten der Erzbischöfe von Mainz für das Jahr 1316 genannte Ort, nun im Besitz der Herren von Hohenfels, kann wegen eines Zeugen aus Bingen auf Laubenheim (Nahe) bezogen werden;"Lorscher-Codex-Erwähnungen (777-1100) werden von den Herausgebern auf Mainz-Laubenheim bezogen; 1316 nur mögliche Zuordnung";claude-sonnet
+Q640202;Lauschied;gemeinde;ersterwaehnung;1200;9;1;Um 1200 wurde der Ort als Lubescheid erstmals urkundlich erwähnt.;um 1200;claude-sonnet
+Q667310;Lautertal;gemeinde;ersterwaehnung;;;0;;"Zusammenschluss (Ende 1971, Gebietsreform); Beedenkirchen 1012, Elmshausen 1339, Gadernheim 1367, Knoden 1428, Lautern 1369, Raidelbach 1339, Reichenbach 1012, Schannenbach 1398";claude-sonnet
+Q814031;Beedenkirchen;ortsteil;ersterwaehnung;1012;9;0;Beedenkirchen wurde 1012 im Lorscher Codex als Betenkiricha erstmals urkundlich erwähnt;;claude-sonnet
+Q1333076;Elmshausen;ortsteil;ersterwaehnung;1339;9;0;Die erste urkundliche Erwähnung von Elmshausen erfolgte 1339 unter dem Namen Elmshusen;;claude-sonnet
+Q1490882;Gadernheim;ortsteil;ersterwaehnung;1367;9;0;Die erste urkundliche Erwähnung von Gadernheim erfolgte 1367 unter dem Namen Geydenheym;;claude-sonnet
+Q1777363;Knoden;ortsteil;ersterwaehnung;1428;9;0;Die erste schriftliche Erwähnung fand der Ort unter dem Namen Knoden 1428.;;claude-sonnet
+Q1808667;Lautern;ortsteil;ersterwaehnung;1369;9;0;Die gesicherte schriftliche Ersterwähnung des Dorfes geht auf eine Eintragung im Zinsbuch des Kurpfälzer Oberamts Heidelberg im Jahr 1369 zurück.;1012 (Lûddera) zweifelhaft: unklar, ob Bach oder Ort gemeint;claude-sonnet
+Q1735543;Raidelbach;ortsteil;ersterwaehnung;1339;9;0;Die früheste erhalten gebliebene urkundliche Erwähnung als Reilenbach als Zubehör der Burg Schönberg stammt aus dem Jahr 1339.;;claude-sonnet
+Q2139159;Reichenbach;ortsteil;ersterwaehnung;1012;9;0;Die erste urkundliche Erwähnung des Orts erfolgte 1012 unter dem Namen Richinbach;;claude-sonnet
+Q2230981;Schannenbach;ortsteil;ersterwaehnung;1398;9;0;Die erste schriftliche Erwähnung des Ortes fand der Ort unter dem Namen Schandenbach 1398;;claude-sonnet
+Q112631153;Felsberghütte;unternehmen;gruendung;;;0;;"kein Verein/Unternehmen: Schutzhütte der DAV-Sektion Darmstadt-Starkenburg; Behelfsheim 1945-46 erbaut, Kaufvertrag 7. August 1950 (kein Gründungsjahr einer Organisation)";claude-sonnet
+Q653157;Lettweiler;gemeinde;ersterwaehnung;1194;9;1;Der Ort wurde um das Jahr 1194 unter dem Namen „Litwilre“ erstmals urkundlich erwähnt.;um 1194;claude-sonnet
+Q675588;Limbach;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q1826180;Lindenfels;gemeinde;ersterwaehnung;1123;9;0;Im Jahr 1123 wurde Lindenfels in der Chronik des Klosters Lorsch erstmals urkundlich erwähnt.;;claude-sonnet
+Q1373898;Eulsbach;ortsteil;ersterwaehnung;1398;9;1;Die früheste erhalten gebliebene urkundliche Erwähnung des Ortes als Ilespach weist in die Jahre 1398–1400;Zeitraum 1398-1400, früheres Jahr genommen;claude-sonnet
+Q1529850;Glattbach;ortsteil;ersterwaehnung;1356;9;0;Die früheste erhalten gebliebene urkundliche Erwähnung des Ortes als Gladbach weist in das Jahr 1356;;claude-sonnet
+Q1779532;Kolmbach;ortsteil;ersterwaehnung;1100;9;1;Das Dorf wird um das Jahr 1100 als Columbach im Lorscher Codex, einem Güterverzeichnis des Klosters Lorsch, erstmals erwähnt.;um 1100;claude-sonnet
+Q18288233;Litzelröder;ortsteil;ersterwaehnung;1585;9;1;Der Name der Siedlung ist als Flurname uff der Lürtzenröder schon seit dem Jahr 1585 urkundlich nachgewiesen.;Erwähnung als Flurname, nicht als Siedlung;claude-sonnet
+Q2239703;Schlierbach;ortsteil;ersterwaehnung;1356;9;0;Die früheste erhalten gebliebene urkundliche Erwähnung des Ortes als Slirbach erfolgte 1356;;claude-sonnet
+Q1564171;Seidenbuch;ortsteil;gruendung;1782;9;0;Mit dem Bau einer Glashütte 1782 wurde der Ort Seidenbuch gegründet.;gegründeter Ort (Glashütte);claude-sonnet
+Q2584473;Winkel;ortsteil;ersterwaehnung;1356;9;0;Die früheste erhalten gebliebene urkundliche Erwähnung des Ortes als Winkel weist in das Jahr 1356;;claude-sonnet
+Q2585049;Winterkasten;ortsteil;ersterwaehnung;1354;9;0;Die früheste bekannte Erwähnung des Ortes Winterkasten stammt von 1354;;claude-sonnet
+Q563720;Lonsheim;gemeinde;ersterwaehnung;775;9;0;wurde früher Laonisheim (Ersterwähnung 775), Lonesheim (857) und Lohengesheim (1234) geschrieben;Lohengesheim 1234 evtl. Langenlonsheim;claude-sonnet
+Q524939;Lorsch;gemeinde;ersterwaehnung;795;9;0;Die erste urkundliche Erwähnung des Ortes Lorsch erfolgte 795;Kloster 764 gegründet, 885 Abtei als Lauressam erwähnt (nicht der Ort);claude-sonnet
+Q1524373;SC Olympia Lorsch;verein;gruendung;1907;9;0;Am 25. Juni 1907 wurde in der Gastwirtschaft Zur Klosterschenke der FC Lorsch 1907 gegründet.;Jahr im Namen (S.C. Olympia Lorsch 1907) bestätigt;claude-sonnet
+Q677298;Ludwigshöhe;gemeinde;ersterwaehnung;;;0;;"Name Ludwigshöhe aus Neuanlage 1822 (Grundsteinlegung 25. August 1822), Rudelsheim erstmals 21. März 766 erwähnt; Zuordnung zur Gemeinde im Paket nicht eindeutig, daher kein Jahr";claude-sonnet
+Q555223;Löllbach;gemeinde;ersterwaehnung;1319;9;0;Löllbach wurde 1319 erstmals als Leubilbach erwähnt;;claude-sonnet
+Q204576;Lörzweiler;gemeinde;ersterwaehnung;825;9;0;Lörzweiler wurde erstmals im Jahr 825 als Lorenzevillare urkundlich erwähnt.;;claude-sonnet
+Q624842;Lützelbach;gemeinde;ersterwaehnung;;;0;;"Zusammenschluss (1972, Gebietsreform); Breitenbrunn 1273, Lützel-Wiebelsbach 1160, Rimhorn 1273, Seckmauern 1247, Haingrund kein Beleg";claude-sonnet
+Q906259;Breitenbrunn;ortsteil;ersterwaehnung;1273;9;0;1273 verkaufte Marquard von Rosenbach umfangreiche Güter, darunter auch ein Gut zu „Breidenbrunen“ an das Kloster Höchst. Dies stellt die älteste erhaltene Erwähnung des Ortes dar.;;claude-sonnet
+Q1569475;Haingrund;ortsteil;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q1236732;Hengmantel;ortsteil;ersterwaehnung;1426;9;0;Hengmantel wurde erstmals 1426 erwähnt;Weiler bei Breitenbrunn;claude-sonnet
+Q1880482;Lützel-Wiebelsbach;ortsteil;ersterwaehnung;1160;9;1;Die älteste erhalten gebliebene Erwähnung von Lützelbach weist in das Jahr 1160.;"Erwähnung eines Adeligen Wignand von Luzzelenbach; Wiebelspach seit 1237 bezeugt";claude-sonnet
+Q2153242;Rimhorn;ortsteil;ersterwaehnung;1273;9;0;Die älteste erhalten gebliebene urkundliche Erwähnung als Riemhurne weist in das Jahr 1273.;;claude-sonnet
+Q1543613;Seckmauern;ortsteil;ersterwaehnung;1247;9;0;Die älteste erhalten gebliebene urkundliche Erwähnung im sogenannten Koppelfutterregister als Sickinmuren weist in das Jahr 1247.;;claude-sonnet
+Q1720;Mainz;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel (nur römische Gründung ab 13/12 v. Chr., keine Ersterwähnung);claude-sonnet
+Q880555;Altstadt;ortsteil;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q883569;Bleichenviertel;ortsteil;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q1885689;Bretzenheim;ortsteil;ersterwaehnung;752;9;0;Im Mittelalter ist Bretzenheim erstmals in einer Urkunde vom 18. Januar 752 als villa nominata Prittonorum bezeugt.;Fulda-Schenkung 754 als weitere Erwähnung;claude-sonnet
+Q1885697;Hartenberg-Münchfeld;ortsteil;ersterwaehnung;;;0;;kein Beleg im Artikel (Wikidata 1989 betrifft Ortsbezirksbildung);claude-sonnet
+Q1560735;Hechtsheim;ortsteil;ersterwaehnung;808;9;0;Am 17. Mai 808 wurde Hehhidesheim erstmals schriftlich durch das Kloster Fulda erwähnt.;Dulcinesheim (teilweise in Hechtsheim aufgegangenes Dorf) schon 782;claude-sonnet
+Q1596364;Heinrich-Egli-Haus;unternehmen;gruendung;1875;9;0;Das Heinrich-Egli-Haus ist ein 1875 von Heinrich Egli gegründetes Wohnheim für wohnungslose und obdachlose Männer in Mainz.;Wohnheim/Einrichtung, kein Stadtteil;claude-sonnet
+Q1662968;Ingelheimer Aue;ortsteil;ersterwaehnung;;;0;;"kein Beleg im Artikel; ehemalige Rheininsel";claude-sonnet
+Q1262559;Kästrich;ortsteil;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q1885700;Laubenheim;ortsteil;ersterwaehnung;773;9;0;Die daraus entstandene Siedlung wurde am 5. März 773 erstmals urkundlich in einer Schenkungsurkunde an das Kloster Fulda unter dem Namen Nubenheim erwähnt.;Mainzer Ortsbezirk (nicht Laubenheim an der Nahe);claude-sonnet
+Q18628478;Lauterenviertel;ortsteil;ersterwaehnung;;;0;;"kein Beleg im Artikel; Stadterweiterung des 19. Jahrhunderts";claude-sonnet
+Q1663663;Layenhof;ortsteil;gruendung;1783;9;0;Das Hofgut Layenhof wurde 1783 durch Franz Georg Zumbach, einem Amtmann des Mainzer Dompropstes Damian Friedrich von der Leyen als „Leyen’scher Hof“ errichtet.;"gegründetes Hofgut; heutige Siedlung aus Konversionsfläche des Finthen Army Airfield";claude-sonnet
+Q1885696;Lerchenberg;ortsteil;gruendung;1962;9;0;Er ging aus der „Jubiläumssiedlung“ hervor, die zur Mainzer Zweitausendjahrfeier im Jahr 1962 gegründet worden war.;"gegründete Siedlung; Stadtratsbeschluss 25. Mai 1961, Ortsbezirk seit 1964";claude-sonnet
+Q463727;Mainz-Amöneburg;ortsteil;ersterwaehnung;;;0;;"kein Beleg im Artikel (Ortsbezirk von Wiesbaden; 1864 nur Zementfabrik gegründet)";claude-sonnet
+Q883326;Mainz-Drais;ortsteil;ersterwaehnung;1149;9;0;Der Ort wurde unter König Konrad III. am 24. August 1149 erstmals urkundlich als Treise erwähnt.;;claude-sonnet
+Q1885688;Mainz-Ebersheim;ortsteil;ersterwaehnung;764;9;0;Die erste urkundliche Erwähnung von Ebersheim fand im Jahr 764 in einer Schenkungsurkunde des Stifts St. Alban an das Kloster Lorsch statt.;Artikel nennt als zweite Möglichkeit eine Urkunde von 789 (Aburinesheim);claude-sonnet
+Q1648853;Mainz-Finthen;ortsteil;ersterwaehnung;1092;9;0;Das heutige Mainz-Finthen wird 1092 erstmals urkundlich als Fundene erwähnt.;;claude-sonnet
+Q961164;Mainz-Gonsenheim;ortsteil;ersterwaehnung;774;9;0;Bereits am 13. November 774 wurde Gonsenheim erstmals als „Guntzinheim“ in einer Schenkungsurkunde König Karls an das Kloster Fulda erwähnt.;;claude-sonnet
+Q37692158;Mainz-Innenstadt;ortsteil;ersterwaehnung;;;0;;"kein Beleg im Artikel; aufgelöster Verwaltungsbezirk (1989 aufgeteilt)";claude-sonnet
+Q478710;Mainz-Kostheim;ortsteil;ersterwaehnung;790;9;0;Die älteste erhaltene Erwähnung von Kostheim stammt aus dem Jahr 790 und findet sich in einer Urkunde, die Karl der Große ausgestellt hat.;Ortsbezirk von Wiesbaden;claude-sonnet
+Q317819;Mainz-Mombach;ortsteil;ersterwaehnung;1256;9;0;Mombach wurde erstmals im Jahre 1256 urkundlich erwähnt.;Artikel: Ort sicherlich älter;claude-sonnet
+Q884862;Mainz-Weisenau;ortsteil;ersterwaehnung;1186;9;1;Die älteste Erwähnung stammt aus einer Rechtfertigungsurkunde des Mainzer Erzbischofs Konrad von Wittelsbach, die nur auf die Zeit zwischen 1186 und 1190 datiert werden kann;"Zeitraum 1186-1190, früheres Jahr genommen; danach Urkunde Heinrichs VI. von 1192 (Siedlung dort am Rhein)";claude-sonnet
+Q1682363;Marienborn;ortsteil;ersterwaehnung;;7;1;;"nur Jahrhundert: Name Mariäborn erstmals Mitte des 17. Jahrhunderts, 1685 Marienborn; keine Ersterwähnung des Ortes genannt";claude-sonnet
+Q524446;Neustadt;ortsteil;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q1444865;Oberstadt;ortsteil;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q140605;Zahlbach;ortsteil;ersterwaehnung;;;0;;kein Beleg für den Ort im Artikel (nur Kloster St. Maria im Heiligen Tal 1251 gegründet);claude-sonnet
+Q2632640;Aareon;unternehmen;gruendung;1957;9;0;Gründungsdatum = 1957;"1957 Gründung des Rechenzentrums (Firmenjubiläum 2007); Vorläufer Deutsche Wohnstättenbank AG 1923";claude-sonnet
+Q15782755;Alte Ziegelei;unternehmen;gruendung;;;0;;"kein Unternehmen: Industriedenkmal/Ziegeleimuseum in Mainz-Bretzenheim; nur der Trägerverein (Verein der Ziegeleifreunde Mainz) 1980 gegründet";claude-sonnet
+Q864442;Bioland;unternehmen;gruendung;1971;9;0;1971 wurde dann der eingetragene Verein „bio-gemüse“, er ist der Vorläufer von Bioland, gegründet.;"Infobox Gründungsdatum = 1971; Anbauverband";claude-sonnet
+Q68308888;DB Regio Bus Mitte;unternehmen;gruendung;2017;9;0;Gründung = 2017;laut Einleitung seit 2019 Verkehrsunternehmen mit Sitz in Mainz;claude-sonnet
+Q15810383;Frauenlob-Gymnasium Mainz;unternehmen;gruendung;1889;9;0;Die Schule wurde im Jahr 1889 als höhere Töchterschule gegründet.;"Schule; Name Frauenlob seit 1938";claude-sonnet
+Q1502445;Genobank Mainz;unternehmen;gruendung;1896;9;0;Die Raiffeisenbank in Rheinhessen wurde am 8. Februar 1896 als Spar- und Darlehenskasse eingetragene Genossenschaft mit unbeschränkter Haftpflicht im Lokal von August Heim („Zur Heimburg“) in der Hauptstraße 117 in Mombach gegründet.;"Artikel heißt Raiffeisenbank in Rheinhessen; 1990 Umbenennung in Genobank Mainz eG";claude-sonnet
+Q1293890;Ketteler-Kolleg Mainz;unternehmen;gruendung;1951;9;0;Das Ketteler-Kolleg wurde 1951 gegründet.;Schule/Kolleg;claude-sonnet
+Q1885780;Mainzer Verkehrsgesellschaft;unternehmen;gruendung;2001;9;0;Die Mainzer Verkehrsgesellschaft (MVG) mbH ist eine im Januar 2001 ausgegründete hundertprozentige Tochtergesellschaft der Mainzer Stadtwerke AG.;Ausgründung aus den Mainzer Stadtwerken;claude-sonnet
+Q1905751;Martinus-Bibliothek;unternehmen;gruendung;;;0;;"kein Beleg im Artikel (nur „350-jährige Geschichte“, kein Jahr); Bibliothek, kein Unternehmen";claude-sonnet
+Q1320858;Omnibusverkehr Rhein-Nahe;unternehmen;gruendung;1989;9;0;Sie entstand 1989 aus einer regionalen Bahnbus-Gesellschaft und war später eine Tochtergesellschaft von DB Regio Bus Mitte.;"Entstehung aus regionaler Bahnbus-Gesellschaft; Unternehmen existiert nicht mehr";claude-sonnet
+Q123766224;Schott Pharma AG & Co. KGaA;unternehmen;gruendung;2022;9;0;Das Unternehmen Schott Pharma entstand 2022 durch Ausgründung aus der Schott AG, einem Hersteller von Spezialglas und Glaskeramik.;"Ausgründung aus der Schott AG; Infobox Gründungsdatum = 2022";claude-sonnet
+Q66667643;Steinhöfelschule;unternehmen;gruendung;1883;9;0;Carl Friedrich Steinhöfel gründete gemeinsam mit seinem Lehrmeister August Rackow 1883 in Hamburg eine private Handelsschule.;"Gründung in Hamburg; Mainzer Standort „Private Handelsschule Dr. …“ 1951 durch Edith Wessel gegründet, Übernahme 2014";claude-sonnet
+Q18394108;Theresianum;unternehmen;gruendung;1927;9;0;Gegründet wurde die Schule im Mai 1927 durch den Johannesbund e.V. in Leutesdorf am Rhein und zog im Folgejahr in das Christkönigshaus.;Gründung in Leutesdorf am Rhein, später Mainz;claude-sonnet
+Q15134701;Weinstube Rote Kopf;unternehmen;gruendung;;;0;;"kein Unternehmen: ehemalige Weinstube, denkmalgeschütztes Anwesen in der Mainzer Altstadt; kein Beleg im Artikel";claude-sonnet
+Q89096955;Öffentliche Bücherei Anna Seghers;unternehmen;gruendung;1911;9;0;Gründung = 1911;"städtische Bibliothek; Infobox";claude-sonnet
+Q58333113;Landesärztekammer Rheinland-Pfalz;verein;gruendung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q2385958;TV Mainz-Zahlbach;verein;gruendung;1862;9;0;Der TV Zahlbach ist ein 1862 in der damals eigenständigen Gemeinde Zahlbach (heute zu Mainz gehörig) gegründeter Sportverein.;"Überlieferung 1861 laut Artikel nicht belegt; Gründung wohl 1. April 1862, Satzung 12. August 1862";claude-sonnet
+Q27886757;Turngemeinde 1861 Mainz-Gonsenheim;verein;gruendung;1861;9;1;Die Turngemeinde 1861 e. V. Mainz-Gonsenheim (kurz: TGM Gonsenheim) ist ein Breitensportverein aus Mainz-Gonsenheim;Jahr nur aus dem Vereinsnamen, im Paket-Text nicht bestätigt;claude-sonnet
+Q676360;Mandel;gemeinde;ersterwaehnung;962;9;0;Der Ort wurde im Jahr 962 als Mannendal erstmals urkundlich erwähnt.;;claude-sonnet
+Q648425;Manubach;gemeinde;ersterwaehnung;1190;9;0;Der Ort wurde 1190 in einer Urkunde des Klosters Ravengiersburg erstmals genannt.;;claude-sonnet
+Q561246;Martinstein;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q562857;Mauchenheim;gemeinde;ersterwaehnung;1220;9;1;Die älteste erhaltene Erwähnung Mauchenheims (Mouchenheim) in einem Güterverzeichnis datiert um 1220.;"um 1220; Urkunde vom 8. Juli 867 wurde irrtümlich auf Mauchenheim bezogen";claude-sonnet
+Q563757;Meckenbach;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel (nur Kirche um 1000);claude-sonnet
+Q561287;Meddersheim;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q520103;Meisenheim;gemeinde;ersterwaehnung;1154;9;0;Urkundlich wird Meisenheim zuerst 1154 erwähnt.;;claude-sonnet
+Q641481;Merxheim;gemeinde;ersterwaehnung;1061;9;0;Der Ort wurde im Jahr 1061 als Merkedesheim in pago Nahgouue erstmals urkundlich erwähnt.;;claude-sonnet
+Q7386758;Messel;gemeinde;ersterwaehnung;800;9;0;Die älteste erhaltene Erwähnung Messels stammt aus dem Jahre 800 aus einem Eintrag im Lorscher Codex unter dem Namen Massila.;;claude-sonnet
+Q25158507;Grube Messel;ortsteil;ersterwaehnung;;;0;;"kein Beleg im Artikel; Wohnplatz entstand erst mit Bahnbau 1858/Bahnhof bis 1870 und Ölschieferwerk, keine Ersterwähnungsangabe";claude-sonnet
+Q818829;Mettenheim;gemeinde;ersterwaehnung;765;9;1;Die ältesten Erwähnungen stammen aus der Zeit 765 bis 766, genaue Daten sind nicht bekannt:;Zeitraum 765 bis 766, früheres Jahr genommen;claude-sonnet
+Q516517;Michelstadt;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel (nur Apotheke 1551, keine Ersterwähnung des Ortes);claude-sonnet
+Q28124889;Bremhof;ortsteil;ersterwaehnung;1012;9;0;Der heutige Weiler Bremhof wurde schon 1012 unter dem Namen „Brambuch“ erwähnt.;;claude-sonnet
+Q2138889;Rehbach;ortsteil;ersterwaehnung;1095;9;0;Die älteste erhaltene Erwähnung von Rehbach erfolgte 1095 im Lorscher Codex.;;claude-sonnet
+Q2339754;Steinbach (Michelstadt);ortsteil;ersterwaehnung;1095;9;0;Die älteste erhalten gebliebene urkundliche Erwähnung als Steinbach steht im Lorscher Codex und datiert von 1095.;Burg 1310 erstmals erwähnt, nicht der Ort;claude-sonnet
+Q1798208;Steinbuch;ortsteil;ersterwaehnung;1329;9;0;Die älteste, erhalten gebliebene urkundliche Erwähnung von Steinbuch datiert von 1329, als die Johanniterkommende Ober-Mossau ihr Gut zu Steinbuch verkaufte.;;claude-sonnet
+Q2350701;Stockheim;ortsteil;ersterwaehnung;1095;9;0;Die älteste erhalten gebliebene urkundliche Erwähnung als Stocheim steht im Lorscher Codex und datiert von 1095.;;claude-sonnet
+Q974720;Vielbrunn;ortsteil;ersterwaehnung;1012;9;0;Die älteste erhaltene Erwähnung von Vielbrunn stammt von 1012 unter dem Namen Villebrunnen.;;claude-sonnet
+Q2556601;Weiten-Gesäß;ortsteil;ersterwaehnung;1113;9;0;Die älteste, erhalten gebliebene urkundliche Erwähnung als Widengesehez datiert von 1113.;;claude-sonnet
+Q1588142;Würzberg;ortsteil;ersterwaehnung;1310;9;0;"Die älteste erhalten gebliebene urkundliche Erwähnung als Wizberg datiert von 1310;";;claude-sonnet
+Q1344333;Ensinger;unternehmen;gruendung;1902;9;0;Er ging auf ein im Jahr 1902 gegründetes Handelsgeschäft für Fahrzeuge zurück;"Infobox Gründungsdatum = 1902; Ensinger Fahrzeugbau war ein Maschinenbaubetrieb (nicht mehr existent)";claude-sonnet
+Q59540359;Gymnasium Michelstadt;unternehmen;gruendung;1823;9;0;Das heutige Gymnasium Michelstadt wurde im Jahr 1823 auf Anregung des Grafen Albrecht zu Erbach-Fürstenau als Progymnasium gegründet.;"Schule, kein Unternehmen im engeren Sinn; Gründung als Progymnasium";claude-sonnet
+Q551127;Modautal;gemeinde;ersterwaehnung;;;0;;"Zusammenschluss (Wikidata 1971, Name keiner der Ortsteile); Allertshofen 1449, Asbach nach 1331, Brandau 1346, Ernsthofen 1362, Herchenrode 1383, Hoxhohl 1423, Klein-Bieberau 1362, Lützelbach 1318, Neunkirchen 1222, Neutsch 1347, Webern 1392";claude-sonnet
+Q1347781;Allertshofen;ortsteil;ersterwaehnung;1449;9;0;Das Dorf wurde im Jahre 1449 erstmals urkundlich genannt.;;claude-sonnet
+Q721271;Asbach;ortsteil;ersterwaehnung;1331;9;1;Das Dorf wurde nach 1331 als Aspach, das lit undir Lichtenberg, erstmals urkundlich genannt.;"„nach 1331“; 1219/1222 nur Personen von Asbach genannt, nicht das Dorf";claude-sonnet
+Q897815;Brandau;ortsteil;ersterwaehnung;1346;9;0;Das Dorf wurde im Jahre 1346 erstmals urkundlich erwähnt, als Heinrich von Rodenstein seinen Besitz in Brandau wiedereinlöslich an Graf Wilhelm von Katzenelnbogen verkauft.;;claude-sonnet
+Q1361013;Ernsthofen;ortsteil;ersterwaehnung;1362;9;0;Das Dorf wurde, soweit bekannt, im Jahre 1362 erstmals urkundlich genannt.;Burg Ernsthofen 1440 erstmals erwähnt (Beleg aus Artikel Modautal), nicht der Ort;claude-sonnet
+Q1449591;Herchenrode;ortsteil;ersterwaehnung;1383;9;1;"Hergeroden (1383); Hergeroden (1392); Hirchenrode (1403);";"kein ausdrücklicher Ersterwähnungssatz; früheste Jahresangabe in der Liste der belegten Ortsnamen";claude-sonnet
+Q1632071;Hoxhohl;ortsteil;ersterwaehnung;1423;9;1;"Hoxol (1423); Hoxhail (1444); Hoxhale, Hoxhole (1449);";"kein ausdrücklicher Ersterwähnungssatz; früheste Jahresangabe in der Liste der belegten Ortsnamen";claude-sonnet
+Q1746189;Klein-Bieberau;ortsteil;ersterwaehnung;1362;9;0;Das Dorf wurde, soweit bekannt, im Jahre 1362 erstmals als Wenigenbybera  urkundlich genannt.;;claude-sonnet
+Q1649502;Lützelbach;ortsteil;ersterwaehnung;1318;9;0;Das Dorf wurde, soweit bekannt, im Jahre 1318 als Lucelenbach erstmals urkundlich genannt.;;claude-sonnet
+Q1981053;Neunkirchen (Modautal);ortsteil;ersterwaehnung;1222;9;0;Das Dorf wurde im Jahre 1222 erstmals urkundlich genannt.;;claude-sonnet
+Q1674724;Neutsch;ortsteil;ersterwaehnung;1347;9;0;Die erste bekannte urkundliche Erwähnung ist aus dem Jahr 1347.;Namensliste beginnt mit Nitz (1370), der Satz nennt aber ausdrücklich 1347;claude-sonnet
+Q1447584;Webern;ortsteil;ersterwaehnung;1392;9;0;Das Dorf wurde, soweit bekannt, im Jahre 1392 erstmals als Weweren urkundlich genannt.;;claude-sonnet
+Q678329;Mommenheim;gemeinde;ersterwaehnung;766;9;0;Mommenheim erscheint urkundlich zum ersten Mal im Jahr 766 und öfters während des 8. Jahrhunderts in Schenkungen an das Kloster Lorsch.;;claude-sonnet
+Q643044;Monsheim;gemeinde;ersterwaehnung;773;9;0;Die älteste erhaltene Erwähnung des Ortes findet sich im Lorscher Codex mit der Schenkung des Erlwin und Rugang am 18. November 773;Kirche St. Georg erstmals 766 erwähnt, nicht der Ort;claude-sonnet
+Q818626;Monzernheim;gemeinde;ersterwaehnung;765;9;0;Die älteste erhaltene Erwähnung von Monzernheim – als „Munzinheim“ – findet sich in einer Schenkungsurkunde von 765 an das Kloster Lorsch.;;claude-sonnet
+Q609223;Monzingen;gemeinde;ersterwaehnung;778;9;0;Die erste urkundliche Erwähnung Monzingens geht auf eine Schenkung von Weinbergen an das Kloster Lorsch im Jahre 778 zurück.;;claude-sonnet
+Q622122;Mossautal;gemeinde;ersterwaehnung;;;0;;"Zusammenschluss (Wikidata 1971) aus Güttersbach, Hiltersklingen, Hüttenthal, Ober- und Unter-Mossau; Güttersbach 1290, Hiltersklingen 795 (Gemeindeartikel; eigener Artikel nennt 1324), Hüttenthal 1366, Ober-Mossau 1253, Unter-Mossau 1426";claude-sonnet
+Q1562298;Güttersbach;ortsteil;ersterwaehnung;1290;9;0;Die älteste bekannte schriftliche Erwähnung von Güttersbach erfolgte unter dem Namen Gunderspach im Jahr 1290.;;claude-sonnet
+Q1618917;Hiltersklingen;ortsteil;ersterwaehnung;795;9;1;Als erster wurde Hiltersklingen im Jahr 795 erstmals urkundlich erwähnt.;"Beleg aus Artikel Mossautal; Widerspruch: eigener Artikel nennt als ersten bekannten Beleg 1324 (Hiltegertsklingen) und 1366";claude-sonnet
+Q1652636;Hüttenthal;ortsteil;ersterwaehnung;1366;9;0;Die älteste bekannte schriftliche Erwähnung von Hüttenthal erfolgte unter dem Namen Huttedal im Jahr 1366.;;claude-sonnet
+Q2008836;Ober-Mossau;ortsteil;ersterwaehnung;1253;9;0;Die älteste bekannte schriftliche Erwähnung von Ober-Mossau erfolgte unter dem Namen Mosaha im Jahre 1253.;;claude-sonnet
+Q2496994;Unter-Mossau;ortsteil;ersterwaehnung;1426;9;0;Die älteste erhaltene Erwähnung des Dorfes als Nyddern Mossauwe stammt von 1426.;;claude-sonnet
+Q643077;Mölsheim;gemeinde;ersterwaehnung;1237;9;0;Die älteste erhaltene Erwähnung von Mölsheim – als Milbisheim – stammt von 1237.;;claude-sonnet
+Q1636669;Humanis (Verlag);unternehmen;gruendung;;;0;;"kein Beleg im Artikel; Infobox Gründungsdatum leer, Zeitschriftenverlag bis 2014";claude-sonnet
+Q16007;Mörfelden-Walldorf;gemeinde;ersterwaehnung;;;0;;"Zusammenschluss 1977 aus Mörfelden und Walldorf; Mörfelden 830 (830 bis 850), Walldorf 1699 als Waldenserkolonie gegründet";claude-sonnet
+Q13487057;Mörfelden;ortsteil;ersterwaehnung;830;9;1;Mörfelden wurde im Codex Laureshamensis von 830 bis 850 unter der Bezeichnung Mersenualt erstmals erwähnt;"Beleg aus Artikel Mörfelden-Walldorf; Zeitraum 830 bis 850, früheres Jahr genommen";claude-sonnet
+Q106621492;Albert-Schweitzer-Schule Mörfelden;unternehmen;gruendung;;;0;;"kein Beleg im Artikel; Grundschule, kein Unternehmen";claude-sonnet
+Q59508697;BürgerEnergieRheinMain;unternehmen;gruendung;2012;9;0;Gründungsdatum = 22. November 2012;"Genossenschaft (eG); Geschichte: 2012 war die Gründung durch 27 Mitglieder";claude-sonnet
+Q1703874;Rot-Weiß Walldorf;verein;gruendung;1914;9;0;Der Verein wurde 1914 als FV Viktoria Walldorf gegründet, als Gründungsdatum gilt der 1. Januar.;1927 Umbenennung in SV Rot-Weiß Walldorf;claude-sonnet
+Q629101;Mörlenbach;gemeinde;ersterwaehnung;795;9;0;Die erste Erwähnung des Ortes findet sich 795 als Morlenbach in der Urkunde einer Grenzbereinigung zum Besitz des Klosters Lorsch in der „Mark Heppenheim“.;in der Grenzbeschreibung von 773 noch nicht erwähnt;claude-sonnet
+Q892876;Bonsweiher;ortsteil;ersterwaehnung;1320;9;0;Der Anlass der Ersterwähnung von 1320 war die Erlaubnis der Pfalzgräfin Mechthild als Lehnsherrin an Diemar Kreis von Lindenfels seiner Ehefrau ein Wittum auf Bonsweiher von 150 Pfd.;weitere Erwähnung 1324;claude-sonnet
+Q2008833;Ober-Liebersbach;ortsteil;ersterwaehnung;877;9;0;Die früheste urkundliche Erwähnung als Liberesbach stammt aus dem Jahr 877 und befindet sich im Lorscher Codex;Liebersbach vor der Trennung in Nieder- und Ober-Liebersbach (getrennt genannt erst 1355);claude-sonnet
+Q2008838;Ober-Mumbach;ortsteil;ersterwaehnung;1130;9;0;Die erste Erwähnung von Ober-Mumbach erfolgte 1130 im Lorscher Codex als Munnenbach.;;claude-sonnet
+Q2536258;Vöckelsbach;ortsteil;ersterwaehnung;1488;9;0;Die erste Erwähnung des Ortes findet sich unter dem Namen Fockelspach 1488.;;claude-sonnet
+Q2555332;Weiher;ortsteil;ersterwaehnung;1369;9;0;Die erste bekannte urkundliche Erwähnung von Weiher erfolgte 1369 mit dem Namen Wilre in dem alten Kurpfälzer Zinsbuch des Oberamts Heidelberg;;claude-sonnet
+Q2208572;SV Mörlenbach;verein;gruendung;1896;9;0;Der Verein wurde 1896 als Turnverein gegründet.;Infobox gegründet = 1896;claude-sonnet
+Q643163;Mörstadt;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q508246;Mühltal;gemeinde;ersterwaehnung;;;0;;"Zusammenschluss 1977 (Gebietsreform); Frankenhausen 1315, Nieder-Beerbach 1318, Nieder-Ramstadt 1190/94, Traisa 1315, Waschenbach 1340; Trautheim und In der Mordach ohne Ersterwähnungsjahr";claude-sonnet
+Q1444636;Frankenhausen;ortsteil;ersterwaehnung;1315;9;0;Erstmals urkundlich erwähnt wird das Dorf im Jahre 1315 als Frankenhuse in einer Abgabenliste;;claude-sonnet
+Q27914927;In der Mordach;ortsteil;ersterwaehnung;;;0;;"kein Beleg im Artikel; nur der heutige Name „Mordach“ ist seit 1560 belegt, keine Ersterwähnung des Ortes";claude-sonnet
+Q1987512;Nieder-Beerbach;ortsteil;ersterwaehnung;1318;9;1;"(In Klammern das Jahr der Erwähnung): Berbach (1318); Niedernbeerbach (1363);";"kein ausdrücklicher Ersterwähnungssatz; früheste Jahresangabe in der Liste der belegten Ortsnamen";claude-sonnet
+Q645358;Nieder-Ramstadt;ortsteil;ersterwaehnung;1190;9;1;Erstmals urkundlich erwähnt wird das Dorf im Jahre 1190/94, als ein Cunradus de Ramstadt als Kanoniker des St.-Andreas-Stifts in Worms bezeugt wird.;"Zeitraum 1190/94, früheres Jahr genommen; Namensliste: Ramestat (um 1190)";claude-sonnet
+Q1456309;Traisa;ortsteil;ersterwaehnung;1315;9;0;Die älteste bekannte schriftliche Erwähnung von Traisa erfolgte unter dem Namen Dreysen im Jahr 1315 in einer Abgabenliste der Grafschaft Katzenelnbogen.;Namensliste nennt Nieder-Treyse (1316);claude-sonnet
+Q2450497;Trautheim;ortsteil;gruendung;;;0;;"kein Beleg im Artikel für Ersterwähnung; Villenkolonie, erste Häuser 1871 (Landhaus Bopp), Name Trautheim erst seit 1896/1906; Gründungsjahr nicht ausdrücklich genannt";claude-sonnet
+Q1256357;Waschenbach;ortsteil;ersterwaehnung;1340;9;0;Erstmals urkundlich erwähnt wird Waschenbach im Jahre 1340.;;claude-sonnet
+Q640229;Münchwald;gemeinde;gruendung;1700;9;1;Der Ort entstand um 1700.;"gegründeter Ort (Ausgründung aus Wallhausen), früher Mönchswald; Fläche 1531 von Kloster Eberbach an Dalberg verkauft";claude-sonnet
+Q622209;Münster;gemeinde;ersterwaehnung;1254;9;0;In einer Urkunde aus dem Jahre 1254 wird Münster erstmals erwähnt.;;claude-sonnet
+Q440663;Altheim;ortsteil;ersterwaehnung;;;0;;"kein Beleg im Artikel; kein Ersterwähnungssatz, nur Namensliste mit Alderheim (1137) (?) und Altheim et Altheim (1189–1220) sowie Adelsfamilie seit 1254";claude-sonnet
+Q665852;Münster-Sarmsheim;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q818622;Nack;gemeinde;ersterwaehnung;1304;9;0;Zum ersten Mal urkundlich erwähnt wurde der Ortsname 1304.;;claude-sonnet
+Q683933;Nackenheim;gemeinde;ersterwaehnung;;;0;;"kein Beleg im Artikel; nur „vor mehr als 1.200 Jahren erstmals urkundlich erwähnt“ (Weinberge), ohne Jahr";claude-sonnet
+Q2556032;Weingut Gunderloch;unternehmen;gruendung;1890;9;0;Das Familienweingut Gunderloch wurde in der Gründerzeit 1890 von einem Mainzer Bankier in Nackenheim gegründet.;;claude-sonnet
+Q628431;Nauheim;gemeinde;ersterwaehnung;851;9;0;Im Lorscher Codex wird die Gemeinde 851 erstmals urkundlich unter dem Namen Niewenheim erwähnt.;Artikel nennt 1125-Jahr-Feier 1976 (passt zu 851);claude-sonnet
+Q1973855;Neckarsteinach;gemeinde;ersterwaehnung;;;0;;"kein Beleg im Artikel für den Ort selbst; 1142 wird nur Bligger von Steinach (Person) erwähnt, 1377 erstmals als Stadt erwähnt";claude-sonnet
+Q1166735;Darsberg;ortsteil;ersterwaehnung;1174;9;0;Erstmals wird Darsberg in einer Urkunde aus dem Jahr 1174 als Tagersperch erwähnt.;als Gründungsjahr des Dorfes gilt 1329 (Lehensbrief: erstmals ausdrücklich das Dorff zum Darsperg);claude-sonnet
+Q1545530;Grein;ortsteil;ersterwaehnung;;;0;;kein Beleg im Artikel (nur Feuerwehr 1908);claude-sonnet
+Q1973712;Neckarhausen;ortsteil;ersterwaehnung;1150;9;0;Die älteste erhaltene Erwähnung des Ortes stammt von 1150 und findet sich in einer Urkunde, die im Rahmen einer Schenkung von Bischof Gunther von Speyer an das nahegelegene Kloster Schönau ausgestellt wurde.;Namensform Neckerhusen erst seit 1424;claude-sonnet
+Q555041;Neu-Bamberg;gemeinde;ersterwaehnung;;;0;;"kein Beleg im Artikel für den Ort; 858 nur die untergegangene Siedlung Sarlesheim (Zarahim)";claude-sonnet
+Q1713640;Junkermühle (Neu-Bamberg);unternehmen;gruendung;;;0;;kein Unternehmen: denkmalgeschützte Hofanlage (Baudenkmal), Fachwerkhaus 18. Jahrhundert;claude-sonnet
+Q659264;Nieder-Hilbersheim;gemeinde;ersterwaehnung;933;9;1;Die erste Erwähnung wird in einer Urkunde der Abtei Seligenstadt auf das Jahr 933 zurückgeführt.;"Hilbriedesheim 1108 im Stiftungsbrief Disibodenberg; Name Nieder-Hilbersheim erst nach 1300";claude-sonnet
+Q1648323;Nieder-Ingelheim;gemeinde;ersterwaehnung;774;9;1;Der erste Aufenthalt Karls des Großen datiert vom Jahr 774 in loco, qui dicitur Ingilinhaim (an einem Ort, der Ingelheim heißt).;"kein ausdrücklicher Ersterwähnungssatz; Nennung des Ortes Ingelheim bei Aufenthalt Karls des Großen 774; heute Stadtteil von Ingelheim am Rhein";claude-sonnet
+Q552643;Nieder-Olm;gemeinde;ersterwaehnung;;;0;;"kein ausdrücklicher Beleg im Artikel; 899 wird nur ein Gutshof namens Ulmena (Olm) übertragen, keine Ersterwähnung des Ortes genannt";claude-sonnet
+Q451301;Am Goldberg;ortsteil;gruendung;;;0;;"kein Beleg im Artikel; Trabantensiedlung, in den 1960er Jahren erschlossen (nur Jahrzehnt)";claude-sonnet
+Q553874;Nieder-Wiesen;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q546701;Niederhausen;gemeinde;ersterwaehnung;1238;9;0;Niederhausen wurde urkundlich erstmals im Jahre 1238 erwähnt.;;claude-sonnet
+Q17715;Niederheimbach;gemeinde;ersterwaehnung;983;9;1;Die älteste erhaltene Erwähnung von Heimbach findet sich in einer Urkunde vom 14. Juni 983, in der Kaiser Otto II. dem Mainzer Erzbischof Willigis seine Rechte im Bann Bingen bestätigte.;Erwähnung von Heimbach vor der Teilung in Nieder- und Oberheimbach;claude-sonnet
+Q1957387;Märchenhain;unternehmen;gruendung;;;0;;"kein Unternehmen/Verein im Sinne der Liste: Märchenwald (Ausflugsziel) 1930er bis 1980; Gaststätte 10. August 1927 eröffnet, Einweihung des Haines 2. Juli 1931, kein ausdrückliches Gründungsjahr";claude-sonnet
+Q680403;Nierstein;gemeinde;ersterwaehnung;822;9;1;Erstmals erwähnt wurde Nierstein in einer Urkunde von 822, die sich auf die Jahre 741/42 bezieht.;Urkunde von 822 bezieht sich auf 741/42;claude-sonnet
+Q26836903;Schwabsburg;ortsteil;ersterwaehnung;1257;9;0;Der Ort wurde im Jahr 1257 erstmals urkundlich erwähnt.;Kirche 1363 erstmals erwähnt, nicht der Ort;claude-sonnet
+Q2206023;SG EWR Rheinhessen-Mainz;verein;gruendung;1995;9;1;Der im Dezember 1995 zunächst als informelle Trainings- und Startgemeinschaft gegründete Zusammenschluss wurde 2000 in einem neu gegründeten Verein verankert;"Zusammenschluss von Schwimmabteilungen; 1995 informelle Startgemeinschaft, 2000 eingetragener Verein";claude-sonnet
+Q97927005;VfR Nierstein;verein;gruendung;1911;9;0;Die Gründung des Vereins erfolgte im Jahr 1911;"1946 neugegründet; Jahr 1911 im Vereinsnamen bestätigt";claude-sonnet
+Q651363;Norheim;gemeinde;ersterwaehnung;766;9;1;Es wurde anlässlich eines Verkaufs an das Kloster Lorsch im „15. Jahr des Königs Pippin“ (766 oder 767) als „Narheim“ und „in pago Nahgowe“ (Narheim im Nahegau) im Lorscher Codex genannt.;766 oder 767, früheres Jahr genommen;claude-sonnet
+Q644120;Nußbaum;gemeinde;ersterwaehnung;1295;9;0;Der Ort wurde im Jahr 1295 erstmals urkundlich erwähnt.;;claude-sonnet
+Q639922;Ober-Flörsheim;gemeinde;ersterwaehnung;776;9;0;Die älteste Erwähnung von Ober-Flörsheim (Flarlesheim superiori) aus dem Jahr 776 findet sich in einem Schenkungsverzeichnis des Klosters Lorsch.;;claude-sonnet
+Q541722;Ober-Hilbersheim;gemeinde;ersterwaehnung;1108;9;0;Die erste überlieferte Erwähnung wird in einer Urkunde des Klosters Disibodenberg auf das Jahr 1108 als Hilbridisheim zurückgeführt.;Name Ober-Hilbersheim (superior hilbersheim) 1219;claude-sonnet
+Q2008825;Ober-Ingelheim;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q22988;Ober-Olm;gemeinde;ersterwaehnung;994;9;0;Der Ort Ober-Olm selbst entstand im 6. Jahrhundert als eine fränkische Gründung und wurde im Jahr 994 erstmals urkundlich erwähnt.;;claude-sonnet
+Q569633;Ober-Ramstadt;gemeinde;ersterwaehnung;1306;9;1;in einem Teilungsvertrag aus dem Jahre 1306 ist ein Gut zu Ober-Ramstadt erwähnt.;"kein ausdrücklicher Ersterwähnungssatz im sichtbaren Teil (Paket abgeschnitten); 1222 nur Person Heinricus de Ramestat, 1310 Urkunde zur Stadtrechtsmöglichkeit";claude-sonnet
+Q1268409;Modau;ortsteil;ersterwaehnung;;;0;;"Zusammenschluss 1971 aus Nieder-Modau und Ober-Modau; Nieder-Modau 1255, Ober-Modau um 1360";claude-sonnet
+Q1987545;Nieder-Modau;ortsteil;ersterwaehnung;1255;9;1;Modaha (1255), Muda (1305), Niedermodau (1344), Groß Modau (1360), Kirchmodau (1400).;"kein ausdrücklicher Ersterwähnungssatz; früheste Jahresangabe der Katzenelnbogener Urkunden-Namensliste, 1255 wird zudem die Kirche indirekt bezeugt; 1247 nur Person Gerhard von Modau";claude-sonnet
+Q1695755;Ober-Modau;ortsteil;ersterwaehnung;1360;9;1;Erstmals urkundlich erwähnt wurde der Ort um 1360.;„um 1360“;claude-sonnet
+Q2162276;Rohrbach;ortsteil;ersterwaehnung;1382;9;0;Der Ort Rohrbach wird urkundlich erstmals 1382 genannt.;1292 werden nur drei Ritter von Rohrbach genannt, nicht das Dorf;claude-sonnet
+Q2558798;Wembach-Hahn;ortsteil;ersterwaehnung;;;0;;"Zusammenschluss der Orte Wembach und Hahn (1927 verbunden); Wembach 1287, Hahn 1318";claude-sonnet
+Q91466805;Georg-Christoph-Lichtenberg-Schule;unternehmen;gruendung;1971;9;0;Gegründet wurde die Schule im Jahr 1971;Schule, kein Unternehmen im engeren Sinn;claude-sonnet
+Q678432;Oberdiebach;gemeinde;ersterwaehnung;893;9;0;Die älteste erhaltene Erwähnung von Oberdiebach stammt von 893.;Rheindiebach erstmals 1461 erwähnt;claude-sonnet
+Q648722;Oberhausen an der Nahe;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q646851;Oberhausen bei Kirn;gemeinde;ersterwaehnung;1342;9;0;Die frühesten Erwähnungen des Ortsnamens finden sich in Urkunden aus den Jahren 1342 und 1346.;weitere Erwähnung im Weistum 1346;claude-sonnet
+Q668509;Oberheimbach;gemeinde;ersterwaehnung;1050;9;0;Die erste eigenständige Erwähnung von Oberheimbach erfolgte 1050.;Heimbach (vor der Teilung) bereits 983 erwähnt;claude-sonnet
+Q674256;Oberstreit;gemeinde;ersterwaehnung;1305;9;0;Am 23. Oktober 1305 wurde Oberstreit  als „Ebenstryt“ erstmals in einer Urkunde des Abtes Werner vom Disibodenberg erwähnt;;claude-sonnet
+Q1682542;Oberzent;gemeinde;ersterwaehnung;;;0;;"Zusammenschluss 2018 aus Beerfelden, Hesseneck, Rothenberg, Sensbachtal; Airlenbach 1366, Beerfelden 1032, Etzean 1366, Falken-Gesäß 1321, Gammelsbach 795, Hetzbach 1353, Kortelshütte 1756, Ober-Hainbrunn 1349, Olfen 1398, Rothenberg 1353";claude-sonnet
+Q408745;Airlenbach;ortsteil;ersterwaehnung;1366;9;0;Die älteste bekannte schriftliche Erwähnung von Airlenbach erfolgte unter dem Namen Erlebach im Jahr 1366.;;claude-sonnet
+Q25426054;Beerfelden;ortsteil;ersterwaehnung;1032;9;0;Die älteste bekannte schriftliche Erwähnung von Beerfelden erfolgte unter dem Namen Burrifelden im Jahr 1032  im Lorscher Codex.;;claude-sonnet
+Q1371973;Etzean;ortsteil;ersterwaehnung;1366;9;0;Das Bestehen des Ortes ist unter dem Namen Etzelshan seit 1366 urkundlich belegt.;;claude-sonnet
+Q1394135;Falken-Gesäß;ortsteil;ersterwaehnung;1321;9;0;Die älteste bekannte schriftliche Erwähnung von Falken-Gesäß erfolgte unter dem Namen Valkengesezze im Jahr 1321.;;claude-sonnet
+Q1493234;Gammelsbach;ortsteil;ersterwaehnung;795;9;0;Die älteste bekannte schriftliche Erwähnung von Gammelsbach erfolgte unter dem Namen Gamenesbach im Jahr 795.;der 772 erwähnte Gaminesbach bezeichnete ein Fließgewässer;claude-sonnet
+Q1616312;Hetzbach;ortsteil;ersterwaehnung;1353;9;0;Älteste bekannte Erwähnung fand das Waldhufendorf Hetzbach im Jahre 1353.;;claude-sonnet
+Q1784796;Kortelshütte;ortsteil;ersterwaehnung;1756;9;1;Die älteste erhaltene Erwähnung von Kortelshütte stammt von 1756. Gegründet wurde das Dorf für Neusiedler sowie für Land- und Besitzlose.;"gegründetes Dorf; Gründungsjahr nicht genannt, Rothenberg-Artikel: „Vor 1756 kam das Dorf Kortelshütte hinzu“";claude-sonnet
+Q2008817;Ober-Hainbrunn;ortsteil;ersterwaehnung;1349;9;0;Die älteste überlieferte Erwähnung von Ober-Hainbrunn stammt von 1349.;;claude-sonnet
+Q2019590;Olfen;ortsteil;ersterwaehnung;1398;9;0;Bekanntermaßen erstmals urkundlich erwähnt wird der Ort im Jahre 1398 als Lehen des Pfalzgrafs Ruprecht an Schenk Eberhard von Erbach.;;claude-sonnet
+Q19713776;Rothenberg;ortsteil;ersterwaehnung;1353;9;0;Die erste bekannte urkundliche Erwähnung als Rodenberg erfolgte 1353, als der römisch-deutsche König Karl IV. Engelhard I. von Hirschhorn mit Dorf und Herrschaft Rothenberg belehnte.;;claude-sonnet
+Q389741;Ockenheim;gemeinde;ersterwaehnung;823;9;0;Die älteste erhaltene Erwähnung des Ortes stammt von 823.;;claude-sonnet
+Q658702;Odernheim am Glan;gemeinde;ersterwaehnung;976;9;0;Der Ort wurde 976 erstmals urkundlich erwähnt und erhielt 1349 das Stadtrecht.;;claude-sonnet
+Q641840;Offstein;gemeinde;ersterwaehnung;766;9;1;Die älteste erhaltene Erwähnung erfuhr der Ort als „Offenstein“ im Lorscher Codex zwischen den Jahren 766 und 768;Zeitraum 766-768, früheres Jahr genommen;claude-sonnet
+Q518690;Oppenheim;gemeinde;ersterwaehnung;765;9;0;Vom 20. Juli 765 und aus dem Lorscher Codex stammen die ältesten erhaltenen Erwähnungen von Oppenheim.;;claude-sonnet
+Q655880;Osthofen;gemeinde;ersterwaehnung;784;9;0;Der Ort wurde im Lorscher Codex in einer auf 1. Juli 784 datierten Urkunde als Ostowa erstmals erwähnt.;;claude-sonnet
+Q140984556;Landhotel Zum Schwanen;unternehmen;gruendung;;;0;;"Denkmalgeschützter Vierseithof; 1818 erstmals namentlich erwähnt und im selben Jahr neu errichtet, aber kein Gründungsjahr des Betriebs genannt";claude-sonnet
+Q88182293;SG Vorwärts Osthofen;verein;gruendung;1910;9;1;Der Verein wurde ursprünglich als Nachfolger zum FC Ostova 02 Osthofen im Jahr 1910 als FV 1910 Osthofen gegründet.;"Artikel handelt vom FC Ostova Osthofen (Vorgänger-/Nachfolgeverein), nicht ausdrücklich von der SG Vorwärts; Zuordnung prüfen";claude-sonnet
+Q569095;Otzberg;gemeinde;ersterwaehnung;;;0;;"Zusammenschluss 1971 aus sechs Gemeinden; Ortsteile mit unterschiedlichen Jahren: Lengfeld 1244, Habitzheim 1262, Klingen 1261 (Clingin) bzw. 1223, Hering 1322, Ober-Nauses 1357, Schloß-Nauses 1471, Zipfen 1784; Veste Otzberg 1231 (Burg, zählt nicht)";claude-sonnet
+Q1304618;Habitzheim;ortsteil;ersterwaehnung;1262;9;0;Habitzheim wurde erstmals 1262 als Habuchisheim urkundlich erwähnt.;;claude-sonnet
+Q1282370;Hering;ortsteil;ersterwaehnung;1322;9;0;das erstmals 1322 erwähnte Hering wird in vielen Urkunden als Stadt genannt;;claude-sonnet
+Q1817656;Lengfeld (Odenwald);ortsteil;ersterwaehnung;1244;9;0;Die erste urkundliche Erwähnung von Lengfeld fand im Jahr 1244 als Lengevelt statt.;;claude-sonnet
+Q1987536;Nieder-Klingen;ortsteil;ersterwaehnung;1223;9;1;Eines der heutigen beiden Klingen wurde bereits 1223 als „Clingen“ erwähnt.;"Unklar, ob Nieder- oder Ober-Klingen gemeint ist; erste eindeutig zugeordnete Namensform Clingen (1307)";claude-sonnet
+Q1356171;Ober-Klingen;ortsteil;ersterwaehnung;1223;9;1;Eines der heutigen beiden Klingen wurde bereits 1223 als „Clingen“ erwähnt.;"Unklar, ob Nieder- oder Ober-Klingen gemeint ist; erste eindeutig zugeordnete Namensform Obern Clingen (1383)";claude-sonnet
+Q1371795;Ober-Nauses;ortsteil;ersterwaehnung;;7;0;;"Nur Jahrhundert: erwähnt im 11. Jahrhundert als Nyuusaze; erste datierte Namensform Obern-Nauweseste (1357)";claude-sonnet
+Q515721;Otzweiler;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel (1375 nur Amt Otzweiler, keine Ortserwähnung);claude-sonnet
+Q647129;Partenheim;gemeinde;ersterwaehnung;757;9;0;Partenheim wurde erstmals im Jahr 757 in einer Schenkungsurkunde über einen Weinberg aus der „marca pattenheimo“ (Gemarkung Partenheim) urkundlich erwähnt.;;claude-sonnet
+Q631811;Pfaffen-Schwabenheim;gemeinde;ersterwaehnung;1248;9;1;Dies erfolgte erst 1248, wobei die Augustiner-Chorherren namensgebend waren;"Bezug von „Dies“ im Auszug abgeschnitten (vermutlich Ersterwähnung unter dem Namen Pfaffen-Schwabenheim); Lorscher Urkunden 770-836 zu Suaboheim nicht eindeutig zuordenbar; Artikel vermerkt Widerspruch zur Ersterwähnung";claude-sonnet
+Q516500;Pfungstadt;gemeinde;ersterwaehnung;785;9;0;Pfungstadt wurde am 18. Mai 785 erstmals im Lorscher Codex urkundlich erwähnt.;;claude-sonnet
+Q1117563;Eich;ortsteil;ersterwaehnung;1335;9;0;Die älteste erhaltene Nennung von Eich stammt von 1335.;;claude-sonnet
+Q653800;Pleitersheim;gemeinde;ersterwaehnung;;7;0;;Nur Jahrhundert: 8. Jahrhundert (Der Ort wurde im 8. Jahrhundert erstmals urkundlich erwähnt);claude-sonnet
+Q533813;Raumbach;gemeinde;ersterwaehnung;1293;9;0;Die erste urkundliche Erwähnung von Raumbach findet sich in einer Urkunde des Grafen Heinrich I. von Veldenz aus dem Jahre 1293.;;claude-sonnet
+Q623474;Raunheim;gemeinde;ersterwaehnung;910;9;0;Am 6. April 910 wurde der Ort erstmals in einer Urkunde des Mainzer Erzbischofs Hatto erwähnt;;claude-sonnet
+Q1957986;Mönchhof;ortsteil;ersterwaehnung;;;0;;"kein Beleg im Artikel (1290 nur Beginn als Klostergut, keine Erwähnung/Gründung genannt; 1118 Ersterwähnung laut Raunheim-Artikel betrifft Mönchhof mit Kapelle, aber nicht als Ortserwähnung eindeutig)";claude-sonnet
+Q14538415;Implenia Construction;unternehmen;gruendung;;;0;;kein Beleg im Artikel (Infobox Gründungsdatum leer);claude-sonnet
+Q561172;Rehbach;gemeinde;ersterwaehnung;1230;9;1;Die erste urkundliche Erwähnung des Dorfes Rehbach erfolgte um das Jahr 1230;;claude-sonnet
+Q553333;Rehborn;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q940691;Reichelsheim;gemeinde;ersterwaehnung;1303;9;0;Die älteste erhalten gebliebene urkundliche Erwähnung als Richelsheim datiert aus dem Jahr 1303.;"Gemeinde = Kernort Reichelsheim; Ortsteile haben eigene Items";claude-sonnet
+Q814096;Beerfurth;ortsteil;ersterwaehnung;;;0;;"Zusammenschluss 1970 aus Kirch-Beerfurth und Pfaffen-Beerfurth; Kirch-Beerfurth 1321 (Berenforte), für Pfaffen-Beerfurth kein Jahr";claude-sonnet
+Q889183;Bockenrod;ortsteil;ersterwaehnung;1324;9;0;Die älteste bekannte schriftliche Erwähnung von Bockenrod erfolgte unter dem Namen Bockerode im Jahr 1324.;;claude-sonnet
+Q1278766;Eberbach;ortsteil;ersterwaehnung;1012;9;0;Die älteste erhaltene Erwähnung von Eberbach stammt aus dem Jahr 1012.;;claude-sonnet
+Q1250091;Erzbach;ortsteil;ersterwaehnung;1324;9;1;Die älteste erhaltene urkundliche Erwähnung des Dorfes stammt aus dem Jahre 1324.;"Namensliste nennt zusätzlich Arezgreste (773, 795); Artikel führt 1324 als älteste Erwähnung des Dorfes";claude-sonnet
+Q1469652;Frohnhofen;ortsteil;ersterwaehnung;1307;9;0;Die älteste erhaltene Erwähnung des Ortes stammt von 1307;;claude-sonnet
+Q1515045;Gersprenz;ortsteil;ersterwaehnung;1012;9;0;Die älteste erhaltene Erwähnung des Ortes, als Gaspenza, stammt von 1012.;;claude-sonnet
+Q2708645;Gumpen;ortsteil;ersterwaehnung;1357;9;0;Erstmals urkundlich erwähnt wurde Groß-Gumpen unter dem Namen Gumpen im Jahre 1357.;;claude-sonnet
+Q133307409;Hutzwiese;ortsteil;gruendung;;;0;;kein Beleg im Artikel (neuzeitliche Siedlung, kein Gründungs- oder Erwähnungsjahr genannt);claude-sonnet
+Q1746197;Klein-Gumpen;ortsteil;ersterwaehnung;1321;9;0;Die älteste erhaltene Erwähnung des Dorfes stammt von 1321.;;claude-sonnet
+Q1725886;Laudenau;ortsteil;ersterwaehnung;1012;9;0;Die älteste erhaltene Erwähnung des Ortes stammt von 1012.;;claude-sonnet
+Q2008827;Ober-Kainsbach;ortsteil;ersterwaehnung;1333;9;0;Der früheste erhalten gebliebene urkundliche Nachweis belegt das Bestehen des Ortes Cuynesbach für 1333.;;claude-sonnet
+Q2008852;Ober-Ostern;ortsteil;ersterwaehnung;1321;9;1;Die nächste Erwähnung als Obern Osterna datiert von 1321.;"880 Osterenaha bezeichnet laut Artikel einen Bach, nicht den Ort; deshalb 1321";claude-sonnet
+Q1597148;Rohrbach;ortsteil;ersterwaehnung;1321;9;0;Die älteste erhaltene schriftliche Erwähnung des Ortes, als Rorbach, stammt von 1321.;;claude-sonnet
+Q2497004;Unter-Ostern;ortsteil;ersterwaehnung;1357;9;0;Die älteste erhaltene Erwähnung des Ortes stammt von 1357.;;claude-sonnet
+Q566967;Reiffelbach;gemeinde;ersterwaehnung;1293;9;0;Die älteste erhaltene Erwähnung von Reiffelbach stammt von 1293;;claude-sonnet
+Q122753;Reinheim;gemeinde;gruendung;1260;9;0;Reinheim wurde 1260 von den Grafen von Katzenelnbogen gegründet;"Gemeinde = Kernstadt; Hof und Burg Reinheim um 1276/77 erstmals urkundlich erwähnt; 1318 als Stadt genannt";claude-sonnet
+Q109829410;Hundertmorgen;ortsteil;ersterwaehnung;1710;9;0;Die erste schriftliche Erwähnung als 100 Morgen auf dem Heydes stammt aus dem Jahr 1710.;;claude-sonnet
+Q15062188;Spachbrücken;ortsteil;ersterwaehnung;1323;9;0;Die älteste bekannte Urkunde, in der Spachbrücken namentlich erwähnt wurde, ist ein Lehensbrief vom 17. Mai 1323.;;claude-sonnet
+Q15070052;Ueberau;ortsteil;ersterwaehnung;1305;9;0;Die früheste erhalten gebliebene Erwähnung von Ueberau findet sich in einer Urkunde des Grafen Eberhard I. von Katzenelnbogen vom 24. Juli 1305;;claude-sonnet
+Q56085259;FS Omnibus;unternehmen;gruendung;1932;9;0;Das Unternehmen wurde 1932 als Fischle & Schlienz von den Busfahrern Christian Schlienz und Ernst Fischle in Esslingen gegründet.;"Sitz Esslingen am Neckar, nicht Reinheim; Zuordnung zur Gemeinde fraglich";claude-sonnet
+Q569656;Riedstadt;gemeinde;ersterwaehnung;;;0;;"Zusammenschluss 1977 (Wikidata P571); kein Beleg im Artikel, keine Ortsteiljahre genannt";claude-sonnet
+Q111087457;Büchnerbühne;unternehmen;gruendung;2009;9;0;Die BüchnerBühne ist ein 2009 in Riedstadt gegründetes Theater;;claude-sonnet
+Q2153346;Rimbach;gemeinde;ersterwaehnung;795;9;0;Die älteste erhalten gebliebene urkundliche Erwähnung von Rimbach erfolgte 795 im Lorscher Codex;Gemeinde = Kernort Rimbach;claude-sonnet
+Q1764890;Albersbach;ortsteil;ersterwaehnung;805;9;0;Die älteste bekannte Erwähnung von Albersbach stammt von 805 als Albenesbach.;;claude-sonnet
+Q1808568;Lauten-Weschnitz;ortsteil;ersterwaehnung;805;9;0;Die erste Erwähnung findet sich 805, als parvum Ludenwiscoz auf der Steinurkunde;;claude-sonnet
+Q1939679;Mitlechtern;ortsteil;ersterwaehnung;805;9;0;Die erste Erwähnung des Ortes findet sich als Mitdelecdrun auf der Steinurkunde von 805;;claude-sonnet
+Q226989;Zotzenbach;ortsteil;ersterwaehnung;;;0;;"kein Jahr der Ersterwähnung wörtlich genannt; nur „1977, die 1100-Jahr-Feier für die erste Erwähnung Zotzenbachs“ (Jahr nicht ausgerechnet); Schenkung vor 1290 erwähnt";claude-sonnet
+Q71322102;Volksbank Weschnitztal;unternehmen;gruendung;1873;9;0;Gründungsdatum = 10. Juli 1873;;claude-sonnet
+Q678623;Roth;gemeinde;ersterwaehnung;1187;9;0;Der Ort wurde 1187 erstmals urkundlich erwähnt.;;claude-sonnet
+Q629999;Roxheim;gemeinde;ersterwaehnung;773;9;0;Die älteste erhaltene Erwähnung des Ortes, als Hrocchesheim, ist von 773 überliefert.;;claude-sonnet
+Q627771;Roßdorf;gemeinde;ersterwaehnung;1250;9;0;Urkundlich wurde Roßdorf im Jahre 1250 als Roßedorph erstmals erwähnt.;"Gemeinde = Kernort Roßdorf; Gundernhausen 1977 eingegliedert, hat eigenes Item";claude-sonnet
+Q1554600;Gundernhausen;ortsteil;ersterwaehnung;1250;9;0;Die erste schriftliche Erwähnung des kompletten Ortsnamens als Gunthershusen finden wir in einer Urkunde des Klosters Fulda aus dem Jahre 1250.;;claude-sonnet
+Q644801;Rüdesheim;gemeinde;ersterwaehnung;1100;9;1;Im Jahr 1100 wird Rüdesheim als Schenkung an das Kloster Sponheim erwähnt.;Artikel sagt nicht ausdrücklich „erstmals“;claude-sonnet
+Q654707;Rümmelsheim;gemeinde;ersterwaehnung;1125;9;0;1125 wurde Rümmelsheim noch unter dem Namen Rimilisheim erstmals urkundlich erwähnt.;;claude-sonnet
+Q4031;Rüsselsheim am Main;gemeinde;ersterwaehnung;840;9;1;Erstmals urkundlich erwähnt wurde „Rucilesheim“ (Bedeutung: Heim des Ruciles oder Rucilin) in einer Bestandsaufnahme königlicher Nutzungsrechte, dem Lorscher Reichsurbar (um 840).;"„um 840“; früher Name bis 2015 Rüsselsheim";claude-sonnet
+Q811850;Bauschheim;ortsteil;ersterwaehnung;834;9;1;Bauschheim wurde urkundlich erstmals als Biuuinesheim im Lorscher Reichsurbar dem Lorscher Codex um (834–850) erwähnt;Zeitraum 834-850, früheres Jahr genommen;claude-sonnet
+Q1592139;Haßloch;ortsteil;ersterwaehnung;;;0;;kein Beleg im Artikel (1356 nur Besetzung der Burg und Stadtgründungsrecht);claude-sonnet
+Q1796502;Königstädten;ortsteil;ersterwaehnung;817;9;0;Erstmals erwähnt wurde Königstädten 817 im Lorscher Codex, als Ludwig der Fromme den Ort durch Tausch mit der Abtei Fulda erwarb.;;claude-sonnet
+Q47518041;Max-Planck-Schule;unternehmen;gruendung;;;0;;"Kein Unternehmen/Verein, sondern Gymnasium; Gründungsjahr der Schule nicht genannt (1988 nur Förderverein)";claude-sonnet
+Q700677;Sankt Johann;gemeinde;ersterwaehnung;1220;9;0;wurde im Jahr 1220 zum ersten Mal urkundlich erwähnt;Im Mittelalter Weiler Megelsheim;claude-sonnet
+Q654080;Sankt Katharinen;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel (nur Zisterzienserkloster vom frühen 13. Jh. bis 1574, keine Ortserwähnung);claude-sonnet
+Q630067;Saulheim;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q551226;Schaafheim;gemeinde;ersterwaehnung;817;9;0;Soweit bekannt wurde Schaafheim in einem Güterverzeichnis des Klosters Fulda im Jahr 817 erstmals urkundlich erwähnt.;"Abschrift im Codex Eberhardi mit Bezugsjahr 830; Gemeinde = Kernort Schaafheim";claude-sonnet
+Q1948864;Mosbach (Schaafheim);ortsteil;ersterwaehnung;828;9;0;Die älteste erhaltene Urkunde, die Mosbach erwähnt, stammt von 828 und nennt Einhard als Aussteller.;;claude-sonnet
+Q15059129;Radheim;ortsteil;ersterwaehnung;798;9;0;Die älteste erhaltene Erwähnung des Dorfes findet sich im Codex Eberhardi des Klosters Fulda von 798.;;claude-sonnet
+Q562391;Schloßböckelheim;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q818510;Schmittweiler;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q641817;Schneppenbach;gemeinde;ersterwaehnung;1044;9;0;Seit dem Mittelalter gehörte Schneppenbach, 1044 erstmals urkundlich erwähnt, zu einer größeren Grundherrschaft der Reichsabtei St. Maximin vor Trier.;;claude-sonnet
+Q641590;Schornsheim;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q678348;Schwabenheim an der Selz;gemeinde;ersterwaehnung;766;9;1;Schwabenheim wird urkundlich möglicherweise erstmals im Jahre 766 als Suaboheim im Lorscher Codex erwähnt.;"„möglicherweise“; weitere Erwähnung 1280";claude-sonnet
+Q630040;Schwarzerden;gemeinde;ersterwaehnung;1325;9;0;Erstmals urkundlich erwähnt wurde der Ort im Jahre 1325;;claude-sonnet
+Q651717;Schweinschied;gemeinde;ersterwaehnung;1388;9;0;Schweinschied wurde im Jahr 1388 erstmals urkundlich erwähnt.;;claude-sonnet
+Q174057;Schweppenhausen;gemeinde;ersterwaehnung;1125;9;0;Sweppenhuzun wird im Jahr 1125 in einer Urkunde Kaiser Heinrichs V. als Besitz der Abtei St. Maximin von Trier zum ersten Mal genannt.;;claude-sonnet
+Q686937;Schöneberg;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q574429;Seeheim-Jugenheim;gemeinde;ersterwaehnung;;;0;;"Zusammenschluss (Wikidata P571 1977); Jugenheim 1241, Seeheim 874, Ober-Beerbach 1384, Malchen 1380er Jahre, Stettbach spätestens 1420";claude-sonnet
+Q1305986;Jugenheim;ortsteil;ersterwaehnung;1241;9;0;Jugenheim wurde im Jahre 1241 erstmals urkundlich erwähnt.;;claude-sonnet
+Q1603868;Malchen;ortsteil;ersterwaehnung;;7;0;;Nur Jahrzehnt: Malchen wurde in den 1380er Jahren erstmals urkundlich erwähnt;claude-sonnet
+Q2008797;Ober-Beerbach;ortsteil;ersterwaehnung;1384;9;0;Die erste Erwähnung des Ortes erfolgte 1384, als der Graf Dieter von Katzenelnbogen seine Dörfer und Gerichte, darunter auch Ober-Beerbach, für 500 Gulden an den Erzbischof Adolf von Mainz verpfändete.;;claude-sonnet
+Q2264963;Seeheim;ortsteil;ersterwaehnung;874;9;0;Soweit bekannt wurde Seeheim im Jahre 874 erstmals in einer Schenkung an das Kloster Lorsch urkundlich erwähnt.;;claude-sonnet
+Q1572069;Steigerts;ortsteil;gruendung;1772;9;0;Steigerts wurde erst im Jahre 1772 besiedelt;Junge Siedlung, Besiedlungsjahr als Gründung;claude-sonnet
+Q2346253;Stettbach (Seeheim-Jugenheim);ortsteil;ersterwaehnung;1420;9;1;Spätestens 1420 wird Stettbach als Stedebach urkundlich;"„Spätestens“, evtl. früher; Artikel nennt 2020 den 600-jährigen Erwähnungsanlass";claude-sonnet
+Q98406775;Lauer GmbH;unternehmen;gruendung;1986;9;0;wurde im Jahr 1986 als Lauer Isolierungen GmbH gegründet;Ursprung auch in der 1939 gegründeten Maschinenfabrik Wester, die das Unternehmen selbst nicht als Gründung nennt;claude-sonnet
+Q21694516;State International School Seeheim;unternehmen;gruendung;;;0;;"Kein Unternehmen/Verein, sondern Schule (Schulzweig); 2006 Primary geöffnet, 2010 Secondary, kein Gründungsjahr genannt";claude-sonnet
+Q641516;Seesbach;gemeinde;ersterwaehnung;1000;9;1;Die erste urkundliche Erwähnung erfolgte um das Jahr 1000 unter dem Namen Semendisbach;;claude-sonnet
+Q630841;Seibersbach;gemeinde;ersterwaehnung;983;9;0;Die erste urkundliche Erwähnung von Seibersbach datiert aus dem Jahr 983;;claude-sonnet
+Q678449;Selzen;gemeinde;ersterwaehnung;782;9;0;Die erste urkundliche Erwähnung Selzens ist im Jahr 782 als „Salzen“ im Lorscher Codex zu finden.;;claude-sonnet
+Q625198;Sensbachtal;gemeinde;ersterwaehnung;;;0;;"kein Beleg im Artikel; Gemeinde 2018 in Oberzent aufgegangen";claude-sonnet
+Q630501;Siefersheim;gemeinde;ersterwaehnung;1254;9;0;Der Ort wurde 1254 erstmals urkundlich erwähnt.;;claude-sonnet
+Q1747193;Weingut Wagner-Stempel;unternehmen;gruendung;;;0;;kein Beleg im Artikel (nur „seit acht Generationen“, 1985 Flaschenweinvermarktung);claude-sonnet
+Q523147;Simmertal;gemeinde;ersterwaehnung;841;9;0;Der Ort wird – ebenso wie Kirn und Rhaunen – schon 841 in einer Urkunde über Einzelbesitzungen des alten Reichsklosters Fulda als „Simera“ erwähnt.;Bis 1971 Name Simmern unter Dhaun;claude-sonnet
+Q652221;Sommerloch;gemeinde;ersterwaehnung;1158;9;0;Die älteste erhaltene Erwähnung, als Sumerlachen in einem Güterverzeichnis des Klosters Rupertsberg bei Bingen, stammt von 1158.;;claude-sonnet
+Q614964;Spabrücken;gemeinde;ersterwaehnung;1170;9;0;Die älteste erhaltene Erwähnung von Spabrücken stammt aus dem Jahr 1170 als Spachbrukken.;;claude-sonnet
+Q674457;Spall;gemeinde;ersterwaehnung;1375;9;0;Die älteste urkundliche Erwähnung des Ortes Spall findet sich im Jahre 1375 mit Spalde in einem Sponheimer Güterbuch.;;claude-sonnet
+Q641594;Spiesheim;gemeinde;ersterwaehnung;770;9;0;Die erste urkundliche Erwähnung unter dem Namen „Spizisheim“ ist auf das Jahr 770 datiert;;claude-sonnet
+Q693109;Sponheim;gemeinde;ersterwaehnung;1224;9;0;Im Zusammenhang mit dem Kloster Sponheim wurde 1224 erstmals auch der Ort Sponheim urkundlich erwähnt.;"Kloster 1124 erstmals erwähnt (zählt nicht); angeblich 1044 erwähnter Eberhard betrifft das Geschlecht";claude-sonnet
+Q678738;Sprendlingen;gemeinde;ersterwaehnung;767;9;0;Die erste Erwähnung Sprendlingens findet sich zum Jahr 767 im Lorscher Codex;;claude-sonnet
+Q683833;Stadecken-Elsheim;gemeinde;ersterwaehnung;;;0;;"Zusammenschluss (Wikidata P571 1969); Elsheim 1144, Stadecken (Wasserburg Stadeck) 1276";claude-sonnet
+Q646472;Staudernheim;gemeinde;ersterwaehnung;1107;9;0;Der Ortsname tauchte erstmals im Jahre 1107 auf.;;claude-sonnet
+Q648748;Stein-Bockenheim;gemeinde;ersterwaehnung;784;9;0;Die erste urkundliche Erwähnung erfolgte im Jahre 784 als Buckenheim.;;claude-sonnet
+Q622448;Stockstadt am Rhein;gemeinde;ersterwaehnung;;;0;;"kein eindeutiger Beleg: Satz „Sie wird auf die Zeit von 830–850 datiert.“ hat im Auszug kein erkennbares Bezugswort (vermutlich Ersterwähnung), bitte im Artikel prüfen; 1184 nur Kirchenpatronat";claude-sonnet
+Q628290;Stromberg;gemeinde;ersterwaehnung;1056;9;1;Im Jahr 1056 wird der Ortsname Stromberg im Zusammenhang mit einem Grafen Bertolfus de Strumburg erstmals erwähnt.;"Artikel nennt widersprüchlich 1344 als „Ortsnamen-Ersterwähnung“ (Thal Stromberg); 1255 locus praecipuus";claude-sonnet
+Q676402;Sulzheim;gemeinde;ersterwaehnung;;;0;;"Ersterwähnungsjahr im Auszug abgeschnitten; nur „feierte 2016 sein 1250-jähriges Jubiläum“ (nicht ausgerechnet), bitte im Artikel prüfen";claude-sonnet
+Q647797;Sörgenloch;gemeinde;ersterwaehnung;1190;9;0;Die älteste erhaltene Erwähnung des Ortes Sörgenloch findet sich in einer Urkunde aus dem Jahr 1190.;;claude-sonnet
+Q681003;Tiefenthal;gemeinde;ersterwaehnung;1051;9;0;vom 16. Januar 1051 als „Daffindal“ erwähnt;;claude-sonnet
+Q680934;Traisen;gemeinde;ersterwaehnung;1128;9;0;Traisen wurde im Jahre 1128 erstmals urkundlich erwähnt.;;claude-sonnet
+Q634084;Trebur;gemeinde;ersterwaehnung;829;9;0;Der Ort Trebur wird 829 zum ersten Mal in einer Urkunde König Ludwigs des Frommen erwähnt.;;claude-sonnet
+Q680372;Trechtingshausen;gemeinde;ersterwaehnung;1122;9;0;Bei den ältesten erhaltenen urkundlichen Erwähnungen 1122 wird der Name des Dorfes Drodingishusen genannt;;claude-sonnet
+Q2256399;Schweizerhaus (Trechtingshausen);unternehmen;gruendung;;;0;;"Ausflugsrestaurant, Gebäude 1842 bis 1844 errichtet; kein Gründungsjahr eines Betriebs im Artikel";claude-sonnet
+Q656646;Udenheim;gemeinde;ersterwaehnung;773;9;0;Udenheim wurde erstmals mit einer Urkunde (Nr. 1286) vom 12. Juni 773 erwähnt;;claude-sonnet
+Q678859;Uelversheim;gemeinde;ersterwaehnung;766;9;0;Uelversheim wurde erstmals 766 urkundlich erwähnt;;claude-sonnet
+Q680459;Undenheim;gemeinde;ersterwaehnung;767;9;0;Die erste schriftliche Erwähnung Undenheims aus dem Jahr 767, stammt aus dem Lorscher Codex;;claude-sonnet
+Q569303;Vendersheim;gemeinde;ersterwaehnung;;;0;;"nur Namensform Fendersheim 1426; kein Beleg im Artikel";claude-sonnet
+Q16055;Viernheim;gemeinde;ersterwaehnung;777;9;0;Die erste urkundliche Erwähnung Viernheims stammt aus dem Jahr 777;Stadtrechte 1948 nicht gezählt;claude-sonnet
+Q18286925;Forsthaus Heide;ortsteil;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q2505122;V-Bus;unternehmen;gruendung;2005;9;1;ist Ende 2005 durch Übernahme des Unternehmens Reisedienst Oskar Mühlhäuser entstand;"Entstehung durch Übernahme eines bestehenden Unternehmens; Gründungsjahr daher unsicher";claude-sonnet
+Q305142;Volxheim;gemeinde;ersterwaehnung;;7;0;;nur „fränkische Gründung des 6. Jahrhunderts“, keine Ersterwähnung mit Jahr;claude-sonnet
+Q569858;Wachenheim;gemeinde;ersterwaehnung;765;9;0;Wachenheim wurde erstmals am 29. August 765 in einer Schenkungsurkunde des Klosters Lorsch als Wachanheim urkundlich im Lorscher Codex erwähnt;;claude-sonnet
+Q1265654;Kurpfalz-Park;unternehmen;gruendung;1970;9;0;Der Kurpfalz-Park nahm seinen Betrieb 1970 zunächst als Hochwild-Schutzpark auf.;"Betriebsaufnahme; heutige Betreiberin B&T Kurpfalz-Park GmbH nach Insolvenz 2005";claude-sonnet
+Q654323;Wackernheim;gemeinde;ersterwaehnung;754;9;0;Seine erste urkundliche Erwähnung als Vuacharenheim datiert vom 17. Juni 754;Ortsbezirk von Ingelheim seit 2019;claude-sonnet
+Q617386;Wahlheim;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q2541156;Wald-Michelbach;gemeinde;ersterwaehnung;1238;9;0;Die erste schriftliche Erwähnung des Ortes findet der Ort unter dem Namen Michilnbach 1238;;claude-sonnet
+Q1272119;Dürr-Ellenbach;ortsteil;ersterwaehnung;1437;9;0;Die erste Erwähnung des Ortes findet sich 1437 als Dorn Elbach;"Wüstung; Gebiet 1430 bereits erwähnt (Allmend), Ort selbst 1437";claude-sonnet
+Q630756;Waldalgesheim;gemeinde;ersterwaehnung;790;9;1;Die erste urkundliche Erwähnung im Lorscher Codex stammt aus dem Jahr 790 (oder evtl.;Text im Paket abgeschnitten, mögliche Alternative nicht sichtbar;claude-sonnet
+Q1482719;Genheim;ortsteil;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q554029;Waldböckelheim;gemeinde;ersterwaehnung;824;9;0;Der Ort wurde am 10. Februar 824 als Becchilenheim erstmals urkundlich erwähnt.;;claude-sonnet
+Q553260;Waldlaubersheim;gemeinde;ersterwaehnung;767;9;0;Waldlaubersheim wurde im Jahr 767 im Lorscher Codex erstmals erwähnt.;;claude-sonnet
+Q659920;Wallertheim;gemeinde;ersterwaehnung;1250;9;0;Die älteste erhaltene Erwähnung von Wallertheim stammt von 1250.;;claude-sonnet
+Q165381;Wallhausen;gemeinde;ersterwaehnung;1195;9;0;Die älteste erhaltene Erwähnung von Wallhausen stammt von 1195.;Kirche 1219 nicht gezählt;claude-sonnet
+Q562472;Warmsroth;gemeinde;ersterwaehnung;1281;9;0;Die älteste erhaltene Erwähnung des Dorfes, als Warmsrait, stammt von 1281.;;claude-sonnet
+Q654221;Weiler bei Bingen;gemeinde;ersterwaehnung;823;9;0;Erstmals im Jahre 823 wird der Name des Ortes in einer Urkunde Kaiser Ludwig des Frommen erwähnt.;Kirche 1128 nicht gezählt;claude-sonnet
+Q566874;Weiler bei Monzingen;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q565748;Weinolsheim;gemeinde;ersterwaehnung;789;9;0;Am 22. Oktober 789 wurde Weinolsheim als Winolfesheim in einer Schenkungsurkunde des Klosters Lorsch erwähnt.;;claude-sonnet
+Q630786;Weinsheim;gemeinde;ersterwaehnung;770;9;0;Der Ort wurde im Jahre 770 zum ersten Mal urkundlich erwähnt als Wigmundisheim.;;claude-sonnet
+Q563278;Weitersborn;gemeinde;ersterwaehnung;;;0;;"nur Kapelle/Kirche 1468 erwähnt, nicht der Ort; kein Beleg im Artikel";claude-sonnet
+Q285140;Weiterstadt;gemeinde;ersterwaehnung;948;9;0;Weiterstadt wurde 948 zum ersten Mal urkundlich erwähnt unter dem Namen Widerestat.;"Gemeinde = Kernort; Ortsteile: Braunshardt 1318, Gräfenhausen 1211, Schneppenhausen 1225";claude-sonnet
+Q835442;Gräfenhausen;ortsteil;ersterwaehnung;1211;9;0;1211 wurde Gräfenhausen im Güterbuch (Oculus Memoriae) des Klosters Eberbach erstmals genannt;;claude-sonnet
+Q250074;Welgesheim;gemeinde;ersterwaehnung;770;9;0;Der Ort „Wellingesheim“ selbst wird erstmals im Jahr 770 im Lorscher Codex urkundlich erwähnt.;;claude-sonnet
+Q555562;Wendelsheim;gemeinde;ersterwaehnung;766;9;0;Die älteste erhaltene Erwähnung von Wendelsheim, als Wendilsheim, steht im  Lorscher Codex und stammt aus dem Jahr 766.;;claude-sonnet
+Q502104;Westhofen;gemeinde;ersterwaehnung;774;9;0;Die älteste erhaltene Erwähnung von Westhofen findet sich im Lorscher Codex und datiert auf den 29. Juli 774.;Marktrecht 1324 nicht gezählt;claude-sonnet
+Q79880052;Weingut J. G. Orb;unternehmen;gruendung;;;0;;Im Artikel nur „erste urkundliche Erwähnung der weinbaulichen Tätigkeit der Familie“ 1464 (Küfer Konz Urbe), kein Gründungsjahr des Weinguts;claude-sonnet
+Q553263;Windesheim;gemeinde;ersterwaehnung;1019;9;0;Der Ort wurde im Jahr 1019 als Windense erstmals urkundlich erwähnt;Kirche 1147 nicht gezählt;claude-sonnet
+Q543528;Winterbach;gemeinde;ersterwaehnung;1295;9;0;Der Ort wurde am 8. Juni 1295 erstmals urkundlich erwähnt.;;claude-sonnet
+Q562772;Winterburg;gemeinde;ersterwaehnung;1325;9;0;Winterburg wurde erstmals im Jahr 1325 urkundlich erwähnt;;claude-sonnet
+Q553848;Wintersheim;gemeinde;ersterwaehnung;766;9;0;Erstmals wurde Wintersheim 766 im Lorscher Codex erwähnt.;;claude-sonnet
+Q685329;Wolfsheim;gemeinde;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q562420;Wonsheim;gemeinde;ersterwaehnung;800;9;0;Erstmals wurde der Ort am 10. Juni 800 in einer Schenkungsurkunde an das Kloster Fulda als Vuanesheim urkundlich erwähnt.;;claude-sonnet
+Q3852;Worms;gemeinde;ersterwaehnung;;;0;;"Stadt mit römischer Vorgeschichte; keine Ersterwähnung des Ortes mit Jahr im Text (1184 Reichsstadt/Freiheitsrechte nicht gezählt); kein Beleg im Artikel";claude-sonnet
+Q2593930;Abenheim;ortsteil;ersterwaehnung;774;9;0;mit einer Schenkungsurkunde des Racher vom 29. Dezember 774 im Lorscher Codex über drei Wiesen urkundlich erwähnt;;claude-sonnet
+Q1167116;Fahrt;ortsteil;ersterwaehnung;1457;9;1;Der Rheindürkheimer Ortsteil Fahrt ist seit 1457 als „Zimmermanns-Hütte“ bzw. „Neue Hütte“ belegt.;"Wohnplatz; frühester Beleg unter anderem Namen, keine förmliche Ersterwähnung";claude-sonnet
+Q2593923;Heppenheim;ortsteil;ersterwaehnung;766;9;1;Die erste Urkunde wurde ausgestellt am 3. November 766 oder 767;"766 oder 767; 1398 erstmals Name „Heppenheim yn dem Dorffe off der Wiesen“";claude-sonnet
+Q2593933;Herrnsheim;ortsteil;ersterwaehnung;771;9;0;Am 12. Juni 771 wird Herrnsheim in einem Güterverzeichnis des Klosters Lorsch erstmals erwähnt.;;claude-sonnet
+Q1452942;Hochheim;ortsteil;ersterwaehnung;1068;9;0;Die älteste erhaltene Erwähnung von Hochheim stammt von dem Wormser Bischof Adalbert I. von Rheinfelden und aus dem Jahr 1068.;Artikel: „Der Ort ist aber älter.“;claude-sonnet
+Q2593926;Horchheim;ortsteil;ersterwaehnung;766;9;0;Horchheim wird erstmals im Jahr 766 anlässlich einer Schenkung an das Kloster Lorsch in einer Urkunde des Lorscher Codex erwähnt.;;claude-sonnet
+Q871205;Ibersheim;ortsteil;ersterwaehnung;767;9;0;vom 10. Februar 767;Älteste bekannte schriftliche Erwähnung (Ibersheimer marca) laut Lorscher Codex;claude-sonnet
+Q47464029;Judengasse;ortsteil;ersterwaehnung;;;0;;"Straße/ehemaliges jüdisches Ghetto, kein eigener Ort; kein Beleg im Artikel";claude-sonnet
+Q23560406;Karl-Marx-Siedlung;ortsteil;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q2593941;Leiselheim;ortsteil;ersterwaehnung;1141;9;0;Erstmals erwähnt wurde Leiselheim 1141 in zwei Urkunden des Wormser Bischofs Burchard II. von Ahorn;;claude-sonnet
+Q1751974;Neuhausen;ortsteil;gruendung;847;9;1;Im Jahr 847 gegründet, wurde Neuhausen am 1. April 1898 als erster Stadtteil eingemeindet.;"Ort ging aus dem 847 gegründeten Cyriakusstift hervor; keine Ersterwähnung genannt";claude-sonnet
+Q315735;Pfeddersheim;ortsteil;ersterwaehnung;754;9;0;Die älteste erhaltene Erwähnung von Pfeddersheim stammt aus einer Urkunde von 754;;claude-sonnet
+Q2593948;Pfiffligheim;ortsteil;ersterwaehnung;1068;9;0;Erstmals 1068 urkundlich unter dem Namen Phephilineheim erwähnt;Kirche 1141 nicht gezählt;claude-sonnet
+Q2593936;Rheindürkheim;ortsteil;ersterwaehnung;;;0;;kein Beleg im Artikel;claude-sonnet
+Q2593938;Weinsheim;ortsteil;ersterwaehnung;804;9;0;Weinsheim wurde erstmals 804 in einer Urkunde über eine Schenkung an das Kloster Fulda genannt.;;claude-sonnet
+Q2593943;Wiesoppenheim;ortsteil;ersterwaehnung;793;9;0;Die älteste erhaltene Erwähnung von Wiesoppenheim findet sich in einer im Lorscher Codex überlieferten Urkunde aus von 793.;;claude-sonnet
+Q124025604;Bildungszentrum Worms;unternehmen;gruendung;;;0;;"Schulzentrum, kein Unternehmen/Verein; Schulen in den 1970er-Jahren zusammengefasst, Standort ab 1976 bezogen";claude-sonnet
+Q65240661;Luther-Bibliothek;unternehmen;gruendung;;;0;;"Sammlung innerhalb der Stadtbibliothek, kein Unternehmen/Verein; kein Beleg im Artikel";claude-sonnet
+Q23938907;Nibelungenschule Worms;unternehmen;gruendung;;;0;;"denkmalgeschütztes Schulgebäude, kein Unternehmen/Verein; Neubau 1898 beschlossen";claude-sonnet
+Q1246590;Samas-Gruppe;unternehmen;gruendung;;;0;;"Infobox: Gründungsdatum leer; kein Beleg im Artikel";claude-sonnet
+Q28823623;Wernersche Verlagsgesellschaft;unternehmen;gruendung;1978;9;0;Der Verlag wurde 1978 von Ferdinand Werner (* 1950) und Claus Reisinger (1950–2017) in Stuttgart gegründet.;"Infobox ebenfalls 1978; Sitz heute Worms";claude-sonnet
+Q97795800;FC Blau-Weiß Worms;verein;gruendung;1933;9;0;gründeten daraufhin 1933 den FC Blau-Weiß Worms;"Infobox gegründet = 1933; Neugründung nach Unzufriedenheit mit Fusion des FV Olympia Worms";claude-sonnet
+Q94993538;Normannia Pfiffligheim;verein;gruendung;1910;9;0;Der Verein wurde am 30. April 1910 gegründet;1946 als Abteilung des SV Worms-Pfiffligheim neu gegründet;claude-sonnet
+Q99755514;SV Horchheim;verein;gruendung;1920;9;0;Der Verein wurde im Jahr 1920 zuerst von einigen Mitgliedern des lokalen Turnvereins als Abteilung in diesem gegründet.;"Infobox gegründet = 1920; Name SV 1920 Horchheim bestätigt";claude-sonnet
+Q82980907;SV Leiselheim;verein;gruendung;1920;9;0;Sportverein 1920 Leiselheim e. V.;Infobox gegründet = 1920;claude-sonnet
+Q567724;Wöllstein;gemeinde;ersterwaehnung;855;9;0;Wöllstein wird zum ersten Mal erwähnt in der Abschrift einer Tauschurkunde vom 18. Juli 855 im Lorscher Codex;;claude-sonnet
+Q543978;Wörrstadt;gemeinde;ersterwaehnung;772;9;0;Wörrstadt wurde 772 erstmals urkundlich erwähnt.;Stadtteil Rommersheim 824;claude-sonnet
+Q2165223;Rommersheim;ortsteil;ersterwaehnung;824;9;0;Der Ort Eichloch wurde erstmals 824 urkundlich erwähnt.;bis 1931 Eichloch;claude-sonnet
+Q226785;Zornheim;gemeinde;ersterwaehnung;771;9;0;Die erste urkundliche Erwähnung geht auf das Jahr 771;;claude-sonnet
+Q226999;Zotzenheim;gemeinde;ersterwaehnung;771;9;0;Bereits im Jahre 771 wird das heutige Zotzenheim erstmals urkundlich erwähnt;;claude-sonnet
+Q244821;Zwingenberg;gemeinde;ersterwaehnung;1012;9;1;Der älteste Hinweis auf locum getwinc findet sich in einer Urkunde aus dem Jahr 1012;Stadt- und Marktrechte 1274 nicht gezählt;claude-sonnet
+Q2160911;Rodau;ortsteil;ersterwaehnung;782;9;0;Rodau wurde zum ersten Mal im Jahr 782 in Urkunde Nr. 228 des Lorscher Codex, einer Urkundensammlung des Klosters Lorsch, erwähnt.;;claude-sonnet

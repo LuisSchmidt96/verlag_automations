@@ -14,6 +14,7 @@ Stufen:
 Aufruf: python leads_2029_einschaetzung.py
   → leads_2029.csv                      (alle 339 Treffer mit Stufe)
   → leads_2029_S_A_B_verlagsgebiet.csv  (S, A und B in BW und der Pfalz, mit Kommentar)
+  → leads_2029_ring_S_A_B.csv           (dasselbe für Südhessen und Rheinhessen/Nahe)
 """
 
 import csv
@@ -26,186 +27,187 @@ PFALZ = {"Landkreis Bad Dürkheim", "Donnersbergkreis", "Landkreis Germersheim",
          "Frankenthal (Pfalz)", "Frankenthal", "Kaiserslautern", "Landau in der Pfalz", "Ludwigshafen am Rhein",
          "Neustadt an der Weinstraße", "Pirmasens", "Speyer", "Zweibrücken"}
 
-# Rang (aus empfehlungen_2029.csv) → (Stufe, Kurzkommentar)
+# QID → (Stufe, Kurzkommentar). Früher am Rang festgemacht – der verschiebt sich, sobald neue
+# Jubiläen dazukommen; die QID nicht.
 E = {
-    1: ("S", "Stadt, 1250 Jahre, Beleg sauber (Fulda 779), mitten im Verlagsgebiet"),
-    2: ("S", "Stadt mit 14 000 Einwohnern, 1250 Jahre; hat 1979 schon die 1200 gefeiert – feiert also"),
-    3: ("S", "800 Jahre, 6 000 Einwohner, Rhein-Pfalz-Kreis direkt vor der Haustür"),
-    4: ("A", "800 Jahre, kleine Gemeinde (2 900), Enzkreis – Verlagsgebiet"),
-    5: ("A", "1250 Jahre, 6 300 Einwohner"),
-    6: ("A", "1250 Jahre (St. Gallen 779), Bodensee – weit weg, aber starke Zahl"),
-    7: ("S", "Stadt, 1250 Jahre, 8 000 Einwohner, Beleg sauber"),
-    8: ("A", "1250 Jahre (Lorscher Codex), 6 300 Einwohner"),
-    9: ("S", "historische Stadt, 1200 Jahre, Tourismusort – Buch passt zum Stadtmarketing"),
-    10: ("A", "1100 Jahre, kleine Gemeinde am Hochrhein; Ortsteile noch älter"),
-    11: ("A", "900 Jahre Ort und Kloster Denkendorf (1129), 11 000 Einwohner"),
-    12: ("A", "größte Stadt der Liste (28 500), aber Ersterwähnung 779 nur „könnte“ – vorher klären"),
-    13: ("A", "800 Jahre, 5 600 Einwohner"),
-    14: ("B", "750 Jahre, 3 000 Einwohner"),
-    15: ("B", "750 Jahre, 2 600 Einwohner"),
-    16: ("S", "1250 Jahre Dürrmenz, ältester Teil von Mühlacker – die Stadt dürfte feiern"),
-    17: ("A", "1250 Jahre; Urkunde gilt für alle drei Sachsen-Orte (Hirschberg und Weinheim)"),
-    18: ("C", "900 Jahre, aber 80 Einwohner"),
-    19: ("B", "900 Jahre, 380 Einwohner – kleines Festheft eher als Buch"),
-    20: ("C", "750 Jahre, 240 Einwohner"),
-    21: ("C", "700 Jahre, 440 Einwohner"),
-    22: ("B", "900 Jahre, 860 Einwohner"),
-    23: ("B", "800 Jahre, 600 Einwohner"),
-    24: ("B", "Zell am Neckar, heute Stadtteil von Esslingen, 800 Jahre"),
-    25: ("B", "700 Jahre, Ortsteil von Altensteig, Kreis Calw"),
-    26: ("A", "1250 Jahre, ältester Ortsteil von Zimmern ob Rottweil – klassische Ortschronik"),
-    27: ("A", "1250 Jahre, Ortsteil von Öhringen"),
-    28: ("B", "1200 Jahre, aber ursprünglich Hofgut, kleiner Ortsteil"),
-    29: ("B", "1100 Jahre, kleiner Ortsteil von Stühlingen"),
-    30: ("B", "800 Jahre, 2 500 Einwohner, Ortsteil von Wangen im Allgäu"),
-    31: ("B", "800 Jahre, 9 100 Einwohner – Stuttgarter Stadtbezirk, „zusammen mit Stuttgart“ 1229 erwähnt"),
-    32: ("C", "900 Jahre, Wortlaut unsicher"),
-    33: ("B", "800 Jahre, Weinort, Ortsteil von Brackenheim"),
-    34: ("B", "800 Jahre, Ortsteil von Ostfildern"),
-    35: ("C", "800 Jahre, Weiler von Esslingen"),
-    36: ("B", "800 Jahre, 1 000 Einwohner"),
-    37: ("B", "800 Jahre, Esslinger Stadtteil"),
-    38: ("B", "800 Jahre, Ortsteil von Gomaringen (Jahr nur aus Wikidata)"),
-    39: ("B", "800 Jahre, Ortsteil von Jettingen"),
-    40: ("C", "800 Jahre, Weiler"),
-    41: ("C", "750 Jahre, Burgruine/Weiler – Jahr nur aus Wikidata"),
-    42: ("C", "750 Jahre, kleiner Esslinger Stadtteil"),
-    43: ("C", "700 Jahre, Weiler"),
-    44: ("C", "700 Jahre, Erwähnung umstritten"),
-    45: ("C", "700 Jahre, Esslinger Wohngebiet"),
-    46: ("C", "700 Jahre, kleiner Ortsteil"),
-    47: ("C", "Mühle/Hofgut"),
-    48: ("C", "Hof"),
-    49: ("B", "1250 Jahre, aber nur „vermutlich“ – zusammen mit Vaihingen/Markgröningen denkbar"),
-    50: ("B", "1250 Jahre, Datierung 779–802 unsicher"),
-    51: ("A", "700 Jahre Lateinschule – außergewöhnlich; Festschrift sehr wahrscheinlich"),
-    52: ("A", "100 Jahre, Familienunternehmen, Pforzheim – Verlagsgebiet"),
-    53: ("B", "100 Jahre Kino, Karlsruher Kultur – kleines Budget"),
-    54: ("B", "50 Jahre Gemeinde (Gebietsreform) – Hessen"),
-    55: ("C", "unklar, ob es die Firma noch gibt"),
-    56: ("X", "Gründung des französischen Mutterkonzerns"),
-    57: ("C", "800 Jahre, Erwähnung nur „möglicherweise“"),
-    58: ("C", "600 Jahre, Weiler, Jahr unsicher"),
-    59: ("B", "200 Jahre Universität – groß, macht es vermutlich mit eigenen Historikern"),
-    60: ("C", "Teil der Universität"),
-    61: ("X", "ehemalige Schule"),
-    62: ("S", "175 Jahre, Familienunternehmen, Weltmarktführer Metallschläuche, Pforzheim"),
-    63: ("S", "150 Jahre, Familienunternehmen, Karlsruhe – 20 km vom Verlag"),
-    64: ("B", "150 Jahre, gehört meines Wissens zur Continentale-Gruppe (aus dem Gedächtnis)"),
-    65: ("B", "50 Jahre Gemeinde (Gebietsreform) – Hessen"),
-    66: ("B", "200 Jahre Sparkasse – Hessen, weit weg"),
-    67: ("X", "2023 insolvent, an Zeitfracht (aus dem Gedächtnis)"),
-    68: ("C", "vermutlich nicht mehr eigenständig – prüfen"),
-    69: ("X", "historischer Postkartenverlag"),
-    70: ("C", "unbekannt – prüfen"),
-    71: ("C", "Tochter eines schwedischen Konzerns"),
-    72: ("A", "100 Jahre, Familienbetrieb mit viel Geschichte"),
-    73: ("X", "Mediengruppe – macht es selbst"),
-    74: ("B", "400 Jahre Schule – Hessen"),
-    75: ("B", "400 Jahre Gymnasium (Nachfolger des Pädagogs) – Hessen"),
-    76: ("B", "200 Jahre Schule – Hessen"),
-    77: ("A", "150 Jahre Privatbank, traditionsbewusst, Freiburg"),
-    78: ("B", "150 Jahre Genossenschaftsbank, vorher Fusion prüfen"),
-    79: ("B", "150 Jahre Genossenschaftsbank, klein – Fusion prüfen"),
-    80: ("B", "125 Jahre Volksbank, Kreis Heilbronn"),
-    81: ("C", "Hessen, Schule"),
-    82: ("B", "175 Jahre Berufsschule, Heilbronn"),
-    83: ("B", "150 Jahre Gymnasium, Stuttgart"),
-    84: ("B", "125 Jahre Gymnasium, Freiburg"),
-    85: ("C", "125 Jahre Grundschule"),
-    86: ("B", "100 Jahre Kraftwerksgesellschaft – Festschrift plausibel"),
-    87: ("C", "gehört zu einem US-Konzern (aus dem Gedächtnis)"),
-    88: ("C", "Mühle, Jahr unsicher"),
-    89: ("B", "200 Jahre – Hessen"),
-    90: ("X", "in AXA aufgegangen (aus dem Gedächtnis)"),
-    91: ("B", "100 Jahre Energieversorger – Hessen"),
-    92: ("B", "100 Jahre, Familienunternehmen – Hessen"),
-    93: ("C", "Musikgeschäft – Koblenz"),
-    94: ("C", "Hessen"),
-    95: ("C", "unklar – Mainz"),
-    96: ("C", "Fertighaus, Eifel"),
-    97: ("B", "100 Jahre Stadtwerke – Hessen"),
-    98: ("C", "Autohaus – Hessen"),
-    99: ("C", "Hessen"),
-    100: ("C", "50 Jahre Hochschule, staatlich"),
-    101: ("C", "50 Jahre Hochschule"),
-    102: ("B", "175 Jahre Berufsschule, Heilbronn"),
-    103: ("B", "175 Jahre Berufsschule, Stuttgart"),
-    104: ("C", "Hessen"),
-    105: ("A", "175 Jahre, Familienunternehmen (Nähgarne), Bönnigheim"),
-    106: ("A", "175 Jahre Kranbau, Heilbronn"),
-    107: ("B", "150 Jahre, gehört einem US-Konzern (aus dem Gedächtnis)"),
-    108: ("A", "150 Jahre, börsennotiert – großes Firmenbuch, Wettbewerb mit Agenturen"),
-    109: ("B", "150 Jahre Brauerei – Gründungsjahr prüfen (Wikidata 1879)"),
-    110: ("A", "150 Jahre, Familienunternehmen (Düsen), Metzingen"),
-    111: ("C", "unbekannt"),
-    112: ("B", "125 Jahre Sägewerk – Eigentümerwechsel prüfen"),
-    113: ("C", "Jazzkeller, 75 Jahre"),
-    114: ("C", "Wanderhütte"),
-    115: ("B", "75 Jahre, Werkzeughersteller, Kreis Freudenstadt"),
-    116: ("C", "75 Jahre Versicherung"),
-    117: ("B", "250 Jahre Gymnasium – Hessen"),
-    118: ("B", "200 Jahre – Hessen"),
-    119: ("C", "Hessen, Schule"),
-    120: ("B", "150 Jahre Gymnasium – Trier"),
-    121: ("C", "Hessen, Schule"),
-    122: ("C", "Hessen, Schule"),
-    123: ("C", "Hessen, Schule"),
-    124: ("B", "100 Jahre, Pfalz"),
-    125: ("C", "Tennisclub"),
-    126: ("C", "25 Jahre"),
-    127: ("B", "50 Jahre, Softwarefirma Karlsruhe"),
-    128: ("B", "50 Jahre, börsennotiert, Enzkreis"),
-    129: ("C", "50 Jahre, klein"),
-    130: ("C", "75 Jahre, klein"),
-    131: ("B", "125 Jahre Gymnasium – Jahr uneinheitlich"),
-    132: ("C", "Dorfverein"),
-    133: ("C", "Dorfverein"),
-    134: ("C", "Dorfverein"),
-    135: ("C", "25 Jahre"),
-    136: ("C", "25 Jahre"),
-    137: ("A", "500 Jahre Schützenverein – außergewöhnliche Zahl, Ortenau"),
-    138: ("B", "175 Jahre Brauerei – Hessen"),
-    139: ("C", "Hessen"),
-    140: ("C", "Hessen"),
-    141: ("C", "Hessen"),
-    142: ("C", "Hessen"),
+    "Q355435": ("S", "Stadt, 1250 Jahre, Beleg sauber (Fulda 779), mitten im Verlagsgebiet"),  # Adelsheim
+    "Q13896": ("S", "Stadt mit 14 000 Einwohnern, 1250 Jahre; hat 1979 schon die 1200 gefeiert – feiert also"),  # Markgröningen
+    "Q23023": ("S", "800 Jahre, 6 000 Einwohner, Rhein-Pfalz-Kreis direkt vor der Haustür"),  # Waldsee
+    "Q80511": ("A", "800 Jahre, kleine Gemeinde (2 900), Enzkreis – Verlagsgebiet"),  # Wimsheim
+    "Q61653": ("A", "1250 Jahre, 6 300 Einwohner"),  # Benningen am Neckar
+    "Q507274": ("A", "1250 Jahre (St. Gallen 779), Bodensee – weit weg, aber starke Zahl"),  # Bermatingen
+    "Q61830": ("S", "Stadt, 1250 Jahre, 8 000 Einwohner, Beleg sauber"),  # Großbottwar
+    "Q61705": ("A", "1250 Jahre (Lorscher Codex), 6 300 Einwohner"),  # Ingersheim
+    "Q491535": ("S", "historische Stadt, 1200 Jahre, Tourismusort – Buch passt zum Stadtmarketing"),  # Bad Wimpfen
+    "Q515323": ("A", "1100 Jahre, kleine Gemeinde am Hochrhein; Ortsteile noch älter"),  # Weilheim
+    "Q80809": ("A", "900 Jahre Ort und Kloster Denkendorf (1129), 11 000 Einwohner"),  # Denkendorf
+    "Q61928": ("A", "größte Stadt der Liste (28 500), aber Ersterwähnung 779 nur „könnte“ – vorher klären"),  # Vaihingen an der Enz
+    "Q80606": ("A", "800 Jahre, 5 600 Einwohner"),  # Oberboihingen
+    "Q546393": ("B", "750 Jahre, 3 000 Einwohner"),  # Cleebronn
+    "Q537465": ("B", "750 Jahre, 2 600 Einwohner"),  # Pfaffenhofen
+    "Q74763163": ("S", "1250 Jahre Dürrmenz, ältester Teil von Mühlacker – die Stadt dürfte feiern"),  # Dürrmenz
+    "Q43273976": ("A", "1250 Jahre; Urkunde gilt für alle drei Sachsen-Orte (Hirschberg und Weinheim)"),  # Großsachsen
+    "Q649456": ("C", "900 Jahre, aber 80 Einwohner"),  # Hirschthal
+    "Q373283": ("B", "900 Jahre, 380 Einwohner – kleines Festheft eher als Buch"),  # Schönau
+    "Q562832": ("C", "750 Jahre, 240 Einwohner"),  # Heinzenhausen
+    "Q563008": ("C", "700 Jahre, 440 Einwohner"),  # Neunkirchen am Potzberg
+    "Q540770": ("B", "900 Jahre, 860 Einwohner"),  # Unterstadion
+    "Q632934": ("B", "800 Jahre, 600 Einwohner"),  # Lauterach
+    "Q1308178": ("B", "Zell am Neckar, heute Stadtteil von Esslingen, 800 Jahre"),  # Zell
+    "Q2549872": ("B", "700 Jahre, Ortsteil von Altensteig, Kreis Calw"),  # Wart
+    "Q20179999": ("A", "1250 Jahre, ältester Ortsteil von Zimmern ob Rottweil – klassische Ortschronik"),  # Flözlingen
+    "Q2016767": ("A", "1250 Jahre, Ortsteil von Öhringen"),  # Ohrnberg
+    "Q889245": ("B", "1200 Jahre, aber ursprünglich Hofgut, kleiner Ortsteil"),  # Bockschaft
+    "Q18019848": ("B", "1100 Jahre, kleiner Ortsteil von Stühlingen"),  # Eberfingen
+    "Q19969752": ("B", "800 Jahre, 2 500 Einwohner, Ortsteil von Wangen im Allgäu"),  # Schomburg
+    "Q1469016": ("B", "800 Jahre, 9 100 Einwohner – Stuttgarter Stadtbezirk, „zusammen mit Stuttgart“ 1229 erwähnt"),  # Wangen
+    "Q112151869": ("C", "900 Jahre, Wortlaut unsicher"),  # Broggingen
+    "Q1566803": ("B", "800 Jahre, Weinort, Ortsteil von Brackenheim"),  # Haberschlacht
+    "Q1738511": ("B", "800 Jahre, Ortsteil von Ostfildern"),  # Kemnat
+    "Q1790172": ("C", "800 Jahre, Weiler von Esslingen"),  # Krummenacker
+    "Q17577331": ("B", "800 Jahre, 1 000 Einwohner"),  # Leupolz
+    "Q1925995": ("B", "800 Jahre, Esslinger Stadtteil"),  # Mettingen (Esslingen am Neckar)
+    "Q2350567": ("B", "800 Jahre, Ortsteil von Gomaringen (Jahr nur aus Wikidata)"),  # Stockach (Gomaringen)
+    "Q33510632": ("B", "800 Jahre, Ortsteil von Jettingen"),  # Unterjettingen
+    "Q63871491": ("C", "800 Jahre, Weiler"),  # Weiler
+    "Q13142752": ("C", "750 Jahre, Burgruine/Weiler – Jahr nur aus Wikidata"),  # Landeck
+    "Q2203516": ("C", "750 Jahre, kleiner Esslinger Stadtteil"),  # Rüdern
+    "Q1586935": ("C", "700 Jahre, Weiler"),  # Harsberg
+    "Q1146049": ("C", "700 Jahre, Erwähnung umstritten"),  # Ingersheim an der Jagst
+    "Q2596006": ("C", "700 Jahre, Esslinger Wohngebiet"),  # Wäldenbronn
+    "Q29567459": ("C", "700 Jahre, kleiner Ortsteil"),  # Zoznegg
+    "Q58915406": ("C", "Mühle/Hofgut"),  # Klinglesmühle
+    "Q110892450": ("C", "Hof"),  # Hirschhof
+    "Q47796855": ("B", "1250 Jahre, aber nur „vermutlich“ – zusammen mit Vaihingen/Markgröningen denkbar"),  # Hochdorf/Enz
+    "Q2284859": ("B", "1250 Jahre, Datierung 779–802 unsicher"),  # Siglingen
+    "Q16006232": ("A", "700 Jahre Lateinschule – außergewöhnlich; Festschrift sehr wahrscheinlich"),  # Rupert-Neß-Gymnasium Wangen
+    "Q798951": ("A", "100 Jahre, Familienunternehmen, Pforzheim – Verlagsgebiet"),  # Bader Versand
+    "Q2231851": ("B", "100 Jahre Kino, Karlsruher Kultur – kleines Budget"),  # Schauburg
+    "Q634106": ("B", "50 Jahre Gemeinde (Gebietsreform) – Hessen"),  # Wettenberg
+    "Q100344792": ("C", "unklar, ob es die Firma noch gibt"),  # Georg Reichard
+    "Q30269106": ("X", "Gründung des französischen Mutterkonzerns"),  # Ipsen (Germany)
+    "Q59434929": ("C", "800 Jahre, Erwähnung nur „möglicherweise“"),  # Dambach (Stödtlen)
+    "Q112776368": ("C", "600 Jahre, Weiler, Jahr unsicher"),  # Altmannsweiler
+    "Q122453": ("B", "200 Jahre Universität – groß, macht es vermutlich mit eigenen Historikern"),  # Universität Stuttgart
+    "Q1616201": ("C", "Teil der Universität"),  # Universitätsbibliothek Stuttgart
+    "Q113620553": ("X", "ehemalige Schule"),  # Realprogymnasium (Buchen)
+    "Q2586953": ("S", "175 Jahre, Familienunternehmen, Weltmarktführer Metallschläuche, Pforzheim"),  # Witzenmann-Gruppe
+    "Q17122614": ("S", "150 Jahre, Familienunternehmen, Karlsruhe – 20 km vom Verlag"),  # Carl Roth
+    "Q1890715": ("B", "150 Jahre, gehört meines Wissens zur Continentale-Gruppe (aus dem Gedächtnis)"),  # Mannheimer Versicherungen
+    "Q622428": ("B", "50 Jahre Gemeinde (Gebietsreform) – Hessen"),  # Lahnau
+    "Q15128978": ("B", "200 Jahre Sparkasse – Hessen, weit weg"),  # Sparkasse Waldeck-Frankenberg
+    "Q1447863": ("X", "2023 insolvent, an Zeitfracht (aus dem Gedächtnis)"),  # Koch, Neff und Volckmar
+    "Q107118168": ("C", "vermutlich nicht mehr eigenständig – prüfen"),  # Enzinger Union Werke
+    "Q115142921": ("X", "historischer Postkartenverlag"),  # Portrait Atelier Bauer
+    "Q109939644": ("C", "unbekannt – prüfen"),  # Gathmann
+    "Q30269260": ("C", "Tochter eines schwedischen Konzerns"),  # Getinge (Germany)
+    "Q520675": ("A", "100 Jahre, Familienbetrieb mit viel Geschichte"),  # Erlebnispark Tripsdrill
+    "Q1782491": ("X", "Mediengruppe – macht es selbst"),  # Konradin Mediengruppe
+    "Q19964300": ("B", "400 Jahre Schule – Hessen"),  # Altes Pädagog
+    "Q1874094": ("B", "400 Jahre Gymnasium (Nachfolger des Pädagogs) – Hessen"),  # Ludwig-Georgs-Gymnasium
+    "Q1665423": ("B", "200 Jahre Schule – Hessen"),  # Viktoriaschule
+    "Q1746794": ("A", "150 Jahre Privatbank, traditionsbewusst, Freiburg"),  # Bankhaus E. Mayer
+    "Q17477739": ("B", "150 Jahre Genossenschaftsbank, vorher Fusion prüfen"),  # Raiffeisenbank Kaiserstuhl
+    "Q15134090": ("B", "150 Jahre Genossenschaftsbank, klein – Fusion prüfen"),  # Volksbank Möckmühl
+    "Q2505471": ("B", "125 Jahre Volksbank, Kreis Heilbronn"),  # VBU Volksbank im Unterland
+    "Q47495905": ("C", "Hessen, Schule"),  # Freie Waldorfschule Kassel
+    "Q1555507": ("B", "175 Jahre Berufsschule, Heilbronn"),  # Gustav-von-Schmoller-Schule Heilbronn
+    "Q89491135": ("B", "150 Jahre Gymnasium, Stuttgart"),  # Elly-Heuss-Knapp-Gymnasium Stuttgart
+    "Q15688375": ("B", "125 Jahre Gymnasium, Freiburg"),  # Friedrich-Gymnasium Freiburg
+    "Q66098763": ("C", "125 Jahre Grundschule"),  # Heusteigschule
+    "Q125578831": ("B", "100 Jahre Kraftwerksgesellschaft – Festschrift plausibel"),  # Rheinkraftwerk Albbruck-Dogern AG
+    "Q2587819": ("C", "gehört zu einem US-Konzern (aus dem Gedächtnis)"),  # Wohlhaupter
+    "Q1226535": ("C", "Mühle, Jahr unsicher"),  # Dinkelmühle Graf
+    "Q2109610": ("B", "200 Jahre – Hessen"),  # Priesterseminar Limburg
+    "Q1152019": ("X", "in AXA aufgegangen (aus dem Gedächtnis)"),  # DBV-Winterthur Holding
+    "Q17486810": ("B", "100 Jahre Energieversorger – Hessen"),  # EAM
+    "Q21036277": ("B", "100 Jahre, Familienunternehmen – Hessen"),  # HEWI
+    "Q66439845": ("C", "Musikgeschäft – Koblenz"),  # Musik-Klein
+    "Q1451815": ("C", "Hessen"),  # Precision Mechatronics
+    "Q1609884": ("C", "unklar – Mainz"),  # Riga Mainz
+    "Q1676048": ("C", "Fertighaus, Eifel"),  # Streif
+    "Q1380025": ("B", "100 Jahre Stadtwerke – Hessen"),  # Städtische Werke
+    "Q25345785": ("C", "Autohaus – Hessen"),  # Taunus-Auto
+    "Q130367700": ("C", "Hessen"),  # YMOS
+    "Q1262599": ("C", "50 Jahre Hochschule, staatlich"),  # Duale Hochschule Baden-Württemberg Karlsruhe
+    "Q1622186": ("C", "50 Jahre Hochschule"),  # Hochschule für Jüdische Studien
+    "Q133932437": ("B", "175 Jahre Berufsschule, Heilbronn"),  # Johann-Jakob-Widmann-Schule
+    "Q134068397": ("B", "175 Jahre Berufsschule, Stuttgart"),  # Werner-Siemens-Schule Stuttgart
+    "Q18027093": ("C", "Hessen"),  # Raiffeisenbank Werratal-Landeck
+    "Q16002754": ("A", "175 Jahre, Familienunternehmen (Nähgarne), Bönnigheim"),  # Amann & Söhne
+    "Q1485474": ("A", "175 Jahre Kranbau, Heilbronn"),  # Wolffkran
+    "Q1131085": ("B", "150 Jahre, gehört einem US-Konzern (aus dem Gedächtnis)"),  # Coperion
+    "Q1333317": ("A", "150 Jahre, börsennotiert – großes Firmenbuch, Wettbewerb mit Agenturen"),  # ElringKlinger
+    "Q1597044": ("B", "150 Jahre Brauerei – Gründungsjahr prüfen (Wikidata 1879)"),  # Heinrich Dinkelacker
+    "Q1811343": ("A", "150 Jahre, Familienunternehmen (Düsen), Metzingen"),  # Lechler (Unternehmen)
+    "Q300222": ("C", "unbekannt"),  # AWG
+    "Q1774105": ("B", "125 Jahre Sägewerk – Eigentümerwechsel prüfen"),  # Klenk Holz
+    "Q1051811": ("C", "Jazzkeller, 75 Jahre"),  # Cave 54
+    "Q130241437": ("C", "Wanderhütte"),  # Hirzeck-Haus
+    "Q18023330": ("B", "75 Jahre, Werkzeughersteller, Kreis Freudenstadt"),  # Leuco
+    "Q1961387": ("C", "75 Jahre Versicherung"),  # NRV-Rechtsschutz
+    "Q1464247": ("B", "250 Jahre Gymnasium – Hessen"),  # Friedrichsgymnasium
+    "Q30264093": ("B", "200 Jahre – Hessen"),  # Glasbau Hahn (Germany)
+    "Q1284907": ("C", "Hessen, Schule"),  # Edith-Stein-Schule Darmstadt
+    "Q766044": ("B", "150 Jahre Gymnasium – Trier"),  # Auguste-Viktoria-Gymnasium Trier
+    "Q1330577": ("C", "Hessen, Schule"),  # Elisabethschule Marburg
+    "Q2315885": ("C", "Hessen, Schule"),  # St.-Angela-Schule (Königstein)
+    "Q189884": ("C", "Hessen, Schule"),  # Zentgrafenschule
+    "Q325249": ("B", "100 Jahre, Pfalz"),  # SVN Zweibrücken
+    "Q1652777": ("C", "Tennisclub"),  # TC Rüppurr Karlsruhe 1929
+    "Q1733921": ("C", "25 Jahre"),  # Karlshochschule International University
+    "Q2044808": ("B", "50 Jahre, Softwarefirma Karlsruhe"),  # PTV
+    "Q22909101": ("B", "50 Jahre, börsennotiert, Enzkreis"),  # STRATEC
+    "Q139916607": ("C", "50 Jahre, klein"),  # Tria Technologies
+    "Q111296742": ("C", "75 Jahre, klein"),  # Dossmann GmbH
+    "Q139863925": ("B", "125 Jahre Gymnasium – Jahr uneinheitlich"),  # Parler-Gymnasium Schwäbisch Gmünd
+    "Q112662540": ("C", "Dorfverein"),  # FC Fortuna 1929 Lohrbach e.V.
+    "Q112798369": ("C", "Dorfverein"),  # Sportverein 1929 Schollbrunn e.V.
+    "Q112843126": ("C", "Dorfverein"),  # Sportverein 1929 Wagenschwend e.V.
+    "Q16909390": ("C", "25 Jahre"),  # Fakultät für Rechtswissenschaft und Volkswirtschaftslehre (Universität Mannheim)
+    "Q15242252": ("C", "25 Jahre"),  # Leonardo da Vinci Gymnasium
+    "Q19930480": ("A", "500 Jahre Schützenverein – außergewöhnliche Zahl, Ortenau"),  # Schützenverein Oberkirch
+    "Q204880": ("B", "175 Jahre Brauerei – Hessen"),  # Licher Privatbrauerei
+    "Q2208030": ("C", "Hessen"),  # STI Group
+    "Q17326366": ("C", "Hessen"),  # Stadtbibliothek Darmstadt
+    "Q802425": ("C", "Hessen"),  # Freien Grunder Eisenbahn
+    "Q1531851": ("C", "Hessen"),  # Glockenbäckerei
 }
 # Ab Rang 143 gibt es, mit wenigen Ausnahmen, nur noch kleine Jubiläen
 # (25/50/75 Jahre), Narrenzünfte, Hessen/Saarland und Verlage. Die Ausnahmen
 # stehen einzeln da, der Rest bekommt C bzw. X mit eigenem Grund.
 E.update({
-    155: ("A", "175 Jahre Kunstakademie – Festschrift so gut wie sicher, Land zahlt"),
-    156: ("B", "150 Jahre Linde – Weltkonzern, macht es selbst; nur der Vollständigkeit halber"),
-    157: ("B", "125 Jahre, Karlsbad – Verlagsgebiet"),
-    158: ("B", "125 Jahre, Rastatt – Verlagsgebiet"),
-    159: ("B", "125 Jahre Fastnachtsgesellschaft, Karlsruhe"),
-    160: ("B", "125 Jahre, Pfalz"),
-    170: ("B", "175 Jahre Bank – Hessen, Jahr uneinheitlich"),
-    172: ("B", "75 Jahre, Familienunternehmen, Kreis Lörrach"),
-    173: ("B", "Liebherr – Konzern macht es selbst"),
-    174: ("C", "Liebherr – Konzern macht es selbst"),
-    175: ("B", "Liebherr – Konzern macht es selbst"),
-    177: ("B", "100 Jahre, Fußball, Kaiserstuhl"),
-    180: ("A", "100 Jahre Geschichtsverein – natürlicher Partner eines Regionalverlags"),
-    192: ("B", "50 Jahre, groß"),
-    193: ("B", "50 Jahre, Reisemobile"),
-    220: ("B", "200 Jahre – Frankfurt"),
-    221: ("B", "200 Jahre Naturkundeverein – Wiesbaden"),
-    222: ("B", "200 Jahre Städelschule – Frankfurt"),
-    238: ("X", "2023 insolvent, an Zeitfracht (aus dem Gedächtnis)"),
-    239: ("B", "150 Jahre Alpenvereinssektion – Festschrift üblich"),
-    240: ("B", "125 Jahre Fußball"),
-    243: ("B", "125 Jahre Fußball"),
-    246: ("A", "125 Jahre SC Freiburg – Chronik sicher, ob mit Regionalverlag offen"),
-    247: ("B", "125 Jahre Alpenvereinssektion – Festschrift üblich"),
-    261: ("B", "150 Jahre Fastnacht, Buchen – Verlagsgebiet"),
-    280: ("X", "Verlag"),
-    299: ("B", "75 Jahre Kammer"),
-    302: ("X", "Verlag – macht es selbst"),
-    303: ("B", "50 Jahre Geschichtsverein – Partner, aber kleine Zahl"),
-    323: ("X", "Verlag"),
-    338: ("X", "Verlag"),
+    "Q322938": ("A", "175 Jahre Kunstakademie – Festschrift so gut wie sicher, Land zahlt"),  # Staatliche Akademie der Bildenden Künste Karlsruhe
+    "Q72927795": ("B", "150 Jahre Linde – Weltkonzern, macht es selbst; nur der Vollständigkeit halber"),  # Linde AG
+    "Q120968418": ("B", "125 Jahre, Karlsbad – Verlagsgebiet"),  # ATSV Mutschelbach
+    "Q319548": ("B", "125 Jahre, Rastatt – Verlagsgebiet"),  # FC Rastatt 04
+    "Q1388226": ("B", "125 Jahre Fastnachtsgesellschaft, Karlsruhe"),  # FG Rüppurr
+    "Q2458740": ("B", "125 Jahre, Pfalz"),  # TuS Hohenecken
+    "Q795936": ("B", "175 Jahre Bank – Hessen, Jahr uneinheitlich"),  # ODDO BHF
+    "Q1529839": ("B", "75 Jahre, Familienunternehmen, Kreis Lörrach"),  # Glatt Unternehmensgruppe
+    "Q23788252": ("B", "Liebherr – Konzern macht es selbst"),  # Liebherr-Hausgeräte
+    "Q23905207": ("C", "Liebherr – Konzern macht es selbst"),  # Liebherr-Mischtechnik
+    "Q23826343": ("B", "Liebherr – Konzern macht es selbst"),  # Liebherr-Werk Biberach
+    "Q176850": ("B", "100 Jahre, Fußball, Kaiserstuhl"),  # Bahlinger SC
+    "Q19963065": ("A", "100 Jahre Geschichtsverein – natürlicher Partner eines Regionalverlags"),  # Geschichtsverein Markgräflerland
+    "Q1023617": ("B", "50 Jahre, groß"),  # CHG-Meridian
+    "Q1045931": ("B", "50 Jahre, Reisemobile"),  # Carthago Reisemobilbau
+    "Q1444994": ("B", "200 Jahre – Frankfurt"),  # Frankfurter Kunstverein
+    "Q1965958": ("B", "200 Jahre Naturkundeverein – Wiesbaden"),  # Nassauischer Verein für Naturkunde
+    "Q875722": ("B", "200 Jahre Städelschule – Frankfurt"),  # Staatliche Hochschule für Bildende Künste – Städelschule
+    "Q1718850": ("X", "2023 insolvent, an Zeitfracht (aus dem Gedächtnis)"),  # KNO Verlagsauslieferung
+    "Q116895440": ("B", "150 Jahre Alpenvereinssektion – Festschrift üblich"),  # Sektion Ulm
+    "Q162349": ("B", "125 Jahre Fußball"),  # 1. FC Normannia Gmünd
+    "Q319868": ("B", "125 Jahre Fußball"),  # FC Singen 04
+    "Q106394": ("A", "125 Jahre SC Freiburg – Chronik sicher, ob mit Regionalverlag offen"),  # SC Freiburg
+    "Q39562085": ("B", "125 Jahre Alpenvereinssektion – Festschrift üblich"),  # Sektion Stuttgart
+    "Q109769788": ("B", "150 Jahre Fastnacht, Buchen – Verlagsgebiet"),  # FG Narrhalla
+    "Q1488660": ("X", "Verlag"),  # Gabler Verlag
+    "Q39080113": ("B", "75 Jahre Kammer"),  # Landesärztekammer Baden-Württemberg
+    "Q2645334": ("X", "Verlag – macht es selbst"),  # Alfred Kröner Verlag
+    "Q1250760": ("B", "50 Jahre Geschichtsverein – Partner, aber kleine Zahl"),  # Geschichtsverein der Diözese Rottenburg-Stuttgart
+    "Q1384477": ("X", "Verlag"),  # Expert Verlag
+    "Q1735714": ("X", "Verlag"),  # Westend Verlag
 })
 X_NAMEN = {"Fachwerkhaus Weilburger Straße 14": "Gebäude", "Q108597725": "Datensatz ohne Namen",
            "Wirtschaftsbetrieb Mainz": "Behördenbetrieb", "Porsche Zentrum Erfurt": "Autohaus, Datenfehler",
@@ -215,9 +217,8 @@ X_NAMEN = {"Fachwerkhaus Weilburger Straße 14": "Gebäude", "Q108597725": "Date
 
 
 def einschaetzung(z):
-    rang = int(z["Rang"])
-    if rang in E:
-        return E[rang]
+    if z["QID"] in E:
+        return E[z["QID"]]
     if z["Name"] in X_NAMEN:
         return "X", X_NAMEN[z["Name"]]
     jahre = int(z["Jahre"])
@@ -401,6 +402,39 @@ KOMMENTAR_B = {
     "FC Singen 04": "125 Jahre Fußball, Singen.",
 }
 
+# Ring ums Verlagsgebiet (Südhessen, Rheinhessen/Nahe) – Durchsicht 26.10.2026 nach dem Nachtragen
+E.update({
+    "Q634084": ("S", "1200 Jahre, 12 700 Einwohner, Königspfalz Tribur – große Geschichte, große Gemeinde"),  # Trebur
+    "Q1998041": ("A", "900 Jahre; hat 1979 schon die 850 gefeiert – feiert also"),  # Nordheim (Biblis)
+    "Q1874094": ("A", "400 Jahre Gymnasium (Pädagog 1629) – Festschrift so gut wie sicher"),  # Ludwig-Georgs-Gymnasium
+    "Q19964300": ("X", "Gebäude bzw. Vorläufer – Ansprechpartner ist das Ludwig-Georgs-Gymnasium"),  # Altes Pädagog
+    "Q1284907": ("B", "175 Jahre Schule, Darmstadt"),  # Edith-Stein-Schule
+    "Q17326366": ("B", "150 Jahre Stadtbibliothek – Festschrift plausibel, städtisches Budget"),  # Stadtbibliothek Darmstadt
+    "Q1798208": ("B", "700 Jahre, Ortsteil von Michelstadt (Odenwald)"),  # Steinbuch
+    "Q2582423": ("B", "700 Jahre, Ortsteil von Bensheim (Bergstraße)"),  # Wilmshausen
+    "Q1952619": ("C", "200 Jahre, Weiler"),  # Mummenroth
+    "Q1394683": ("C", "200 Jahre, Weiler am Odenwaldkamm"),  # Tromm
+    "Q22674520": ("C", "75 Jahre Kino"),  # Bali Kino Alzey
+})
+RING = {"Landkreis Bergstraße", "Landkreis Darmstadt-Dieburg", "Odenwaldkreis", "Landkreis Groß-Gerau",
+        "Landkreis Mainz-Bingen", "Landkreis Alzey-Worms", "Landkreis Bad Kreuznach"}
+RING_STAEDTE = {"Darmstadt", "Mainz", "Worms"}  # kreisfrei; in den Daten oft ohne Landkreis
+
+KOMMENTAR_RING = {
+    "Trebur": "1200 Jahre (829, Urkunde Ludwigs des Frommen). Gemeinde mit 12 700 Einwohnern im Kreis Groß-Gerau. "
+              "Trebur war karolingische Königspfalz (Tribur) – Stoff für ein großes Geschichtsbuch, und die Gemeinde "
+              "ist groß genug, es zu bezahlen. Bester Lead außerhalb des Verlagsgebiets.",
+    "Nordheim": "900 Jahre (1129, Schenkung Bischof Burchards von Worms). Ortsteil von Biblis. Hat 1979 schon das "
+                "850-jährige Bestehen gefeiert – die Tradition ist da.",
+    "Ludwig-Georgs-Gymnasium": "400 Jahre (1629 als Pädagog gegründet). Eine der ältesten Schulen Hessens – zu so "
+                               "einer Zahl gibt es eine Festschrift. Darmstadt, gleich an der Bergstraße.",
+    "Viktoriaschule": "200 Jahre Schule in Darmstadt. Festschrift üblich, kleines Budget.",
+    "Edith-Stein-Schule Darmstadt": "175 Jahre Schule in Darmstadt.",
+    "Stadtbibliothek Darmstadt": "150 Jahre. Bibliotheken machen zu runden Jubiläen gern einen Band – Träger ist die Stadt.",
+    "Steinbuch": "700 Jahre (1329), Ortsteil von Michelstadt im Odenwald.",
+    "Wilmshausen": "700 Jahre (1329), kleiner Ortsteil von Bensheim an der Bergstraße.",
+}
+
 
 def lies_kontakte():
     """Kontaktdaten aus kontakte/ergebnis_*.jsonl (von Agenten aus Impressum/Kontaktseiten gesammelt)."""
@@ -415,7 +449,7 @@ def lies_kontakte():
     pruef = ORDNER / "kontakte" / "pruefung.json"
     if pruef.exists():
         for qid, status in json.loads(pruef.read_text(encoding="utf-8")).items():
-            if qid in kontakte:
+            if qid in kontakte and kontakte[qid].get("email"):  # nach Korrektur geleerte Adressen nicht
                 kontakte[qid]["geprueft"] = status
     return kontakte
 
@@ -476,6 +510,27 @@ def main():
                         z["Landkreis"], z["Einwohner"], kommentare[z["Name"]], k.get("email") or "", k.get("geprueft") or "",
                         k.get("telefon") or "", k.get("anschrift") or "", k.get("ansprechpartner") or "",
                         k.get("quelle") or "", hinweis, z["Beleg"], z["Wikipedia"]])
+    ring = [z for z in alle if z["Stufe"] in ("S", "A", "B") and z["Verlagsgebiet"] == "nein"
+            and (z["Landkreis"] in RING or z["Gemeinde"] in RING_STAEDTE)]
+    ring.sort(key=lambda z: (reihenfolge[z["Stufe"]], list(KOMMENTAR_RING).index(z["Name"])
+                             if z["Name"] in KOMMENTAR_RING else 99))
+    fehlt = [z["Name"] for z in ring if z["Name"] not in KOMMENTAR_RING]
+    if fehlt:
+        raise SystemExit(f"Ring-Kommentar fehlt für: {fehlt}")
+    with open(ORDNER / "leads_2029_ring_S_A_B.csv", "w", newline="", encoding="utf-8-sig") as f:
+        w = csv.writer(f, delimiter=";")
+        w.writerow(["Nr", "Stufe", "Name", "Art", "Jubiläum 2029", "Ort", "Landkreis", "Einwohner", "Kommentar",
+                    "E-Mail", "E-Mail geprüft", "Telefon", "Anschrift", "Ansprechpartner", "Kontakt-Quelle",
+                    "Kontakt-Hinweis", "Beleg", "Wikipedia"])
+        for nr, z in enumerate(ring, 1):
+            k = kontakte.get(z["QID"], {})
+            ort = z["Gemeinde"] if z["Gemeinde"] != z["Name"] else ""
+            w.writerow([nr, z["Stufe"], z["Name"], z["Art"], f"{z['Jahre']} Jahre (seit {z['seit']})", ort,
+                        z["Landkreis"] or z["Gemeinde"], z["Einwohner"], KOMMENTAR_RING[z["Name"]],
+                        k.get("email") or "", k.get("geprueft") or "", k.get("telefon") or "",
+                        k.get("anschrift") or "", k.get("ansprechpartner") or "", k.get("quelle") or "",
+                        k.get("bemerkung") or "", z["Beleg"], z["Wikipedia"]])
+    print("Ring-Liste:", len(ring), "Einträge")
     from collections import Counter
     print("Stufen gesamt:", dict(sorted(Counter(z["Stufe"] for z in alle).items(), key=lambda t: reihenfolge[t[0]])))
     print("Präsentationsliste:", len(praesentation), "Einträge,",

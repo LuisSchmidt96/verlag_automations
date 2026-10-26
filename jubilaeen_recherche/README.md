@@ -44,6 +44,16 @@ von Claude), das Ergebnis kommt mit wörtlichem Belegsatz in
 
 `nachtraege.csv` ist eingecheckt — sie ist Handarbeit, kein Cache.
 
+Bei großen Mengen wird die Prüfliste in `pakete/paket_<nr>.md` geteilt und von
+Agenten abgearbeitet (Ergebnis `pakete/ergebnis_<nr>.jsonl`).
+`python ergebnisse_pruefen.py` kontrolliert die Ergebnisse (QID im Paket, Jahr im
+Beleg, Beleg wörtlich im Paket), `--uebernehmen` hängt die gültigen an
+`nachtraege.csv` an.
+
+Stand Oktober 2026: nachgetragen sind ganz BW, die Pfalz, Südhessen (Bergstraße,
+Darmstadt-Dieburg, Odenwald, Groß-Gerau, Darmstadt) und Rheinhessen/Nahe. Offen:
+Saarland, übriges RLP, übriges Hessen.
+
 ## Empfehlungsliste
 
 `python empfehlungen.py 2029` schreibt `empfehlungen_2029.csv`: alle runden
@@ -58,4 +68,6 @@ mit Stufe S/A/B/C/X) und `leads_2029_S_A_B_verlagsgebiet.csv` (S, A, B in BW
 und der Pfalz, mit Kommentar und Kontaktdaten). Stufen und Kommentare sind
 von Hand gesetzt und stehen im Skript; die Kontaktdaten kommen aus
 `kontakte/` (von Agenten aus Impressum/Kontaktseiten gesammelt, lokal, nicht
-eingecheckt).
+eingecheckt). `python kontakte_pruefen.py` ruft jede Fundstelle selbst ab und
+prüft, ob die E-Mail-Adresse dort wirklich steht (`kontakte/pruefung.json`).
+Zusätzlich `leads_2029_ring_S_A_B.csv` für Südhessen und Rheinhessen/Nahe.
