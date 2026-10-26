@@ -50,3 +50,12 @@ von Claude), das Ergebnis kommt mit wörtlichem Belegsatz in
 Jubiläen des Jahres, nach Punkten sortiert (Art, Jubiläumszahl, Einwohner,
 Verlagsgebiet, Abzüge für unsichere Jahre), mit Kommentar und Beleg. Die
 Gewichte stehen oben im Skript und sind eine Faustregel.
+
+## Lead-Liste 2029
+
+`python leads_2029_einschaetzung.py` schreibt `leads_2029.csv` (alle Treffer
+mit Stufe S/A/B/C/X) und `leads_2029_S_A_B_verlagsgebiet.csv` (S, A, B in BW
+und der Pfalz, mit Kommentar und Kontaktdaten). Stufen und Kommentare sind
+von Hand gesetzt und stehen im Skript; die Kontaktdaten kommen aus
+`kontakte/` (von Agenten aus Impressum/Kontaktseiten gesammelt, lokal, nicht
+eingecheckt).
