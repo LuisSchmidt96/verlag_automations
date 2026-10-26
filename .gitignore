@@ -78,3 +78,13 @@ vergleich.txt
 buchdurchgang/config.json
 shopware_publisher/kategorien_*.json
 buchdurchgang/kategorien_*.json
+
+# jubilaeen_recherche: Abfrage-Cache und Ergebnisse sind jederzeit neu erzeugbar
+jubilaeen_recherche/cache/
+jubilaeen_recherche/*.sqlite
+jubilaeen_recherche/*.csv
+# … außer den Nachträgen: die sind Handarbeit (Belege aus Wikipedia), nicht neu erzeugbar
+!jubilaeen_recherche/nachtraege.csv
+jubilaeen_recherche/pakete/
+jubilaeen_recherche/*_pruefliste.md
+jubilaeen_recherche/*.log
