@@ -3,6 +3,7 @@
 Aufruf:
     python ergebnisse_pruefen.py                 # nur prüfen, Bericht ausgeben
     python ergebnisse_pruefen.py --uebernehmen   # gültige Zeilen anhängen
+    python ergebnisse_pruefen.py --uebernehmen --modell=claude-haiku   # Prüfer in geprueft_am
 
 Erwartet pakete/paket_<nr>.md und pakete/ergebnis_<nr>.jsonl (siehe pruefanleitung.md).
 Eine Zeile gilt nur, wenn
@@ -68,7 +69,10 @@ def pruefe(nr):
             if str(jahr) not in beleg:
                 fehler.append(f"{nr}: {q} ({z.get('label')}) Jahr {jahr} steht nicht im Beleg: {beleg[:80]!r}")
                 continue
-            stuecke = [s for s in KUERZUNG.split(norm(beleg)) if len(s) > 3]
+            # Ein Satzteil, den der Prüfer vor dem Komma abschneidet und mit Punkt
+            # schließt („… 1150 zum ersten Mal als „Glette“ erwähnt.“), ist trotzdem
+            # wörtlich – den angehängten Punkt also nicht mitvergleichen.
+            stuecke = [s.rstrip(".") for s in KUERZUNG.split(norm(beleg)) if len(s) > 3]
             if not stuecke or not all(s in gesamt for s in stuecke):
                 fehler.append(f"{nr}: {q} ({z.get('label')}) Beleg nicht wörtlich im Paket: {beleg[:80]!r}")
                 continue
@@ -81,6 +85,8 @@ def pruefe(nr):
 
 def main():
     uebernehmen = "--uebernehmen" in sys.argv
+    # Wer geprüft hat, steht in geprueft_am – BW und Ring Sonnet, Bayern Haiku.
+    modell = next((a.split("=", 1)[1] for a in sys.argv if a.startswith("--modell=")), "claude-sonnet")
     vorhanden = {z["qid"] for z in csv.DictReader(open(NACHTRAEGE, encoding="utf-8-sig"), delimiter=";")}
     alle, alle_fehler = [], []
     for p in sorted(PAKETE.glob("paket_*.md")):
@@ -107,7 +113,7 @@ def main():
                             "" if z.get("jahr") is None else z["jahr"],
                             "" if z.get("praezision") is None else z["praezision"],
                             int(bool(z.get("unsicher"))), z.get("beleg", ""), z.get("bemerkung", ""),
-                            "claude-sonnet"])
+                            modell])
         print(f"{len(alle)} Zeilen an nachtraege.csv angehängt")
 
 

@@ -1,7 +1,8 @@
 # jubilaeen_recherche
 
 Recherche-Skript (Kommandozeile, keine .exe): holt Unternehmen, Vereine,
-Gemeinden und Ortsteile in BW, RLP, Saarland und Hessen mit Gründungs- bzw.
+Gemeinden und Ortsteile in BW, RLP, Saarland und Hessen sowie in den an BW
+grenzenden bayerischen Kreisen (`ZUSATZ_KREISE` im Skript) mit Gründungs- bzw.
 Ersterwähnungsdatum aus Wikidata und rechnet die runden Jubiläen aus.
 
 ```
@@ -48,11 +49,16 @@ Bei großen Mengen wird die Prüfliste in `pakete/paket_<nr>.md` geteilt und von
 Agenten abgearbeitet (Ergebnis `pakete/ergebnis_<nr>.jsonl`).
 `python ergebnisse_pruefen.py` kontrolliert die Ergebnisse (QID im Paket, Jahr im
 Beleg, Beleg wörtlich im Paket), `--uebernehmen` hängt die gültigen an
-`nachtraege.csv` an.
+`nachtraege.csv` an; `--modell=claude-haiku` vermerkt in `geprueft_am`, wer
+geprüft hat (BW und Ring: Sonnet, Bayern: Haiku).
 
-Stand Oktober 2026: nachgetragen sind ganz BW, die Pfalz, Südhessen (Bergstraße,
-Darmstadt-Dieburg, Odenwald, Groß-Gerau, Darmstadt) und Rheinhessen/Nahe. Offen:
+Stand November 2026: nachgetragen sind ganz BW, die Pfalz, Südhessen (Bergstraße,
+Darmstadt-Dieburg, Odenwald, Groß-Gerau, Darmstadt), Rheinhessen/Nahe und die
+bayerischen Grenzkreise (Lindau bis Miltenberg, dazu Memmingen). Offen:
 Saarland, übriges RLP, übriges Hessen.
+
+Nach dem Übernehmen `python jubilaeen.py` ohne `--nur-auswerten` laufen lassen –
+nur so wird die Datenbank mit den Nachträgen neu gebaut (alles aus dem Cache).
 
 ## Empfehlungsliste
 
@@ -61,13 +67,25 @@ Jubiläen des Jahres, nach Punkten sortiert (Art, Jubiläumszahl, Einwohner,
 Verlagsgebiet, Abzüge für unsichere Jahre), mit Kommentar und Beleg. Die
 Gewichte stehen oben im Skript und sind eine Faustregel.
 
-## Lead-Liste 2029
+## Lead-Listen 2028–2030
 
-`python leads_2029_einschaetzung.py` schreibt `leads_2029.csv` (alle Treffer
-mit Stufe S/A/B/C/X) und `leads_2029_S_A_B_verlagsgebiet.csv` (S, A, B in BW
-und der Pfalz, mit Kommentar und Kontaktdaten). Stufen und Kommentare sind
-von Hand gesetzt und stehen im Skript; die Kontaktdaten kommen aus
-`kontakte/` (von Agenten aus Impressum/Kontaktseiten gesammelt, lokal, nicht
-eingecheckt). `python kontakte_pruefen.py` ruft jede Fundstelle selbst ab und
-prüft, ob die E-Mail-Adresse dort wirklich steht (`kontakte/pruefung.json`).
-Zusätzlich `leads_2029_ring_S_A_B.csv` für Südhessen und Rheinhessen/Nahe.
+`python leads.py 2028 2029 2030` schreibt je Jahr
+
+* `leads_<jahr>.csv` – alle Treffer mit Stufe S/A/B/C/X
+* `leads_<jahr>_verlagsgebiet.csv` – S, A, B in BW und der Pfalz, mit Kommentar
+  und Kontaktdaten
+* `leads_<jahr>_nachbargebiete.csv` – dasselbe für Südhessen, Rheinhessen/Nahe
+  und die bayerischen Grenzkreise
+
+Stufen und Kommentare sind von Hand gesetzt und stehen in
+`einschaetzung_<jahr>.py` (nach QID, keine Punkteformel). Treffer, die dort noch
+fehlen, meldet `leads.py` laut und setzt sie vorläufig auf C.
+
+Kontaktdaten kommen aus `kontakte/` (lokal, nicht eingecheckt): Agenten haben
+Impressum und Kontaktseiten gelesen; `python kontakte_holen.py` holt fehlende
+Adressen ohne Agenten direkt von den Seiten (nur Adressen der eigenen Domain).
+`python kontakte_pruefen.py` ruft jede Fundstelle selbst ab und prüft, ob die
+E-Mail-Adresse dort wirklich steht (`kontakte/pruefung.json`).
+
+Werbe-E-Mails an Firmen ohne Einwilligung sind nach § 7 UWG heikel – für den
+ersten Kontakt eher Brief oder Anruf, die Adresse dann für die Antwort.

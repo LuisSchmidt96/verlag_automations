@@ -51,6 +51,16 @@ LAENDER = {
     "RP": ("Q1200", "Rheinland-Pfalz"),
     "SL": ("Q1201", "Saarland"),
     "HE": ("Q1199", "Hessen"),
+    "BY": ("Q980", "Bayern"),
+}
+# Ganz abgefragt werden nur diese vier; von Bayern nur die Kreise an der Grenze
+# zu BW (Wunsch der Verlagsleitung, November 2026) – ganz Bayern wäre ein
+# Vielfaches an Abfragen und weit weg vom Verlagsgebiet.
+STANDARD_LAENDER = ["BW", "RP", "SL", "HE"]
+ZUSATZ_KREISE = {
+    # an BW grenzend laut Wikidata P47 (die Stadt Neu-Ulm steckt im Landkreis)
+    "BY": ["Q14825", "Q10402", "Q10401", "Q10408", "Q10410", "Q10412", "Q10417", "Q10418",
+           "Q10454", "Q10456", "Q10458", "Q10469", "Q10472"],
 }
 
 # Klassen der Suche. „ort“ heißt: das Item liegt über P159/P131 irgendwo im
@@ -1098,10 +1108,16 @@ def main():
             for k in klassen:
                 hole_region(sammler, k, None, args.kreis, "kreis")
         else:
-            for code in args.land or list(LAENDER):
+            for code in args.land or STANDARD_LAENDER:
                 print(f"\n== {LAENDER[code][1]} ==")
                 for k in klassen:
                     hole_region(sammler, k, code, LAENDER[code][0], "land")
+            if not args.land:
+                for code, kreise in ZUSATZ_KREISE.items():
+                    print(f"\n== {LAENDER[code][1]} (Grenzkreise) ==")
+                    for kreis in kreise:
+                        for k in klassen:
+                            hole_region(sammler, k, code, kreis, "kreis")
         db = baue_datenbank(sammler, db_pfad, heute, heute + args.horizont)
         schreibe_csv(db, ORDNER / f"{name}_items.csv", ITEMS_CSV, {"heute": heute})
         schreibe_csv(db, ORDNER / f"{name}_daten.csv",
