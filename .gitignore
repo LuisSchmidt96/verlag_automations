@@ -89,3 +89,14 @@ jubilaeen_recherche/pakete/
 jubilaeen_recherche/*_pruefliste.md
 jubilaeen_recherche/*.log
 jubilaeen_recherche/kontakte/
+
+# presseverteiler: die Mappe nennt Journalisten samt Zuständigkeit, der
+# Versandordner enthält ihre Anschriften — personenbezogen, nur vor Ort.
+Presseverteiler.xlsx
+Presseverteiler.neu.xlsx
+Presseversand/
+# … ebenso die Pakete und Ergebnisse der Einschätzung (Redaktionen samt
+# Access-Bemerkungen) und die Sicherung der Mappe davor.
+presseverteiler/einschaetzung/
+# Die bisherigen Presselisten je Buch: Namen und Anschriften von Journalisten.
+presseverteiler/training_data/
