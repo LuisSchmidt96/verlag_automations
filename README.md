@@ -38,6 +38,14 @@ verlag_automations/
 │   ├── vorlagen/               ← Briefvorlage (in die .exe gebündelt)
 │   └── beispiele/              ← Altmappe + Musterbriefe (personenbezogen, nicht eingecheckt)
 │                                 Bestand (Honorarbestand.xlsx) liegt neben der .exe
+├── presseverteiler/            ← Pressekontakte je Buch aus früheren Listen vorschlagen
+│   ├── core.py, app.py, main.py, Presseverteiler.spec, README.md
+│   ├── probelauf.py            ← Entwicklerskript: Vorschlag gegen Sollwerte
+│   ├── blindtest.py            ← Entwicklerskript: Vorschlag blind gegen echte Listen
+│   ├── historie_aufbauen.py    ← Entwicklerskript: Pressehistorie aus alten Listen
+│   ├── einschaetzung.py        ← Entwicklerskript: Kontakte von Agenten einschätzen lassen
+│   └── einschaetzanleitung.md  ←   (Regeln dafür)
+│                                 Pressehistorie.xlsx und Presseverteiler.xlsx liegen auf dem NAS
 ├── tools/
 │   ├── update_and_build.ps1    ← zieht Git-Änderungen & baut alle Tools neu
 │   ├── launch.ps1              ← startet ein Tool und aktualisiert es dabei
