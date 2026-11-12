@@ -32,9 +32,39 @@ verschieden gesetzt:
 
 | Zeile | Kopf | Kasten |
 |-------|------|--------|
-| Beteiligte | `A, B und C (Hrsg.)` | `A, B, C (Hrsg.)` |
+| Herausgeber | `A, B und C (Hrsg.)` | `A, B, C (Hrsg.)` |
+| Autoren | `A, B und C` | `A, B und C` |
 | Titel | nur der Titel | `Titel. Untertitel.` |
-| darunter | Untertitel, sonst `Band 5` | Reihenzeile, `Mit Beiträgen von …` |
+| darunter | Untertitel, sonst `Band 5` | Reihenzeile, `Mit Beiträgen von …`, `Herausgegeben vom … Fotografien von …` |
+
+### Autor oder Herausgeber — wer steht oben?
+
+Gebaut war das Werkzeug an einem Sammelband (Bausteine Bruchsal Bd. 5):
+Herausgeber oben, **jeder** Autor (`A01`) als „Mit Beiträgen von“. Von 16 PIs
+auf `vr-intern/VLB` sind aber 13 Autorenbücher. Beim PZN-Führer (05-194: Autor
+`A01` + Körperschaft `B01`) wurde daraus „Psychiatrisches Zentrum Nordbaden
+(PZN) (Hrsg.)“ und „Mit Beiträgen von Hansi Rau.“ Von Hand gesetzt war „Hansi
+Rau“ oben und „Herausgegeben vom Psychiatrischen Zentrum …“ im Kasten. Jetzt:
+
+| Im VLB | oben | im Kasten darunter |
+|--------|------|--------------------|
+| Personen als Herausgeber (`B01`) | Herausgeber mit „(Hrsg.)“ | Autoren als „Mit Beiträgen von …“ |
+| Autoren (`A01`), keine Personen-Hrsg. | Autoren, ohne „(Hrsg.)“ | Körperschaft in der Reihenzeile oder als „Herausgegeben vom …“ |
+| nur Körperschaft(en) | Körperschaft mit „(Hrsg.)“ | — |
+
+**Weitere Beteiligte** (Vorwort, Einführung, Einleitung, Texte, Fotografien,
+Illustrationen, Zeichnungen, Karten, Übersetzung, Nachwort; `A32` „Beiträge
+von“ geht zu „Mit Beiträgen von“) stehen in einer Zeile mit „Herausgegeben
+vom …“, wie in PI 05-217: „Herausgegeben vom Nationalpark Schwarzwald.
+Fotografien von Burkhard Riegels.“ Rollen und Wortlaut stehen in
+`NEBENROLLEN`; eine Rolle, die dort fehlt, wird nicht gesetzt, aber in der
+Ausgabe gemeldet.
+
+**Format** hinter dem Einband: höchstens 12,5 cm breit → „im handlichen
+Taschenformat“ (nur die Breite zählt), sonst breiter als 17 **oder** höher als
+24 cm → „im repräsentativen Großformat“. Dazwischen kein Zusatz. Das
+„attraktive quadratische Format“ der alten PIs gibt es nicht mehr; ein
+21 × 21 ist Großformat.
 
 Dazu die Regeln, die man sonst wieder herausnimmt:
 
@@ -46,20 +76,25 @@ Dazu die Regeln, die man sonst wieder herausnimmt:
   dasselbe. Ohne Reihenzeile bleibt die Bandangabe in der Titelzeile
   (`… und ihres Umlands. Band 5.`), mit Reihenzeile wandert sie dorthin
   (`Waldenserstudien, hrsg. von …, Bd. 9`).
-* **Die herausgebende Körperschaft steht in der Reihenzeile**, nicht bei den
-  Personen — es sei denn, es gibt keine Reihe; dann steht sie bei den
-  Herausgebern, sonst verschwände sie wieder.
+* **Steht oben schon jemand, kommt die herausgebende Körperschaft in die
+  Reihenzeile** — es sei denn, es gibt keine Reihe; dann steht sie bei den
+  Herausgebern (in VLB-Reihenfolge: „Landkreis Rastatt, Toni Huber (Hrsg.)“)
+  bzw. bei einem Autorenbuch als „Herausgegeben vom …“.
 * **`koerperschaft_dativ` in der `config.json`** hält die gebeugte Form für
   „hrsg. von …“: `"Deutsche Waldenservereinigung e.V. …"` →
   `"der Deutschen Waldenservereinigung e.V. …"`. Ob es *der*, *dem* oder *den*
   heisst, hängt am Geschlecht des Namens und steht in keinen Daten — geraten
-  wird es deshalb nicht. Fehlt ein Name in der Tabelle, erscheint die
-  ungebeugte Form und das Werkzeug sagt es in der Ausgabe.
+  wird es deshalb nicht. „von dem“ wird zu „vom“. Fehlt ein Name in der
+  Tabelle, erscheint die ungebeugte Form und das Werkzeug sagt es in der
+  Ausgabe. Dieselbe Tabelle steht im `shopware_publisher` — ein Eintrag
+  gehört in beide.
 
-**Was das Werkzeug nicht wissen kann:** Wer im VLB als `A01` (Autor) steht,
-wird als „Mit Beiträgen von …“ geführt — auch wenn er auf dem Umschlag als
-Mitherausgeber erscheint. Das steht so in der ONIX; korrigiert werden muss es
-im VLB oder von Hand in Word.
+**Was das Werkzeug nicht wissen kann:** Es hält sich an die Rollen im VLB.
+Wer dort als Herausgeber steht, aber auf dem Umschlag als Autor erscheint (oder
+umgekehrt), steht im PI falsch — korrigiert werden muss es im VLB oder von
+Hand in Word. Ob ein Band mit Personen-Herausgebern *und* einem einzigen
+Autor ein Sammelband ist oder eine edierte Monografie, steht ebenfalls nicht
+in den Daten; das Werkzeug behandelt ihn als Sammelband.
 
 ## Wichtig
 

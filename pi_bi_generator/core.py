@@ -98,9 +98,13 @@ DEFAULT_CONFIG = {
     # Waldenservereinigung“, aber „dem Stadtarchiv“, je nach Geschlecht des
     # Namens. Geraten wird sie deshalb nicht: einmal hier eintragen, dann
     # stimmt sie für jeden weiteren Band der Reihe.
+    # Ein „dem …“ wird hinter „von“ zu „vom …“ zusammengezogen
+    # („Herausgegeben vom Psychiatrischen Zentrum …“), siehe _von_dativ.
     "koerperschaft_dativ": {
         "Deutsche Waldenservereinigung e.V. Ötisheim-Schönenberg":
             "der Deutschen Waldenservereinigung e.V. Ötisheim-Schönenberg",
+        "Psychiatrisches Zentrum Nordbaden (PZN)":
+            "dem Psychiatrischen Zentrum Nordbaden (PZN)",
     },
     "cover_timeout": 15,
     # Wird erhöht, wenn eine der Tabellen oben sich ändert — sonst bliebe in
@@ -159,8 +163,8 @@ class Buchdaten:
         # Kopf = die Zeilen über dem Werbetext, Kasten = der Rahmen darunter.
         # Beide zeigen dieselben Namen, aber anders getrennt (siehe unten).
         "editoren_kopf", "editoren_kasten", "kopf_zusatz",
-        "mitwirkende", "reihe_zeile", "kasten_zusatz",
-        "umfang_zeile", "titel_band",
+        "mitwirkende", "reihe_zeile", "weitere_zeile", "kasten_zusatz",
+        "umfang_zeile", "format_zusatz", "titel_band",
         "verlag", "preis", "verlag_isbn_preis", "datum",
         "cover_url", "werbetext_absaetze",
     )
@@ -226,7 +230,9 @@ def _kontributoren(product, rolle: str) -> list[dict]:
         return []
     beitraege = []
     for c in dd.findall("contributor"):
-        if _txt(c.find("b035")) != rolle:
+        # ONIX erlaubt mehrere Rollen je Person („Herausgeber und Autor“) —
+        # nur die erste anzusehen, ließe die zweite unbemerkt fallen.
+        if rolle not in _rollen(c):
             continue
         seq = int(_txt(c.find("b034"))) if _txt(c.find("b034")).isdigit() else 999
         koerperschaft = _txt(c.find("b047"))
@@ -235,6 +241,132 @@ def _kontributoren(product, rolle: str) -> list[dict]:
             beitraege.append((seq, {"name": name,
                                     "koerperschaft": bool(koerperschaft)}))
     return [k for _, k in sorted(beitraege, key=lambda x: x[0])]
+
+
+def _rollen(contributor) -> list[str]:
+    return [_txt(r) for r in contributor.findall("b035")]
+
+
+# Weitere Beteiligte (ONIX-Liste 17) -> Satzanfang im Kasten. Bisher fielen
+# sie stillschweigend weg, obwohl die von Hand gesetzten PIs sie nennen:
+# „Fotografien von Burkhard Riegels.“ (05-217), „Übersetzt von Gregor
+# Brand“ (05-197), „Texte von Christoph Timm.“ (05-215). A08 (Fotograf als
+# Urheber) und A13 (Fotos von) landen im selben Satz. Die Reihenfolge hier
+# ist die Reihenfolge im Kasten.
+#
+# Dieselbe Tabelle steht im shopware_publisher (bewusste Dopplung, siehe
+# CLAUDE.md) — wer hier eine Rolle ergänzt, sollte dort nachziehen.
+NEBENROLLEN = {
+    "A23": "Mit einem Vorwort von",
+    "A15": "Mit einer Einführung von",
+    "A24": "Mit einer Einleitung von",
+    "A14": "Texte von",
+    "A08": "Fotografien von",
+    "A13": "Fotografien von",
+    "A12": "Illustrationen von",
+    "A35": "Zeichnungen von",
+    "A39": "Karten von",
+    "B06": "Übersetzt von",
+    "A19": "Mit einem Nachwort von",
+}
+
+# Autor, Herausgeber und „Beiträge von“ werden in lade_buchdaten eigens
+# verteilt; alle anderen Rollen stehen in NEBENROLLEN oder werden gemeldet.
+_HAUPTROLLEN = ("A01", "B01", "A32")
+
+
+def _nebenrollen_saetze(product) -> list[str]:
+    """['Fotografien von Burkhard Riegels.', 'Übersetzt von Gregor Brand.']"""
+    saetze: dict[str, list[str]] = {}
+    for code, anfang in NEBENROLLEN.items():
+        for k in _kontributoren(product, code):
+            namen = saetze.setdefault(anfang, [])
+            if k["name"] not in namen:
+                namen.append(k["name"])
+    return [f"{anfang} {_join_und(namen)}." for anfang, namen in saetze.items()]
+
+
+def _melde_unbekannte_rollen(product) -> None:
+    """Rollen, die das Werkzeug nicht setzt, wenigstens melden — sonst fehlt
+    jemand im Kasten, ohne dass es einer merkt."""
+    dd = product.find("descriptivedetail")
+    if dd is None:
+        return
+    bekannt = set(_HAUPTROLLEN) | set(NEBENROLLEN)
+    for c in dd.findall("contributor"):
+        for rolle in _rollen(c):
+            if rolle and rolle not in bekannt:
+                name = _txt(c.find("b047")) or _txt(c.find("b036")) or "?"
+                print(f"⚠ {name} steht im VLB mit der Rolle {rolle} — die "
+                      f"setzt das Werkzeug nicht; bitte von Hand ergänzen.")
+
+
+def _von_dativ(koerperschaften: list[str], cfg: dict) -> str:
+    """'von der Deutschen Waldenservereinigung …' bzw. 'vom Stadtarchiv'.
+
+    Artikel und Beugung stehen in der Tabelle koerperschaft_dativ. Fehlt ein
+    Name dort, steht die ungebeugte Form da und das Werkzeug sagt Bescheid;
+    geraten wird nicht. „von dem“ zieht der Verlag zu „vom“ zusammen
+    („Herausgegeben vom Nationalpark Schwarzwald“, PI 05-217).
+    """
+    dativ = cfg.get("koerperschaft_dativ", {})
+    gebeugt = []
+    for k in koerperschaften:
+        if k in dativ:
+            gebeugt.append(dativ[k])
+        else:
+            gebeugt.append(k)
+            print(f"⚠ Körperschaft {k!r} steht nicht in koerperschaft_dativ "
+                  f"(config.json) — hinter „hrsg. von“ fehlt die Beugung "
+                  f"('der …'/'dem …').")
+    text = "von " + _join_und(gebeugt)
+    if text.startswith("von dem "):
+        text = "vom " + text[len("von dem "):]
+    return text
+
+
+def _masse_cm(dd) -> tuple[float, float]:
+    """(Höhe, Breite) in cm aus measure (x315 01 = Höhe, 02 = Breite)."""
+    hoehe = breite = 0.0
+    if dd is None:
+        return hoehe, breite
+    for m in dd.findall("measure"):
+        art = _txt(m.find("x315"))
+        try:
+            wert = float(_txt(m.find("c094")).replace(",", "."))
+        except ValueError:
+            continue
+        einheit = _txt(m.find("c095")).lower()
+        if einheit == "mm":
+            wert /= 10.0
+        elif einheit != "cm":
+            continue                    # Zoll o. Ä. kommt beim Verlag nicht vor
+        if art == "01":
+            hoehe = wert
+        elif art == "02":
+            breite = wert
+    return hoehe, breite
+
+
+def _format_zusatz(hoehe: float, breite: float) -> str:
+    """Formatangabe hinter dem Einband („fester Einband im repräsentativen
+    Großformat“).
+
+    Vorgabe des Verlags (12.11.2026): höchstens 12,5 cm breit ->
+    Taschenformat, breiter als 17 ODER höher als 24 cm -> Großformat, alles
+    dazwischen ohne Zusatz. Beim Taschenformat zählt nur die Breite: der
+    PZN-Führer (12 x 22 cm) heißt in PI und Shop „im handlichen
+    Taschenformat“. Das „attraktive quadratische Format“ der alten PIs
+    schreibt der Verlag nicht mehr — ein 21 x 21 ist jetzt Großformat.
+
+    Das Taschenformat wird zuerst geprüft, sonst würde ein schmales, hohes
+    Buch (12 x 25) über seine Höhe zum Großformat.
+    """
+    if breite and breite <= 12.5:
+        return "im handlichen Taschenformat"
+    if breite > 17 or hoehe > 24:
+        return "im repräsentativen Großformat"
+    return ""
 
 
 # VLB liefert dieselben Daten in zwei Schreibweisen: mit KURZ-Tags (<b012>) und
@@ -373,47 +505,86 @@ def lade_buchdaten(xml_pfad, cfg: dict | None = None) -> Buchdaten:
     herausgeber = [k["name"] for k in hrsg if not k["koerperschaft"]]
     koerperschaften = [k["name"] for k in hrsg if k["koerperschaft"]]
     autoren = [k["name"] for k in _kontributoren(product, "A01")]
-    mitwirkende = (f"Mit Beiträgen von {_join_und(autoren)}."
-                   if autoren else "")
+    beitraeger = [k["name"] for k in _kontributoren(product, "A32")]
+    nebensaetze = _nebenrollen_saetze(product)
+    _melde_unbekannte_rollen(product)
 
-    # -- Reihenzeile ----------------------------------------------------
+    # Wer steht über dem Titel? Gebaut war das Werkzeug an einem Sammelband
+    # (Bausteine Bruchsal Bd. 5): Herausgeber oben, jeder Autor (A01) als
+    # „Mit Beiträgen von“. Von 16 PIs auf vr-intern/VLB sind aber 13
+    # Autorenbücher, und dort steht der Autor oben, ohne „(Hrsg.)“ (05-207:
+    # „Stefan Pätzold“). Beim PZN-Führer (05-194, Autor A01 + Körperschaft
+    # B01) wurde daraus „Psychiatrisches Zentrum Nordbaden (PZN) (Hrsg.)“ und
+    # „Mit Beiträgen von Hansi Rau.“ — von Hand gesetzt war „Hansi Rau“ oben
+    # und „Herausgegeben vom Psychiatrischen Zentrum …“ im Kasten.
+    #
+    # Daher drei Fälle:
+    # * Personen als Herausgeber -> Sammelband: sie oben mit „(Hrsg.)“, die
+    #   Autoren als „Mit Beiträgen von“.
+    # * sonst Autoren -> Autorenbuch: die Autoren oben; eine herausgebende
+    #   Körperschaft in die Reihenzeile oder als „Herausgegeben vom …“.
+    # * nur Körperschaften -> sie oben mit „(Hrsg.)“ (05-215: „Kulturamt der
+    #   Stadt Pforzheim (Hrsg.)“), auch wenn es eine Reihe gibt.
+    #
     # Die Reihe kommt nur dann in den Kasten, wenn sie NICHT der Buchtitel
     # selbst ist: bei den „Bausteinen“ heisst die Reihe wie das Buch, dort
     # stünde sonst zweimal dasselbe (so hält es auch das Musterdokument).
-    #
-    # Die herausgebende Körperschaft steht in dieser Zeile, nicht bei den
-    # Personen — so korrigiert der Verlag es von Hand. Gibt es keine
-    # Reihenzeile, gehört sie zu den Herausgebern, sonst verschwände sie
-    # wieder.
+    # Steht oben schon jemand, gehört die herausgebende Körperschaft in die
+    # Reihenzeile — so korrigiert der Verlag es von Hand (Waldenserstudien).
+    reihe_eigen = bool(serientitel) and serientitel.strip() != titel.strip()
+    koerp_reihe: list[str] = []
+    hrsg_satz = ""
+    if herausgeber:
+        haupt, ist_hrsg = list(herausgeber), True
+        beitraege = autoren + beitraeger
+        if reihe_eigen:
+            koerp_reihe = koerperschaften
+        else:
+            # in der VLB-Reihenfolge — „Landkreis Rastatt, Toni Huber
+            # (Hrsg.)“ (PI 05-220), nicht die Körperschaft hinten angehängt
+            haupt = [k["name"] for k in hrsg]
+    elif autoren:
+        haupt, ist_hrsg = list(autoren), False
+        beitraege = beitraeger
+        if koerperschaften and reihe_eigen:
+            koerp_reihe = koerperschaften
+        elif koerperschaften:
+            hrsg_satz = ("Herausgegeben "
+                         + _von_dativ(koerperschaften, cfg) + ".")
+    else:
+        haupt, ist_hrsg = list(koerperschaften), True
+        beitraege = beitraeger
+    mitwirkende = (f"Mit Beiträgen von {_join_und(beitraege)}."
+                   if beitraege else "")
+
+    # -- Reihenzeile ----------------------------------------------------
     reihe_zeile = ""
-    if serientitel and serientitel.strip() != titel.strip():
+    if reihe_eigen:
         stuecke = [serientitel]
-        if koerperschaften:
-            # „hrsg. von der Deutschen Waldenservereinigung e.V.“ — Artikel
-            # und Beugung stehen in der Tabelle koerperschaft_dativ. Fehlt
-            # ein Name dort, steht die ungebeugte Form da und das Werkzeug
-            # sagt Bescheid; geraten wird nicht.
-            dativ = cfg.get("koerperschaft_dativ", {})
-            gebeugt = []
-            for k in koerperschaften:
-                if k in dativ:
-                    gebeugt.append(dativ[k])
-                else:
-                    gebeugt.append(k)
-                    print(f"⚠ Körperschaft {k!r} steht nicht in "
-                          f"koerperschaft_dativ (config.json) — in der "
-                          f"Reihenzeile fehlt die Beugung ('der …'/'dem …').")
-            stuecke.append("hrsg. von " + _join_und(gebeugt))
+        if koerp_reihe:
+            # „hrsg. von der Deutschen Waldenservereinigung e.V.“
+            stuecke.append("hrsg. " + _von_dativ(koerp_reihe, cfg))
         if band:
             stuecke.append(f"Bd. {band}")
         reihe_zeile = ", ".join(stuecke)
 
-    # Kopf: „A, B und C (Hrsg.)“ — Kasten: „A, B, C (Hrsg.)“. Beides so
-    # vorgegeben; im alten Musterdokument war es genau andersherum (Kopf mit
-    # Schrägstrichen), das war nicht gewollt.
-    namen = herausgeber + ([] if reihe_zeile else koerperschaften)
-    editoren_kopf = (_join_und(namen) + " (Hrsg.)") if namen else ""
-    editoren_kasten = (", ".join(namen) + " (Hrsg.)") if namen else ""
+    # Herausgeber — Kopf: „A, B und C (Hrsg.)“, Kasten: „A, B, C (Hrsg.)“.
+    # Beides so vorgegeben; im alten Musterdokument war es genau
+    # andersherum (Kopf mit Schrägstrichen), das war nicht gewollt.
+    # Autoren stehen an beiden Stellen mit „und“, so in den alten PIs
+    # („Bernd-Jürgen Seitz und Heiko Haumann“, 05-198, Kopf wie Kasten).
+    if not haupt:
+        editoren_kopf = editoren_kasten = ""
+    elif ist_hrsg:
+        editoren_kopf = _join_und(haupt) + " (Hrsg.)"
+        editoren_kasten = ", ".join(haupt) + " (Hrsg.)"
+    else:
+        editoren_kopf = editoren_kasten = _join_und(haupt)
+
+    # Herausgebende Körperschaft und weitere Beteiligte in EINER Zeile —
+    # „Herausgegeben vom Nationalpark Schwarzwald. Fotografien von Burkhard
+    # Riegels.“ (PI 05-217, im Shop ebenso).
+    weitere_zeile = " ".join(s for s in [hrsg_satz] + nebensaetze if s)
 
     # -- Umfang / Einband ----------------------------------------------
     seiten = _txt(dd.find("extent/b219")) if dd is not None else ""
@@ -425,14 +596,17 @@ def lade_buchdaten(xml_pfad, cfg: dict | None = None) -> Buchdaten:
         einband = einband_code  # unbekannter Code: roh anzeigen
         print(f"⚠ Unbekannter Einband-Code b012={einband_code!r} — "
               f"bitte einband_map in config.json ergänzen.")
+    format_zusatz = _format_zusatz(*_masse_cm(dd))
     teile = []
     if seiten:
         teile.append(f"{seiten} Seiten")
     if anzahl_abb and abb_text:
         teile.append(f"mit {anzahl_abb} {abb_text}")
     umfang_zeile = " ".join(teile)
-    if einband:
-        umfang_zeile = (umfang_zeile + ", " if umfang_zeile else "") + einband
+    # „Klappenbroschur im handlichen Taschenformat“ (PI 05-194)
+    einband_text = " ".join(t for t in (einband, format_zusatz) if t)
+    if einband_text:
+        umfang_zeile = (umfang_zeile + ", " if umfang_zeile else "") + einband_text
     if umfang_zeile:
         umfang_zeile += "."
 
@@ -452,7 +626,7 @@ def lade_buchdaten(xml_pfad, cfg: dict | None = None) -> Buchdaten:
 
     # Zusatzzeilen im Kasten, in dieser Reihenfolge. Leere fallen weg —
     # der Absatz wird dann entfernt, statt eine Leerzeile zu hinterlassen.
-    kasten_zusatz = [z for z in (reihe_zeile, mitwirkende) if z]
+    kasten_zusatz = [z for z in (reihe_zeile, mitwirkende, weitere_zeile) if z]
 
     # -- Verlag / Preis / Datum ----------------------------------------
     verlag = _txt(product.find("publishingdetail/publisher/b081")) \
@@ -499,8 +673,9 @@ def lade_buchdaten(xml_pfad, cfg: dict | None = None) -> Buchdaten:
         autoren=autoren,
         editoren_kopf=editoren_kopf, editoren_kasten=editoren_kasten,
         kopf_zusatz=kopf_zusatz, reihe_zeile=reihe_zeile,
-        kasten_zusatz=kasten_zusatz,
-        mitwirkende=mitwirkende, umfang_zeile=umfang_zeile, titel_band=titel_band,
+        weitere_zeile=weitere_zeile, kasten_zusatz=kasten_zusatz,
+        mitwirkende=mitwirkende, umfang_zeile=umfang_zeile,
+        format_zusatz=format_zusatz, titel_band=titel_band,
         verlag=verlag, preis=preis, verlag_isbn_preis=verlag_isbn_preis,
         datum=datum, cover_url=cover_url, werbetext_absaetze=werbetext_absaetze,
     )
@@ -539,7 +714,10 @@ TOKEN_WERBETEXT = "{{WERBETEXT}}"
 #   {{BAND}}          Kopf, unter dem Titel     -> Untertitel, sonst „Band 5“
 #   {{EDITOREN_UND}}  Kasten, erste Zeile       -> „A, B, C (Hrsg.)“
 #   {{TITEL_BAND}}    Kasten, Titelzeile        -> „Titel. Untertitel.“
-#   {{MITWIRKENDE}}   Kasten, Zusatzzeilen      -> Reihe + „Mit Beiträgen von“
+#   {{MITWIRKENDE}}   Kasten, Zusatzzeilen      -> Reihe, „Mit Beiträgen von“,
+#                                                  „Herausgegeben vom …“ usw.
+#
+# {{EDITOREN}} und {{EDITOREN_UND}} tragen bei Autorenbüchern die Autoren.
 #
 # Umbenennen hiesse, die beiden .docx-Vorlagen anzufassen; der Gewinn wäre
 # rein kosmetisch, das Risiko nicht.
