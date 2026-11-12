@@ -9,18 +9,30 @@ Aufgabe: für ein neues Buch die Pressekontakte auswählen, die es bekommen
 sollen. Bisher sucht der Pressereferent sie je Buch von Hand aus der
 Access-Liste heraus — rund 30 Minuten und fehleranfällig.
 
-Das Tool hält fest, wofür jeder Pressekontakt zuständig ist (Regionen,
-Themen), und wählt danach aus. Die Adressen bleiben in Access; das Tool liest
-den Export bei jedem Start frisch und schreibt nie zurück. Die Zuständigkeiten
-stehen in `Presseverteiler.xlsx` neben der .exe — eine Excel-Mappe und kein
-JSON, damit der Verlag sie auch ohne das Tool öffnen und notfalls von Hand
-weiterführen kann.
+Das Tool schlägt die Empfänger aus den Listen ähnlicher früherer Bücher vor
+(`Pressehistorie.xlsx`). Der erste Entwurf fragte stattdessen, wofür jeder
+Kontakt zuständig ist. Das haben die alten Presselisten widerlegt: Die Hälfte
+der Empfänger hat mit dem Verbreitungsgebiet nichts zu tun (Befunde in
+`WIP_Presselisten-Auswertung.md`). Regionen und Themen je Kontakt stehen
+weiter in `Presseverteiler.xlsx`, dienen aber nur noch als Suchhilfe und für
+Kontakte ohne Vorgeschichte.
+
+Die Adressen bleiben in Access; das Tool liest den Export bei jedem Start
+frisch und schreibt nie zurück. Beide Mappen sind Excel und kein JSON, damit
+der Verlag sie auch ohne das Tool öffnen und notfalls von Hand weiterführen
+kann.
 """
 
 from __future__ import annotations
 
+import io
+import math
+import os
 import re
+import shutil
 import sys
+import tempfile
+import unicodedata
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
@@ -41,12 +53,64 @@ def _base_dir() -> Path:
     return Path(__file__).parent
 
 
-# Laufzeitdateien liegen direkt neben der .exe — bewusst KEIN data-Unterordner,
-# damit der Anwender sie sofort findet.
+# Neben der .exe liegt nur die config.json: Welcher Access-Export, gilt je
+# Rechner. Die beiden Mappen liegen auf dem NAS, siehe unten.
 APP_DIR = _base_dir()
 CONFIG_PFAD = APP_DIR / "config.json"
-VERTEILER_PFAD = APP_DIR / "Presseverteiler.xlsx"
-AUSGABE_ORDNER = APP_DIR / "Presseversand"
+
+
+def _netz_ablage() -> Path:
+    """Wo der Verlag die Presselisten ablegt: auf dem NAS, nicht neben der .exe.
+
+    Dort liegen alle Listen seit 2020, und nur dort findet sie der Rest des
+    Verlags. Unter Linux hängt gvfs die Freigabe unter diesem Pfad ein.
+    """
+    ordner = "VR-Akquise/MK/Presse/Presselisten für Rezensionsversand"
+    if sys.platform == "win32":
+        return Path(r"\\VR-Archiv\vr-intern") / ordner
+    return Path(f"/run/user/{os.getuid()}/gvfs/smb-share:"
+                f"server=vr-archiv.local,share=vr-intern") / ordner
+
+
+AUSGABE_ORDNER = _netz_ablage()
+
+# Historie und Mappe liegen anders als bei den übrigen Tools nicht neben der
+# .exe, sondern bei den Listen auf dem NAS. Neben der .exe lägen sie in der
+# lokalen Kopie, die launch.ps1 unter %LOCALAPPDATA% anlegt: ungesichert, und
+# jeder Rechner lernte für sich. Die Historie ist aber das, woraus der
+# Vorschlag lernt, die geht nicht verloren und gehört allen.
+DATEN_ORDNER = "_Presseverteiler"
+VERTEILER_PFAD = AUSGABE_ORDNER / DATEN_ORDNER / "Presseverteiler.xlsx"
+HISTORIE_PFAD = AUSGABE_ORDNER / DATEN_ORDNER / "Pressehistorie.xlsx"
+# Der Access-Export liegt mit dort, damit nicht jeder Rechner seinen eigenen,
+# verschieden alten hat. Neu exportiert wird an genau diese Stelle.
+ACCESS_PFAD = AUSGABE_ORDNER / DATEN_ORDNER / "Access_Export.xlsx"
+
+
+def _mappe_lesen(pfad):
+    """Öffnet eine xlsx aus dem Arbeitsspeicher.
+
+    Eine xlsx ist ein Zip, und beim Lesen springt openpyxl darin umher. Über
+    die gvfs-Einbindung des NAS schlägt das immer wieder fehl („Input/output
+    error“, „File is not a zip file“), am Stück gelesen klappt es zuverlässig.
+    Nebenbei hält das Programm so keine Datei auf dem NAS offen, während
+    jemand den Access-Export neu ablegt.
+    """
+    return openpyxl.load_workbook(io.BytesIO(Path(pfad).read_bytes()),
+                                  read_only=True, data_only=True)
+
+
+def _mappe_ablegen(wb, pfad: Path):
+    """Schreibt eine Mappe ohne Halbfertiges am Ziel: erst im Speicher, dann
+    am Stück als .neu.xlsx, dann umbenennen. Am Stück aus demselben Grund wie
+    beim Lesen; das Umbenennen sorgt dafür, dass ein Abbruch mitten im
+    Schreiben die alte Mappe nicht beschädigt."""
+    puffer = io.BytesIO()
+    wb.save(puffer)
+    pfad.parent.mkdir(parents=True, exist_ok=True)
+    zwischen = pfad.with_name(pfad.stem + ".neu.xlsx")
+    zwischen.write_bytes(puffer.getvalue())
+    zwischen.replace(pfad)
 
 REGION = "Region"
 THEMA = "Thema"
@@ -102,6 +166,14 @@ def _sicherer_dateiname(text: str) -> str:
     return " ".join(text.split()).strip(". ")
 
 
+def alphabetisch(text: str) -> str:
+    """Vergleichsform für Sortierung und Suche: Ä zählt wie A, wie im
+    Telefonbuch. Sonst stünde Überlingen hinter Zürich, und wer „Sudkurier“
+    tippt, fände den SÜDKURIER nicht."""
+    zerlegt = unicodedata.normalize("NFKD", text.casefold())
+    return "".join(z for z in zerlegt if not unicodedata.combining(z))
+
+
 # ---------------------------------------------------------------------
 # Access-Export einlesen
 # ---------------------------------------------------------------------
@@ -139,7 +211,7 @@ def _blatt_als_dicts(zeilen: list[tuple],
 
 
 def lade_tabelle(pfad, pflichtspalten: set[str]) -> list[dict]:
-    wb = openpyxl.load_workbook(pfad, read_only=True, data_only=True)
+    wb = _mappe_lesen(pfad)
     try:
         zeilen = [tuple(z) for z in wb.worksheets[0].iter_rows(values_only=True)]
     finally:
@@ -212,8 +284,12 @@ class Kontakt:
 
     @property
     def sortierung(self) -> tuple:
-        return (self.institution.lower() or "~", self.abteilung.lower(),
-                self.feld("Name").lower())
+        return (alphabetisch(self.institution) or "~",
+                alphabetisch(self.abteilung), alphabetisch(self.feld("Name")))
+
+    @property
+    def hat_anschrift(self) -> bool:
+        return bool(self.feld("Straße") and self.feld("Ort"))
 
 
 def lade_presse(pfad) -> tuple[list[Kontakt], int]:
@@ -252,12 +328,10 @@ def lade_presse(pfad) -> tuple[list[Kontakt], int]:
 # (Audio-CDs, DVDs, E-Books, Kalender, Bildbände, Schriftenreihen,
 # „Ortsgeschichte/A-B“ …): danach wählt niemand Presse aus.
 #
-# „gehört zu“ ist der Kern: Ein Buch über den Pfinzgau erreicht damit auch
-# die Presse für den Landkreis Karlsruhe, die Region Karlsruhe und ganz
-# Baden. Ohne diese Kette müsste man die BNN mit zwanzig Kleinregionen
-# auszeichnen — und vergäße die einundzwanzigste. Mehrere Obergebiete sind
-# erlaubt, weil Landschaften sich nicht an Kreisgrenzen halten (der
-# Kraichgau liegt in drei Landkreisen).
+# „gehört zu“ macht Bücher vergleichbar: Ein Buch über den Pfinzgau gilt damit
+# auch als ähnlich zu Büchern über den Landkreis Karlsruhe, die Region
+# Karlsruhe und ganz Baden. Mehrere Obergebiete sind erlaubt, weil Landschaften
+# sich nicht an Kreisgrenzen halten (der Kraichgau liegt in drei Landkreisen).
 #
 # Herkunft „Ergänzung“: im Shop gibt es diese nicht, für die Presse braucht
 # man sie aber. „Geschichte“ fehlt im Shop als Oberbegriff, obwohl „his“ das
@@ -309,8 +383,8 @@ STANDARD_SCHLAGWORTE: list[tuple[str, str, str, str]] = [
 
     # Ergänzt im November 2026, als die Pressekontakte zum ersten Mal
     # eingeschätzt wurden: Dort sitzt Lokalpresse, für die es sonst nur
-    # „Baden“, „Württemberg“ oder „Pfalz“ gäbe. Dann bekäme die Badische
-    # Zeitung in Freiburg jede Kraichgauer Ortschronik.
+    # „Baden“, „Württemberg“ oder „Pfalz“ gäbe. Ein Buch über Freiburg ließe
+    # sich dann nicht von einem über den Kraichgau unterscheiden.
     ("Freiburg / Breisgau", REGION, "Baden", "Ergänzung"),
     ("Landkreis Waldshut", REGION, "Baden", "Ergänzung"),
     ("Schwarzwald-Baar-Kreis", REGION, "Baden; Schwarzwald", "Ergänzung"),
@@ -356,11 +430,9 @@ STANDARD_SCHLAGWORTE: list[tuple[str, str, str, str]] = [
 
     # -- Themen --
     ("Geschichte", THEMA, "", "Ergänzung"),
-    # Ortsgeschichte gehört bewusst NICHT zu Geschichte: sonst bekäme jede
-    # Geschichtszeitschrift ohne Regionsbindung jede Ortschronik — im
-    # Probelauf mit den Access-Startwerten waren das 135 Redaktionen bis
-    # Paris für ein Buch über Östringen. Ein Ortsbuch ist Sache der
-    # Lokalpresse; wer es trotzdem will, bekommt „Ortsgeschichte“ eingetragen.
+    # Ortsgeschichte gehört bewusst NICHT zu Geschichte: Ein Ortsbuch ist Sache
+    # der Lokalpresse. Unter „Geschichte“ sähe jede Ortschronik den
+    # Fachbüchern ähnlich, deren Listen an Geschichtszeitschriften gehen.
     ("Ortsgeschichte", THEMA, "", "Shop"),
     ("Kirchengeschichte", THEMA, "Geschichte", "Shop"),
     ("Jüdische Geschichte", THEMA, "Geschichte", "Shop"),
@@ -374,6 +446,7 @@ STANDARD_SCHLAGWORTE: list[tuple[str, str, str, str]] = [
     ("Revolution 1848/49", THEMA, "Politik und Soziales", "Shop"),
     ("Technik und Wirtschaft", THEMA, "", "Shop"),
     ("Eisenbahn", THEMA, "Technik und Wirtschaft", "Shop"),
+    # IfU = Institut für Unternehmensgeschichte
     ("IfU", THEMA, "Technik und Wirtschaft; Geschichte", "Shop"),
     ("Kunst und Musik", THEMA, "", "Shop"),
     ("Bildende Kunst", THEMA, "Kunst und Musik", "Shop"),
@@ -527,14 +600,11 @@ def startwerte(kontakt: Kontakt) -> tuple[set, set, list[tuple[str, str]]]:
 
 
 # ---------------------------------------------------------------------
-# Der Verteiler: wer wofür zuständig ist
+# Der Verteiler: Regionen und Themen je Kontakt
 # ---------------------------------------------------------------------
-# Medienart und Ressort entscheiden vermutlich mit, wer ein Buch bekommt
-# (Rezensionsexemplar an die Kulturredaktion, nicht an alle 23 Leute bei der
-# RNZ). In die Auswahl gehen sie noch NICHT ein — erst wenn der
-# Pressereferent bestätigt, dass er danach auswählt. Erfasst werden sie
-# schon jetzt, weil sie bei der ersten Einschätzung fast umsonst mit
-# anfallen. Feste Werte statt Freitext, damit man später danach filtern kann;
+# Medienart und Ressort gehen nicht in den Vorschlag ein. Erfasst sind sie,
+# weil sie bei der ersten Einschätzung fast umsonst mit anfielen und beim
+# Durchsehen helfen. Feste Werte statt Freitext, damit man später danach filtern kann;
 # das Access-Feld „Medium“ zeigt, was sonst daraus wird („Zeitung“,
 # „zeitung“, „Tageszeitung“, „TV“, „Fernsehen“).
 MEDIENARTEN = ["Tageszeitung", "Wochenblatt", "Amtsblatt", "Magazin",
@@ -546,7 +616,7 @@ RESSORTS = ["Lokales", "Kultur", "Rezensionen", "Chefredaktion",
 
 @dataclass
 class Eintrag:
-    """Die Zuständigkeit eines Pressekontakts.
+    """Was über einen Pressekontakt bekannt ist, außer der Anschrift.
 
     Die Anzeigefelder (Institution, Name …) sind eine Abschrift aus Access,
     damit die Mappe in Excel lesbar ist. Maßgeblich für Adressen bleibt
@@ -678,7 +748,7 @@ def pruefe_verteiler(v: Verteiler) -> list[str]:
 
 
 # ---------------------------------------------------------------------
-# Die Auswahlregel
+# Ober- und Teilgebiete
 # ---------------------------------------------------------------------
 
 def mit_obergebieten(namen, schlagworte: dict[str, Schlagwort]) -> set[str]:
@@ -702,10 +772,9 @@ def mit_unterbegriffen(namen, schlagworte: dict[str, Schlagwort]) -> set[str]:
     von mit_obergebieten.
 
     Damit kreuzt die Oberfläche beim Buch die Teilgebiete gleich mit an: Ein
-    Buch über den Landkreis Karlsruhe betrifft auch Bretten, also sollen die
-    Brettener Nachrichten (Kraichgau) es bekommen. Das geschieht sichtbar im
-    Baum und nicht still in der Auswahlregel — so lässt sich ein Teilgebiet,
-    das mit dem Buch nichts zu tun hat, für dieses eine Buch wieder abwählen.
+    Buch über den Landkreis Karlsruhe betrifft auch Bretten. Das geschieht
+    sichtbar im Baum, so lässt sich ein Teilgebiet, das mit dem Buch nichts zu
+    tun hat, für dieses eine Buch wieder abwählen.
     """
     kinder: dict[str, list[str]] = {}
     for s in schlagworte.values():
@@ -721,38 +790,6 @@ def mit_unterbegriffen(namen, schlagworte: dict[str, Schlagwort]) -> set[str]:
     return ergebnis
 
 
-def grund(e: Eintrag, regionen: set[str], themen: set[str]) -> str | None:
-    """Warum dieser Kontakt das Buch bekommt — oder None.
-
-    Die Regel: Jede *ausgefüllte* Achse muss passen; eine leere Achse zählt
-    als „egal“. Innerhalb einer Achse genügt ein Treffer.
-
-    * Lokalzeitung, nur Regionen eingetragen → alles aus ihrer Gegend.
-    * Eisenbahn-Fachblatt, nur Thema → alle Eisenbahnbücher, egal woher.
-    * Regionalzeitschrift für badische Geschichte, beides → nur das.
-    * „immer“ → jedes Buch.
-
-    Genau diese Verknüpfung kann der AutoFilter von Excel nicht: der
-    verknüpft alle Spalten mit UND. Deshalb gibt es dieses Tool überhaupt.
-
-    `regionen` und `themen` sind die des Buchs, bereits mit Obergebieten.
-    """
-    if e.immer:
-        return "immer"
-    if not (e.regionen or e.themen):
-        return None
-    teile = []
-    for eigene, buch, achse in ((e.regionen, regionen, REGION),
-                                (e.themen, themen, THEMA)):
-        if not eigene:
-            continue
-        treffer = eigene & buch
-        if not treffer:
-            return None
-        teile.append(f"{achse}: {', '.join(sorted(treffer))}")
-    return " · ".join(teile)
-
-
 # Achsen, bei denen ein Häkchen am Buch die Teilgebiete mitnimmt. Nur die
 # Regionen: Ein Buch über den Landkreis Karlsruhe handelt auch vom
 # Kraichgau-Teil darin — eine Fläche enthält ihre Teile. Bei den Themen
@@ -762,52 +799,330 @@ def grund(e: Eintrag, regionen: set[str], themen: set[str]) -> str | None:
 MIT_TEILGEBIETEN = {REGION}
 
 
-def erreicht_vom_buch(namen, schlagworte: dict[str, Schlagwort],
-                      achse: str) -> set[str]:
-    """Die angekreuzten Schlagworte des Buchs samt den Obergebieten, die es
-    erreicht.
+def spitzen(namen, schlagworte: dict[str, Schlagwort]) -> set[str]:
+    """Die obersten Häkchen: angekreuzt, ohne dass ihr Oberbegriff es ist.
 
-    Bei den Regionen wird nur von den *obersten* Häkchen aus nach oben
-    erweitert, also von denen, deren Oberbegriff nicht selbst angekreuzt ist.
-    Der Grund sind die mehrfachen Obergebiete: Wer „Landkreis Karlsruhe“
-    ankreuzt, bekommt den Kraichgau als Teilgebiet mit — und der Kraichgau
-    gehört auch zum Landkreis Heilbronn und damit zu Württemberg. Liefe die
-    Kette von jedem Häkchen aus nach oben, ginge ein Buch über den Landkreis
-    Karlsruhe an alle Redaktionen für Heilbronn und Württemberg. Wer den
-    Kraichgau dagegen selbst und allein ankreuzt, meint ihn ganz — dann
-    gehören alle drei Landkreise dazu.
-
-    Bei den Themen gibt es keine Mitnahme, also ist jedes Häkchen bewusst
-    gesetzt und zieht seine Obergebiete mit.
+    Die Oberfläche kreuzt bei einer Region die Teilgebiete mit an. Gemeint hat
+    man aber nur die Spitze: Wer „Landkreis Karlsruhe“ anklickt, meint nicht
+    den Kraichgau samt Heilbronner Teil. Deshalb vergleicht der Vorschlag nur
+    die Spitzen, sonst sähe das Buch dem Landkreis Heilbronn ähnlich.
     """
     namen = set(namen)
-    if achse not in MIT_TEILGEBIETEN:
-        return mit_obergebieten(namen, schlagworte)
-    spitzen = {n for n in namen
-               if not (n in schlagworte
-                       and set(schlagworte[n].gehoert_zu) & namen)}
-    return namen | mit_obergebieten(spitzen, schlagworte)
+    return {n for n in namen
+            if not (n in schlagworte
+                    and set(schlagworte[n].gehoert_zu) & namen)}
 
 
-def auswahl(v: Verteiler, kontakte: list[Kontakt], regionen, themen
-            ) -> list[tuple[Kontakt, str]]:
-    """Alle Kontakte, die das Buch bekommen, mit Begründung.
+# ---------------------------------------------------------------------
+# Historie: wer welches Buch bekommen hat
+# ---------------------------------------------------------------------
+# Rund 350 Presselisten aus den Jahren 2020–2026 zeigen, wie die Auswahl
+# wirklich läuft. Sie lässt sich nicht aus einer Zuständigkeit je Kontakt
+# ableiten: Die Rheinpfalz-Kultur bekommt 81 % der Bücher aus Rhein-Neckar und
+# 69 % aus dem Raum Karlsruhe, obwohl sie dort nicht erscheint. Die alten
+# Listen selbst sind aber eine brauchbare Vorlage. 98 % der Empfänger eines
+# neuen Buchs standen schon in früheren Listen.
 
-    `regionen` und `themen` sind die angekreuzten Schlagworte des Buchs —
-    die Teilgebiete der Regionen hat die Oberfläche beim Ankreuzen schon
-    dazugenommen (siehe MIT_TEILGEBIETEN).
+BLATT_BUECHER = "Bücher"
+BLATT_EMPFAENGER = "Empfänger"
+BUCH_SPALTEN = ["Nr", "Datum", "Titel", "ISBN", "Gattung", "Regionen",
+                "Themen", "Empfänger", "Herkunft"]
+EMPFAENGER_SPALTEN = ["Nr", "Access-ID", "Institution", "Ort"]
+
+HISTORIE_HINWEISE = [
+    "Pressehistorie — wer welches Buch bekommen hat",
+    "",
+    "Aus dieser Mappe schlägt das Programm „Presseverteiler“ die Empfänger "
+    "eines neuen Buchs vor. Jede gespeicherte Liste kommt automatisch dazu.",
+    "",
+    "Blatt „Bücher“: je Buch eine Zeile. Regionen und Themen stehen wie im "
+    "Programm, mehrere mit Semikolon getrennt.",
+    "Blatt „Empfänger“: je Buch und Kontakt eine Zeile. Nr verweist auf das "
+    "Blatt „Bücher“. Maßgeblich ist die Access-ID; Institution und Ort stehen "
+    "nur zur Ansicht da.",
+    "",
+    "Von Hand ändern geht, solange das Programm geschlossen ist. Eine Liste, "
+    "die als Vorbild nichts taugt, lässt sich löschen: die Zeile im Blatt "
+    "„Bücher“ entfernen, die Empfänger dazu dürfen stehen bleiben.",
+]
+
+
+@dataclass
+class Buch:
+    """Ein Buch aus der Historie samt den Empfängern seiner Presseliste."""
+    nummer: int
+    datum: date
+    titel: str
+    isbn: str = ""
+    # Nur zur Ansicht. Beim Vergleich zählt sie nicht: Themen und Gattung sagen
+    # dasselbe, ohne eines von beiden war der Vorschlag im Test genauso gut.
+    gattung: str = ""
+    regionen: set = field(default_factory=set)
+    themen: set = field(default_factory=set)
+    empfaenger: set = field(default_factory=set)
+    herkunft: str = ""
+    # {Access-ID: (Institution, Ort)} — Abschrift zur Ansicht. Sie hält auch
+    # Kontakte fest, die es in Access nicht mehr gibt.
+    anzeige: dict = field(default_factory=dict)
+
+
+def _als_datum(wert) -> date | None:
+    if isinstance(wert, datetime):
+        return wert.date()
+    if isinstance(wert, date):
+        return wert
+    try:
+        return datetime.strptime(_text(wert), "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def lade_historie(pfad: Path = None) -> list[Buch]:
+    """Alle Bücher, älteste zuerst. Ohne Mappe eine leere Liste: Dann gibt es
+    keine Vorschläge aus früheren Büchern, das Programm läuft aber."""
+    pfad = Path(pfad or HISTORIE_PFAD)
+    if not pfad.is_file():
+        return []
+    wb = _mappe_lesen(pfad)
+    try:
+        buch_zeilen = _blatt_zeilen(wb, BLATT_BUECHER)
+        empf_zeilen = _blatt_zeilen(wb, BLATT_EMPFAENGER)
+    finally:
+        wb.close()
+
+    buecher: dict[int, Buch] = {}
+    for z in _blatt_als_dicts(buch_zeilen, {"Nr", "Datum", "Titel"}):
+        nummer, datum = _ganzzahl(z.get("Nr")), _als_datum(z.get("Datum"))
+        if nummer is None or datum is None:
+            continue
+        buecher[nummer] = Buch(
+            nummer, datum, _text(z.get("Titel")), _text(z.get("ISBN")),
+            _text(z.get("Gattung")), set(_liste(z.get("Regionen"))),
+            set(_liste(z.get("Themen"))), herkunft=_text(z.get("Herkunft")))
+    for z in _blatt_als_dicts(empf_zeilen, {"Nr", "Access-ID"}):
+        buch = buecher.get(_ganzzahl(z.get("Nr")))
+        access_id = _ganzzahl(z.get("Access-ID"))
+        if buch is None or access_id is None:
+            continue
+        buch.empfaenger.add(access_id)
+        buch.anzeige[access_id] = (_text(z.get("Institution")),
+                                   _text(z.get("Ort")))
+    return sorted(buecher.values(), key=lambda b: (b.datum, b.nummer))
+
+
+def speichere_historie(buecher: list[Buch], kontakte: list[Kontakt],
+                       pfad: Path = None) -> Path:
+    """Schreibt die ganze Mappe neu, wie speichere_verteiler über eine
+    Nebendatei, damit ein Abbruch die alte Mappe nicht zerstört."""
+    pfad = Path(pfad or HISTORIE_PFAD)
+    sperre = pruefe_sperre(pfad)
+    if sperre:
+        raise PermissionError(sperre)
+    nach_id = {k.access_id: k for k in kontakte}
+    wb = openpyxl.Workbook()
+
+    ws = wb.active
+    ws.title = BLATT_HINWEISE
+    for zeile in HISTORIE_HINWEISE:
+        ws.append([zeile])
+    ws["A1"].font = Font(bold=True, size=14)
+    ws.column_dimensions["A"].width = 120
+    for zelle in ws["A"]:
+        zelle.alignment = Alignment(wrap_text=True, vertical="top")
+
+    ws = wb.create_sheet(BLATT_BUECHER)
+    _kopfzeile(ws, BUCH_SPALTEN, [7, 12, 60, 20, 18, 40, 40, 10, 40])
+    for b in buecher:
+        ws.append([b.nummer, b.datum.isoformat(), b.titel, b.isbn, b.gattung,
+                   "; ".join(sorted(b.regionen)), "; ".join(sorted(b.themen)),
+                   len(b.empfaenger), b.herkunft])
+    ws.auto_filter.ref = ws.dimensions
+
+    ws = wb.create_sheet(BLATT_EMPFAENGER)
+    _kopfzeile(ws, EMPFAENGER_SPALTEN, [7, 10, 40, 24])
+    for b in buecher:
+        for i in sorted(b.empfaenger):
+            k = nach_id.get(i)
+            institution, ort = ((k.institution, k.ort) if k
+                                else b.anzeige.get(i, ("", "")))
+            ws.append([b.nummer, i, institution, ort])
+    ws.auto_filter.ref = ws.dimensions
+
+    pfad.parent.mkdir(parents=True, exist_ok=True)
+    _mappe_ablegen(wb, pfad)
+    return pfad
+
+
+def buch_merken(buecher: list[Buch], titel: str, isbn: str, regionen, themen,
+                empfaenger, heute: date = None) -> Buch:
+    """Nimmt eine gespeicherte Liste in die Historie auf.
+
+    Wer dieselbe Liste am selben Tag noch einmal speichert, hat sie korrigiert.
+    Sie ersetzt dann den alten Stand, sonst zählte das Buch doppelt.
     """
-    r = erreicht_vom_buch(regionen, v.schlagworte, REGION)
-    t = erreicht_vom_buch(themen, v.schlagworte, THEMA)
-    treffer = []
+    heute = heute or date.today()
+    for b in buecher:
+        if b.datum == heute and (b.titel, b.isbn) == (titel, isbn):
+            b.regionen, b.themen = set(regionen), set(themen)
+            b.empfaenger = set(empfaenger)
+            return b
+    nummer = max((b.nummer for b in buecher), default=0) + 1
+    b = Buch(nummer, heute, titel, isbn, "", set(regionen), set(themen),
+             set(empfaenger), herkunft="Presseverteiler")
+    buecher.append(b)
+    return b
+
+
+# ---------------------------------------------------------------------
+# Der Vorschlag
+# ---------------------------------------------------------------------
+# Das Buch wird mit allen früheren Büchern verglichen. Die ähnlichsten stimmen
+# ab: Wer in vielen ihrer Listen stand, steht weit oben. Damit kommen die
+# Kulturredaktionen von selbst nach oben, die bei fast jedem Buch dabei sind,
+# und ebenso die Fachblätter eines Themas. Eine Regel je Kontakt braucht es
+# dafür nicht.
+#
+# Die Werte sind an den Listen bis Ende 2024 eingestellt und an denen ab 2025
+# blind geprüft (siehe blindtest.py). Wer sie ändert, muss das wiederholen.
+NACHBARN = 15            # so viele ähnliche Bücher stimmen ab
+SCHWELLE = 0.30          # ab diesem Stimmenanteil ist ein Kontakt vorangekreuzt
+ALTERUNG_JAHRE = 2       # nach so vielen Jahren zählt eine Liste nur noch 1/e
+# Kontakte, die laut Einschätzung in der Gegend des Buchs sitzen, rücken in der
+# Liste etwas nach oben. Vorangekreuzt werden sie dadurch nicht: Das hat im
+# Test nur 1–2 Punkte gebracht, hilft aber neuen Kontakten ohne Vorgeschichte.
+ZUSCHLAG_GEGEND = 0.15
+
+
+@dataclass
+class Treffer:
+    kontakt: Kontakt
+    stimmen: float            # Anteil der gewichteten Stimmen, 0 bis 1
+    buecher: int              # in so vielen der ähnlichen Bücher dabei
+    vorgeschlagen: bool       # vorangekreuzt
+    warum: str
+
+
+@dataclass
+class Vorschlag:
+    treffer: list[Treffer] = field(default_factory=list)
+    nachbarn: list[tuple[float, Buch]] = field(default_factory=list)
+
+
+def _merkmale(regionen, themen,
+              schlagworte: dict[str, Schlagwort]) -> dict[str, float]:
+    """Das Buch als gewichtete Merkmale. Was genau angekreuzt ist, zählt mehr
+    als die Obergebiete, die daraus folgen."""
+    oben = spitzen(regionen, schlagworte)
+    merkmale = {f"R:{n}": 1.0 for n in mit_obergebieten(oben, schlagworte)}
+    merkmale.update({f"R:{n}": 2.0 for n in oben})
+    merkmale.update({f"T:{n}": 1.0
+                     for n in mit_obergebieten(themen, schlagworte)})
+    merkmale.update({f"T:{n}": 1.5 for n in themen})
+    return merkmale
+
+
+def _kosinus(a: dict[str, float], b: dict[str, float]) -> float:
+    skalar = sum(wert * b[m] for m, wert in a.items() if m in b)
+    laenge = math.sqrt(sum(x * x for x in a.values())
+                       * sum(x * x for x in b.values()))
+    return skalar / laenge if laenge else 0.0
+
+
+def aehnliche_buecher(regionen, themen, historie: list[Buch],
+                      schlagworte: dict[str, Schlagwort],
+                      stichtag: date = None, anzahl: int = None,
+                      alterung: float = None) -> list[tuple[float, Buch]]:
+    """Die ähnlichsten Bücher vor dem Stichtag, als (Gewicht, Buch).
+
+    Seltene Merkmale zählen mehr: Dass zwei Bücher in Baden-Württemberg
+    spielen, sagt wenig, dass beide vom Zabergäu handeln, sagt viel. Neuere
+    Listen wiegen mehr, weil die Listen über die Jahre kleiner geworden sind
+    und Kontakte wechseln.
+
+    Nur Bücher *vor* dem Stichtag: Der Blindtest stellt damit sicher, dass der
+    Vorschlag nichts aus der Zukunft kennt. Im Betrieb ist der Stichtag heute,
+    und eine am selben Tag gespeicherte Liste bleibt bis morgen außen vor.
+    """
+    stichtag = stichtag or date.today()
+    anzahl = NACHBARN if anzahl is None else anzahl
+    alterung = ALTERUNG_JAHRE if alterung is None else alterung
+    pool = [b for b in historie if b.datum < stichtag and b.empfaenger]
+    if not pool or not (regionen or themen):
+        return []
+    roh = [(b, _merkmale(b.regionen, b.themen, schlagworte)) for b in pool]
+    haeufig: dict[str, int] = {}
+    for _, m in roh:
+        for name in m:
+            haeufig[name] = haeufig.get(name, 0) + 1
+
+    def gewichtet(m: dict[str, float]) -> dict[str, float]:
+        return {name: wert * math.log(1 + len(pool) / (1 + haeufig.get(name, 0)))
+                for name, wert in m.items()}
+
+    ziel = gewichtet(_merkmale(regionen, themen, schlagworte))
+    bewertet = []
+    for b, m in roh:
+        alter = (stichtag - b.datum).days / 365
+        gewicht = _kosinus(ziel, gewichtet(m)) * math.exp(-alter / alterung)
+        if gewicht > 0:
+            bewertet.append((gewicht, b))
+    bewertet.sort(key=lambda x: (-x[0], -x[1].datum.toordinal(), x[1].nummer))
+    return bewertet[:anzahl]
+
+
+def vorschlag(regionen, themen, historie: list[Buch], v: Verteiler,
+              kontakte: list[Kontakt], stichtag: date = None,
+              anzahl: int = None, schwelle: float = None,
+              alterung: float = None) -> Vorschlag:
+    """Die Empfänger für ein Buch, die wahrscheinlichsten zuerst.
+
+    `regionen` sind die im Baum angekreuzten, samt mitgenommenen Teilgebieten.
+    Die Liste enthält auch Kontakte unter der Schwelle: Die Hälfte seiner
+    Empfänger steht erst dort, und genau da soll der Pressereferent nachsehen.
+    """
+    schwelle = SCHWELLE if schwelle is None else schwelle
+    nachbarn = aehnliche_buecher(regionen, themen, historie, v.schlagworte,
+                                 stichtag, anzahl, alterung)
+    gesamt = sum(g for g, _ in nachbarn) or 1.0
+    stimmen: dict[int, float] = {}
+    zahl: dict[int, int] = {}
+    for g, b in nachbarn:
+        for i in b.empfaenger:
+            stimmen[i] = stimmen.get(i, 0.0) + g / gesamt
+            zahl[i] = zahl.get(i, 0) + 1
+
+    gegend = mit_unterbegriffen(regionen, v.schlagworte)
+    wertung = []
     for k in kontakte:
         e = v.eintraege.get(k.access_id)
-        if e is None:
+        s = stimmen.get(k.access_id, 0.0)
+        hier = bool(e and e.regionen & gegend)
+        immer = bool(e and e.immer)
+        if not (s or hier or immer):
             continue
-        g = grund(e, r, t)
-        if g:
-            treffer.append((k, g))
-    return treffer
+        if immer:
+            warum = "immer"
+        elif s:
+            warum = (f"in {zahl[k.access_id]} von {len(nachbarn)} "
+                     f"ähnlichen Büchern")
+        else:
+            warum = "sitzt in der Gegend, bisher nicht bei ähnlichen Büchern"
+        wertung.append((s + (ZUSCHLAG_GEGEND if hier else 0.0), Treffer(
+            k, s, zahl.get(k.access_id, 0), immer or s >= schwelle, warum)))
+    wertung.sort(key=lambda x: (-x[1].vorgeschlagen, -x[0],
+                                x[1].kontakt.sortierung))
+    return Vorschlag([t for _, t in wertung], nachbarn)
+
+
+def einzelne_mails(kontakte: list[Kontakt]) -> list[tuple[Kontakt, str]]:
+    """Jede Adresse einmal, mit dem Kontakt, bei dem sie zuerst steht."""
+    gesehen, paare = set(), []
+    for k in kontakte:
+        for adresse in k.mails:
+            if adresse.lower() not in gesehen:
+                gesehen.add(adresse.lower())
+                paare.append((k, adresse))
+    return paare
 
 
 def mailadressen(kontakte: list[Kontakt]) -> tuple[str, int, int]:
@@ -819,18 +1134,10 @@ def mailadressen(kontakte: list[Kontakt]) -> tuple[str, int, int]:
     einmal bekommen. Stehen mehrere Adressen bei einem Kontakt, gehen alle
     mit: lieber Redakteur und Redaktion als keiner von beiden.
     """
-    gesehen, adressen, ohne, doppelt = set(), [], 0, 0
-    for k in kontakte:
-        if not k.mails:
-            ohne += 1
-            continue
-        for adresse in k.mails:
-            if adresse.lower() in gesehen:
-                doppelt += 1
-                continue
-            gesehen.add(adresse.lower())
-            adressen.append(adresse)
-    return "; ".join(adressen), ohne, doppelt
+    paare = einzelne_mails(kontakte)
+    ohne = sum(1 for k in kontakte if not k.mails)
+    doppelt = sum(len(k.mails) for k in kontakte) - len(paare)
+    return "; ".join(adresse for _, adresse in paare), ohne, doppelt
 
 
 # ---------------------------------------------------------------------
@@ -863,7 +1170,7 @@ HINWEISE = [
     "Blatt „Presse“: je Pressekontakt eine Zeile.",
     "  Regionen / Themen: Schlagworte aus dem Blatt „Schlagworte“, mehrere mit "
     "Semikolon getrennt („Kraichgau; Landkreis Karlsruhe“).",
-    "  immer: x = bekommt jedes Buch.",
+    "  immer: x = ist bei jedem Buch vorangekreuzt.",
     "  geprüft: x = die Einordnung ist durchgesehen. Leer = Vorschlag, noch "
     "nicht bestätigt.",
     "  unsicher: x = der Vorschlag ist geraten; diese zuerst durchsehen.",
@@ -874,16 +1181,14 @@ HINWEISE = [
     "  Institution bis Medium: nur zur Ansicht, wird beim Speichern aus "
     "Access erneuert.",
     "",
-    "Die Regel: Ein Kontakt bekommt das Buch, wenn jede AUSGEFÜLLTE Achse "
-    "passt. Eine leere Achse zählt als „egal“.",
-    "  Nur Regionen eingetragen: bekommt alles aus diesen Regionen.",
-    "  Nur Themen eingetragen: bekommt alles zu diesen Themen, egal woher.",
-    "  Beides eingetragen: nur, was in beiden passt.",
-    "  Nichts eingetragen: bekommt nie etwas.",
+    "Wer ein Buch bekommt, schlägt das Programm aus den Listen ähnlicher "
+    "früherer Bücher vor (Mappe „Pressehistorie.xlsx“). Regionen und Themen "
+    "je Kontakt dienen nur noch als Suchhilfe und helfen neuen Kontakten ohne "
+    "Vorgeschichte.",
     "",
     "Blatt „Schlagworte“: „gehört zu“ macht die Obergebiete. Ein Buch über "
-    "den Pfinzgau erreicht so auch alle, die für den Landkreis Karlsruhe, die "
-    "Region Karlsruhe, Baden oder Baden-Württemberg eingetragen sind.",
+    "den Pfinzgau gilt damit auch als ähnlich zu Büchern über den Landkreis "
+    "Karlsruhe, die Region Karlsruhe und Baden.",
     "  Herkunft „Shop“: Kategorie aus dem Webshop. „Ergänzung“: fehlt im Shop, "
     "für die Presse aber nötig.",
     "",
@@ -919,7 +1224,7 @@ def _blatt_zeilen(wb, name: str) -> list[tuple]:
 
 def lade_verteiler(pfad: Path = None) -> Verteiler:
     pfad = Path(pfad or VERTEILER_PFAD)
-    wb = openpyxl.load_workbook(pfad, read_only=True, data_only=True)
+    wb = _mappe_lesen(pfad)
     try:
         schlagwort_zeilen = _blatt_zeilen(wb, BLATT_SCHLAGWORTE)
         presse_zeilen = _blatt_zeilen(wb, BLATT_PRESSE)
@@ -1041,46 +1346,54 @@ def speichere_verteiler(v: Verteiler, kontakte: list[Kontakt],
             ws.append([feld_, wert, n])
 
     pfad.parent.mkdir(parents=True, exist_ok=True)
-    zwischen = pfad.with_name(pfad.stem + ".neu.xlsx")
-    wb.save(zwischen)
-    zwischen.replace(pfad)
+    _mappe_ablegen(wb, pfad)
     return pfad
 
 
 # ---------------------------------------------------------------------
-# Versand je Buch: Liste und Protokoll in einem
+# Versand je Buch: ein Ordner mit je einer Liste pro Versandweg
 # ---------------------------------------------------------------------
-# Eine Datei je Buch. Das Blatt „Empfänger“ ist zugleich Quelle für den
-# Serienbrief (Word → Sendungen → Empfänger auswählen) und Nachweis, wer das
-# Buch bekommen hat. Später lässt sich aus diesen Dateien lernen, welche
-# Kontakte bei welchen Schlagworten tatsächlich angeschrieben wurden.
+# Ein Ordner je Buch, damit der Pressereferent die Datei für seinen Versandweg
+# sofort findet und nicht erst das richtige Blatt suchen muss. „Empfänger.xlsx“
+# ist zugleich der Nachweis, wer das Buch bekommen hat. Die Ordner liegen neben
+# denen, die er seit 2020 von Hand anlegt, und heißen darum wie diese nach dem
+# Buch, ohne Datum und ISBN.
+#
+# Die Post-Liste enthält alle mit Anschrift, nicht nur die ohne E-Mail: Die
+# wären im Median 0 je Liste, höchstens 4 (Listen ab 2025). Damit sie sich
+# trotzdem herausfiltern lassen, gibt es die Spalte „auch per E-Mail“.
+
+DATEI_EMPFAENGER = "Empfänger.xlsx"
+DATEI_MAIL = "E-Mail.xlsx"
+DATEI_POST = "Post.xlsx"
+DATEI_BCC = "E-Mail-Adressen.txt"
 
 VERSAND_SPALTEN = ["Access-ID", "Anrede", "Titel", "Vorname", "Name",
                    "Institution", "Abteilung", "Unterabteilung", "c/o",
                    "Straße", "Hausnummer", "PLZ", "Ort", "Land", "eMail",
                    "Medium", "Grund"]
+MAIL_SPALTEN = ["Institution", "Abteilung", "Person", "eMail"]
+POST_SPALTEN = ["Access-ID", "Anrede", "Titel", "Vorname", "Name",
+                "Institution", "Abteilung", "Unterabteilung", "c/o",
+                "Straße", "Hausnummer", "PLZ", "Ort", "Land",
+                "auch per E-Mail"]
 
 
-def speichere_versand(titel: str, isbn: str, regionen, themen,
+def _titel_person(k: Kontakt) -> str:
+    return " ".join(t for t in (k.feld("Titel 1"), k.feld("Titel 2"),
+                                k.feld("Titel 3")) if t)
+
+
+def _mappe_empfaenger(titel: str, isbn: str, regionen, themen,
                       empfaenger: list[tuple[Kontakt, str]],
-                      abgewaehlt: list[tuple[Kontakt, str]],
-                      ordner: Path = None) -> Path:
-    ordner = Path(ordner or AUSGABE_ORDNER)
-    ordner.mkdir(parents=True, exist_ok=True)
-    name = _sicherer_dateiname(
-        "_".join(t for t in (date.today().isoformat(), isbn,
-                             titel[:60]) if t)) or date.today().isoformat()
-    ziel = ordner / f"{name}.xlsx"
-
+                      abgewaehlt: list[tuple[Kontakt, str]]):
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Empfänger"
     _kopfzeile(ws, VERSAND_SPALTEN,
                [10, 10, 10, 16, 20, 34, 24, 18, 14, 24, 8, 8, 18, 8, 32, 14, 40])
     for k, g in empfaenger:
-        titel_person = " ".join(t for t in (k.feld("Titel 1"), k.feld("Titel 2"),
-                                            k.feld("Titel 3")) if t)
-        ws.append([k.access_id, k.feld("Anrede"), titel_person,
+        ws.append([k.access_id, k.feld("Anrede"), _titel_person(k),
                    k.feld("Vorname"), k.feld("Name"), k.institution,
                    k.feld("Abteilung"), k.feld("Unterabteilung"),
                    k.feld("c/o"), k.feld("Straße"), k.feld("Hausnummer"),
@@ -1097,7 +1410,9 @@ def speichere_versand(titel: str, isbn: str, regionen, themen,
             ("Regionen", "; ".join(sorted(regionen))),
             ("Themen", "; ".join(sorted(themen))),
             ("Empfänger", len(empfaenger)),
-            ("davon ohne E-Mail", sum(1 for k, _ in empfaenger if not k.mails))):
+            ("davon ohne E-Mail", sum(1 for k, _ in empfaenger if not k.mails)),
+            ("davon ohne Anschrift",
+             sum(1 for k, _ in empfaenger if not k.hat_anschrift))):
         ws.append([schluessel, wert])
         ws.cell(row=ws.max_row, column=1).font = Font(bold=True)
 
@@ -1107,6 +1422,92 @@ def speichere_versand(titel: str, isbn: str, regionen, themen,
                    [10, 34, 24, 50])
         for k, g in abgewaehlt:
             ws.append([k.access_id, k.institution, k.person, g])
+    return wb
 
-    wb.save(ziel)
+
+def _mappe_mail(kontakte: list[Kontakt]):
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "E-Mail"
+    _kopfzeile(ws, MAIL_SPALTEN, [34, 24, 24, 40])
+    for k, adresse in einzelne_mails(kontakte):
+        ws.append([k.institution, k.abteilung, k.person, adresse])
+    ws.auto_filter.ref = ws.dimensions
+    return wb
+
+
+def _mappe_post(kontakte: list[Kontakt]):
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Post"
+    _kopfzeile(ws, POST_SPALTEN,
+               [10, 10, 10, 16, 20, 34, 24, 18, 14, 24, 8, 8, 18, 8, 14])
+    for k in kontakte:
+        if k.hat_anschrift:
+            ws.append([k.access_id, k.feld("Anrede"), _titel_person(k),
+                       k.feld("Vorname"), k.feld("Name"), k.institution,
+                       k.feld("Abteilung"), k.feld("Unterabteilung"),
+                       k.feld("c/o"), k.feld("Straße"), k.feld("Hausnummer"),
+                       k.feld("PLZ"), k.feld("Ort"), k.feld("Land"),
+                       "ja" if k.mails else "nein"])
+    ws.auto_filter.ref = ws.dimensions
+    return wb
+
+
+def _buch_ordner(wurzel: Path, titel: str, isbn: str) -> Path:
+    """Der Ordner des Buchs.
+
+    Am selben Tag gilt erneutes Speichern als Korrektur und ersetzt die Listen.
+    Stammen sie von einem anderen Tag, ist es vermutlich das gleichnamige
+    Jahrbuch des Vorjahrs. Dessen Liste darf nicht verloren gehen, das Buch
+    bekommt dann einen eigenen Ordner mit Datum.
+    """
+    heute = date.today()
+    name = _sicherer_dateiname(titel[:60] or isbn) or heute.isoformat()
+    alt = wurzel / name / DATEI_EMPFAENGER
+    if alt.exists() and date.fromtimestamp(alt.stat().st_mtime) != heute:
+        return wurzel / f"{name} {heute.isoformat()}"
+    return wurzel / name
+
+
+def speichere_versand(titel: str, isbn: str, regionen, themen,
+                      empfaenger: list[tuple[Kontakt, str]],
+                      abgewaehlt: list[tuple[Kontakt, str]],
+                      ordner: Path = None) -> Path:
+    """Schreibt den Ordner des Buchs und gibt ihn zurück.
+
+    Alle Dateien entstehen jedes Mal neu. So bleibt beim erneuten Speichern
+    keine Liste vom alten Stand liegen, auch wenn sie nun leer wäre.
+    """
+    ziel = _buch_ordner(Path(ordner or AUSGABE_ORDNER), titel, isbn)
+
+    # Alphabetisch: Die Listen liest ein Mensch, die Reihenfolge des Vorschlags
+    # sagt dort nichts mehr.
+    empfaenger = sorted(empfaenger, key=lambda e: e[0].sortierung)
+    kontakte = [k for k, _ in empfaenger]
+    mappen = {
+        DATEI_EMPFAENGER: _mappe_empfaenger(titel, isbn, regionen, themen,
+                                            empfaenger, abgewaehlt),
+        DATEI_MAIL: _mappe_mail(kontakte),
+        DATEI_POST: _mappe_post(kontakte)}
+
+    # Erst alle prüfen, dann schreiben: Sonst stünde bei einer offenen Datei
+    # ein Teil des Ordners auf dem neuen Stand und ein Teil auf dem alten.
+    for datei in mappen:
+        sperre = pruefe_sperre(ziel / datei)
+        if sperre:
+            raise OSError(sperre)
+
+    # Erst örtlich schreiben, dann am Stück kopieren: Eine xlsx ist ein Zip,
+    # beim Schreiben springt openpyxl in der Datei herum, und das verträgt die
+    # gvfs-Einbindung des NAS schlecht. copyfile statt copy2, weil gvfs das
+    # Setzen der Dateirechte ablehnen kann.
+    with tempfile.TemporaryDirectory() as tmp:
+        for datei, wb in mappen.items():
+            wb.save(Path(tmp) / datei)
+        (Path(tmp) / DATEI_BCC).write_text(mailadressen(kontakte)[0],
+                                           encoding="utf-8")
+        ziel.mkdir(parents=True, exist_ok=True)
+        for pfad in Path(tmp).iterdir():
+            shutil.copyfile(pfad, ziel / pfad.name)
     return ziel

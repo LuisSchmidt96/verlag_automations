@@ -3,6 +3,11 @@
 Gilt für jeden, der ein Paket aus `presseverteiler/einschaetzung/` abarbeitet,
 ob Mensch, Claude oder Hilfs-Agent. Ablauf und Skript: `einschaetzung.py`.
 
+**Stand November 2026:** Die Auswahlregel unten gilt nicht mehr. Wer ein Buch
+bekommt, schlägt das Programm aus früheren Listen vor, weil die Regel die echte
+Auswahl schlecht traf (`WIP_Presselisten-Auswertung.md`). Die Einschätzung dient
+nur noch als Suchhilfe und für neue Kontakte ohne Vorgeschichte.
+
 ## Worum es geht
 
 Der **Verlag Regionalkultur** (Ubstadt-Weiher bei Bruchsal) macht Orts- und
@@ -91,7 +96,7 @@ Daraus folgt:
      Kunstmagazin einer Stadt) → Region und „Kunst und Musik“, eventuell
      auch „Belletristik / Literatur“. Lifestyle- und Stadtmagazine → nur
      Region.
-   * „IfU“ nicht vergeben. Was es bedeutet, ist unklar. Nimm stattdessen
+   * „IfU“ (Institut für Unternehmensgeschichte) nicht vergeben, sondern
      „Technik und Wirtschaft“.
 4. **Regionale Fachmedien** (Geschichts- und Heimatverein, landeskundliches
    Jahrbuch, Kirchenzeitung eines Bistums oder einer Landeskirche, regionale

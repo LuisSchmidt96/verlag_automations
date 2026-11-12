@@ -3,18 +3,23 @@
 Presseverteiler (Tkinter-GUI)
 =============================
 
-Je Buch ein paar Schlagworte ankreuzen, und die Liste der Pressekontakte
-steht da — statt einer halben Stunde in der Access-Liste.
+Je Buch ein paar Schlagworte ankreuzen, und ein Vorschlag aus den Listen
+ähnlicher früherer Bücher steht da — statt einer halben Stunde in der
+Access-Liste.
 
 Zwei Reiter:
-- Auswahl je Buch : Regionen und Themen des Buchs ankreuzen, Treffer prüfen,
-                    E-Mails kopieren oder die Liste für den Serienbrief speichern.
-- Einordnen       : festlegen, wofür jeder Pressekontakt zuständig ist.
+- Auswahl je Buch : Regionen und Themen des Buchs ankreuzen, Vorschlag prüfen,
+                    mit einem Klick alles ausgeben.
+- Kontakte        : Regionen und Themen je Kontakt pflegen. Das ist Suchhilfe
+                    und hilft neuen Kontakten, für die Auswahl aber keine Pflicht.
 
-Dateien im App-Ordner (neben der .exe):
-- config.json            : zuletzt benutzter Access-Export
-- Presseverteiler.xlsx   : wer wofür zuständig ist (in Excel lesbar)
-- Presseversand/         : je Buch eine Liste samt Protokoll
+Neben der .exe:
+- config.json            : zuletzt benutzter Access-Export, ggf. andere Ablage
+
+In der Ablage auf dem NAS (core.AUSGABE_ORDNER):
+- <Titel>/               : je Buch die Listen für E-Mail und Post samt Protokoll
+- _Presseverteiler/Pressehistorie.xlsx  : wer welches Buch bekommen hat
+- _Presseverteiler/Presseverteiler.xlsx : Regionen und Themen je Kontakt
 
 Bauen als .exe (Windows):
     pyinstaller presseverteiler/Presseverteiler.spec
@@ -27,7 +32,7 @@ import os
 import subprocess
 import sys
 import traceback
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 from tkinter import (Tk, Toplevel, StringVar, BooleanVar, Text, END,
                      filedialog, messagebox, ttk)
@@ -38,10 +43,10 @@ from presseverteiler import core
 HAKEN_AN, HAKEN_AUS = "☑", "☐"
 
 ANSICHTEN = ["alle", "ungeprüft", "ungeprüft und unsicher", "geprüft",
-             "bekommt nie etwas", "immer"]
+             "nie gewählt", "immer"]
 
-# Breite der Spalte „Zuständigkeit“ im Reiter „Einordnen“: Platz für die
-# Bäume der Regionen und Themen nebeneinander.
+# Breite der rechten Spalte im Reiter „Kontakte“: Platz für die Bäume der
+# Regionen und Themen nebeneinander.
 BREITE_ZUSTAENDIGKEIT = 780
 
 
@@ -69,13 +74,9 @@ class SchlagwortBaum(ttk.Frame):
       Teilgebiete mit an (Landkreis Karlsruhe → Kraichgau, Pfinzgau), ein
       zweiter wählt den ganzen Ast wieder ab. Einzelne Teilgebiete lassen sich
       danach abwählen. Bei den Themen nicht — warum, steht bei
-      core.MIT_TEILGEBIETEN. Die Obergebiete, die das Buch ebenfalls erreicht,
-      werden bewusst nicht markiert: Ein hervorgehobener Knoten „Geschichte“
-      las sich, als gehöre der ganze Ast dazu, samt Kirchengeschichte. Das
-      sagt stattdessen der Satz über der Trefferliste.
+      core.MIT_TEILGEBIETEN.
     * **Pressekontakt**: Die Unterbegriffe werden nur als „inbegriffen“
-      markiert, nicht angekreuzt. Wer für Geschichte zuständig ist, bekommt
-      ohnehin alles darunter. Ausgeschrieben in die Mappe stünden sonst bei
+      markiert, nicht angekreuzt. Ausgeschrieben in die Mappe stünden sonst bei
       jeder Redaktion zwanzig Schlagworte statt einem.
     """
 
@@ -251,7 +252,10 @@ class App(Tk):
             self.state("zoomed")
 
         self.cfg = self._lade_config()
-        self.access_pfad = StringVar(value=self.cfg.get("access", ""))
+        # Ohne eigene Wahl der gemeinsame Export auf dem NAS: Ein neuer Rechner
+        # muss dann nichts einstellen.
+        self.access_pfad = StringVar(value=self.cfg.get("access") or str(
+            self._ablage() / core.DATEN_ORDNER / core.ACCESS_PFAD.name))
 
         self.kontakte: list[core.Kontakt] = []
         self.nach_id: dict[int, core.Kontakt] = {}
@@ -261,8 +265,16 @@ class App(Tk):
         self.mappe_stand: float | None = None
         self.ungespeichert = False
 
-        # Auswahl je Buch
-        self.treffer: list[tuple[core.Kontakt, str]] = []
+        self.historie: list[core.Buch] = []
+        self.gewaehlt_zahl: Counter = Counter()   # je Kontakt: in wie vielen Listen
+
+        # Auswahl je Buch. Die Häkchen ergeben sich aus dem Vorschlag und den
+        # Klicks darauf. Die Klicks stehen getrennt, damit sie erhalten bleiben,
+        # wenn man danach noch eine Region dazunimmt.
+        self.treffer: list[core.Treffer] = []
+        # (Spalte, absteigend); None = Reihenfolge des Vorschlags
+        self.treffer_ordnung: tuple[str, bool] | None = None
+        self.nachbarn: list[tuple[float, core.Buch]] = []
         self.abgewaehlt: set[int] = set()
         self.hinzu: set[int] = set()
 
@@ -282,9 +294,9 @@ class App(Tk):
 
     def _sichere_config(self):
         try:
+            self.cfg["access"] = self.access_pfad.get()
             core.CONFIG_PFAD.write_text(json.dumps(
-                {"access": self.access_pfad.get()}, indent=2,
-                ensure_ascii=False), encoding="utf-8")
+                self.cfg, indent=2, ensure_ascii=False), encoding="utf-8")
         except OSError as e:
             self._log(f"config.json nicht schreibbar: {e}")
 
@@ -361,74 +373,117 @@ class App(Tk):
         rechts = ttk.Frame(rahmen)
         rechts.pack(side="left", fill="both", expand=True, padx=(10, 0))
 
+        # Die früheren Bücher zeigen, woher der Vorschlag kommt. Zwei Bücher
+        # derselben Reihe oder desselben Orts bekamen oft dieselbe Liste, darum
+        # lässt sich eine davon direkt übernehmen.
+        aehnlich = ttk.LabelFrame(rechts, text="Ähnliche frühere Bücher",
+                                  padding=4)
+        aehnlich.pack(fill="x")
+        spalten = [("titel", "Titel", 460), ("datum", "Datum", 80),
+                   ("zahl", "Empfänger", 70), ("regionen", "Regionen", 200),
+                   ("themen", "Themen", 170)]
+        koerper = ttk.Frame(aehnlich)
+        koerper.pack(fill="x")
+        baum = ttk.Treeview(koerper, columns=[s_[0] for s_ in spalten],
+                            show="headings", selectmode="browse", height=5)
+        for schluessel, titel, breite in spalten:
+            baum.heading(schluessel, text=titel)
+            baum.column(schluessel, width=breite, anchor="w")
+        vs = ttk.Scrollbar(koerper, orient="vertical", command=baum.yview)
+        baum.configure(yscrollcommand=vs.set)
+        baum.pack(side="left", fill="x", expand=True)
+        vs.pack(side="left", fill="y")
+        baum.bind("<Double-1>", lambda e: self._liste_uebernehmen())
+        self.aehnlich_baum = baum
+        ttk.Button(aehnlich, text="Liste dieses Buchs übernehmen",
+                   command=self._liste_uebernehmen).pack(anchor="e",
+                                                         pady=(4, 0))
+
         self.erreicht = StringVar(value="Links Regionen und Themen des Buchs "
                                         "ankreuzen.")
         ttk.Label(rechts, textvariable=self.erreicht, wraplength=980,
-                  justify="left").pack(fill="x", pady=(0, 4))
+                  justify="left").pack(fill="x", pady=(6, 4))
 
-        # „warum“ gleich neben die Institution: Das ist die Spalte, mit der
-        # man eine Liste prüft. Abteilung und Medium dürfen notfalls aus dem
-        # Fenster rutschen.
+        suche = ttk.Frame(rechts)
+        suche.pack(fill="x", pady=(0, 4))
+        ttk.Label(suche, text="suchen:").pack(side="left")
+        self.treffer_suche = StringVar()
+        self.treffer_suche.trace_add("write",
+                                     lambda *_: self._fuelle_treffer())
+        ttk.Entry(suche, textvariable=self.treffer_suche, width=28).pack(
+            side="left", padx=(4, 12))
+        ttk.Label(suche, foreground="#555555", text=(
+            "Klick auf eine Spaltenüberschrift sortiert, der zweite dreht um, "
+            "der dritte stellt den Vorschlag wieder her.")).pack(side="left")
+
+        # „Quote“ und „warum“ gleich neben die Institution: Das sind die
+        # Spalten, mit denen man eine Liste prüft. Person und Medienart dürfen
+        # notfalls aus dem Fenster rutschen.
         spalten = [("sel", "", 34), ("inst", "Institution", 200),
-                   ("grund", "warum", 230), ("person", "Person", 140),
-                   ("ort", "PLZ / Ort", 130), ("mail", "E-Mail", 190),
-                   ("abt", "Abteilung", 130), ("medium", "Medium", 80)]
+                   ("abt", "Abteilung", 150), ("quote", "Quote", 56),
+                   ("grund", "warum", 170), ("ort", "PLZ / Ort", 130),
+                   ("mail", "E-Mail", 180), ("person", "Person", 130),
+                   ("medium", "Medienart", 90)]
+        self.treffer_spalten = {s_[0]: s_[1] for s_ in spalten}
         koerper = ttk.Frame(rechts)
         koerper.pack(fill="both", expand=True)
-        baum = ttk.Treeview(koerper, columns=[s[0] for s in spalten],
+        baum = ttk.Treeview(koerper, columns=[s_[0] for s_ in spalten],
                             show="headings", selectmode="extended")
         for schluessel, titel, breite in spalten:
-            baum.heading(schluessel, text=titel)
-            baum.column(schluessel, width=breite, stretch=schluessel != "sel",
-                        anchor="center" if schluessel == "sel" else "w")
+            schmal = schluessel in ("sel", "quote")
+            baum.heading(schluessel, text=titel,
+                         command=lambda s_=schluessel:
+                         self._treffer_sortieren(s_))
+            baum.column(schluessel, width=breite, stretch=not schmal,
+                        anchor="center" if schmal else "w")
         vs = ttk.Scrollbar(koerper, orient="vertical", command=baum.yview)
         baum.configure(yscrollcommand=vs.set)
         baum.pack(side="left", fill="both", expand=True)
         vs.pack(side="left", fill="y")
         baum.tag_configure("aus", foreground="#999999")
-        baum.tag_configure("ungeprueft", foreground="#8a5a00")
         baum.tag_configure("hand", foreground="#1f5fa8")
         baum.bind("<Button-1>", self._treffer_klick)
         baum.bind("<space>", lambda e: self._treffer_umschalten(
             [int(i) for i in baum.selection()]))
-        baum.bind("<Double-1>", lambda e: self._zum_einordnen())
+        baum.bind("<Double-1>", self._treffer_doppelklick)
         self.treffer_baum = baum
 
         self.treffer_zahl = StringVar(value="")
         ttk.Label(rechts, textvariable=self.treffer_zahl).pack(anchor="w",
                                                                pady=(4, 0))
         ttk.Label(rechts, foreground="#555555", text=(
-            "Haken anklicken (oder Leertaste) = für dieses Buch abwählen. "
-            "Braun = Einordnung noch ungeprüft (Vorschlag aus Access). "
-            "Blau = von Hand hinzugefügt. Doppelklick = Zuständigkeit "
-            "bearbeiten.")).pack(anchor="w")
+            "Haken anklicken (oder Leertaste) = an- oder abwählen. Grau = "
+            "nicht angekreuzt, aber naheliegend: Hier lohnt der Blick nach "
+            "unten. Blau = von Hand dazugenommen. Doppelklick = Kontakt "
+            "ansehen.")).pack(anchor="w")
 
         knoepfe = ttk.Frame(rechts)
         knoepfe.pack(fill="x", pady=(6, 0))
-        ttk.Button(knoepfe, text="Kontakt von Hand hinzufügen…",
+        ttk.Button(knoepfe, text="Kontakte suchen und hinzufügen…",
                    command=self._hinzufuegen_dialog).pack(side="left")
-        ttk.Button(knoepfe, text="Zuständigkeit bearbeiten",
+        ttk.Button(knoepfe, text="Kontakt ansehen",
                    command=self._zum_einordnen).pack(side="left", padx=6)
-        ttk.Button(knoepfe, text="Ordner öffnen",
-                   command=self._ordner_oeffnen).pack(side="right")
-        ttk.Button(knoepfe, text="Liste speichern (Serienbrief + Protokoll)",
-                   command=self._liste_speichern).pack(side="right", padx=6)
-        ttk.Button(knoepfe, text="E-Mail-Adressen kopieren (BCC)",
-                   command=self._mails_kopieren).pack(side="right")
+        # Ein Knopf für alles: Einzelne Schritte vergisst man, und ohne den
+        # Eintrag in die Historie lernt das Tool die Liste nie.
+        ttk.Button(knoepfe, text="Fertig – alles ausgeben",
+                   command=self._alles_ausgeben).pack(side="right")
+        ttk.Label(knoepfe, foreground="#555555", text=(
+            "Ordner mit allen Listen, E-Mail-Adressen in die Zwischenablage"
+            )).pack(side="right", padx=8)
 
     def _baue_einordnen(self):
         rahmen = ttk.Frame(self.reiter, padding=6)
-        self.reiter.add(rahmen, text="Einordnen")
+        self.reiter.add(rahmen, text="Kontakte")
 
-        # Liste und Zuständigkeit teilen sich den Platz an einem
-        # verschiebbaren Steg. Die Zuständigkeit ist breit genug für beide
+        # Liste und rechte Spalte teilen sich den Platz an einem
+        # verschiebbaren Steg. Die rechte Spalte ist breit genug für beide
         # Bäume nebeneinander — übereinander waren sie je neun Zeilen hoch,
         # und man musste bei jedem Kontakt scrollen. Wird das Fenster
         # schmaler, gibt die Liste nach (weight=1), nicht die Bäume.
         teiler = ttk.Panedwindow(rahmen, orient="horizontal")
         teiler.pack(fill="both", expand=True)
         links = ttk.Frame(teiler)
-        rechts = ttk.LabelFrame(teiler, text="Zuständigkeit", padding=6,
+        rechts = ttk.LabelFrame(teiler, text="Regionen und Themen", padding=6,
                                 width=BREITE_ZUSTAENDIGKEIT)
         rechts.pack_propagate(False)
         teiler.add(links, weight=1)
@@ -454,7 +509,8 @@ class App(Tk):
         spalten = [("inst", "Institution", 190), ("abt", "Abteilung", 120),
                    ("ort", "PLZ / Ort", 110), ("art", "Medienart", 90),
                    ("regionen", "Regionen", 160), ("themen", "Themen", 140),
-                   ("immer", "immer", 44), ("geprueft", "geprüft", 52)]
+                   ("listen", "Listen", 46), ("immer", "immer", 44),
+                   ("geprueft", "geprüft", 52)]
         koerper = ttk.Frame(links)
         koerper.pack(fill="both", expand=True)
         baum = ttk.Treeview(koerper, columns=[s[0] for s in spalten],
@@ -499,8 +555,9 @@ class App(Tk):
         self.knopf_uebernehmen.pack(side="bottom", fill="x", pady=(6, 0))
         ttk.Label(rechts, foreground="#555555", wraplength=umbruch,
                   justify="left",
-                  text="Leere Regionen = egal woher, leere Themen = egal "
-                       "worüber. Ganz leer = bekommt nie etwas.").pack(
+                  text="Wer ein Buch bekommt, ergibt sich aus früheren Listen. "
+                       "Regionen und Themen helfen beim Suchen und bei neuen "
+                       "Kontakten ohne Vorgeschichte.").pack(
             side="bottom", fill="x", pady=(6, 0))
         z = ttk.Frame(rechts)
         z.pack(side="bottom", fill="x", pady=(4, 0))
@@ -511,9 +568,9 @@ class App(Tk):
         z = ttk.Frame(rechts)
         z.pack(side="bottom", fill="x", pady=(6, 0))
         self.ein_immer = BooleanVar(value=False)
-        ttk.Checkbutton(z, text="bekommt immer jedes Buch",
+        ttk.Checkbutton(z, text="bei jedem Buch vorankreuzen",
                         variable=self.ein_immer).pack(side="left")
-        # Medienart und Ressort gehen noch nicht in die Auswahl ein (siehe
+        # Medienart und Ressort gehen nicht in den Vorschlag ein (siehe
         # core.MEDIENARTEN) — hier nur, damit man Falsches gleich berichtigt.
         self.ein_ressort = StringVar()
         ttk.Combobox(z, textvariable=self.ein_ressort, state="readonly",
@@ -555,14 +612,17 @@ class App(Tk):
                 "Die letzte Änderung konnte nicht gespeichert werden und geht "
                 "beim Neuladen verloren. Trotzdem laden?"):
             return
+        if self._ablage_pruefen() is None:
+            return
+        mappe, historie_pfad = self._mappe_pfad(), self._historie_pfad()
         self.config(cursor="watch")
         self._log(f"Lese {pfad.name} …")
         self.update()
         try:
             kontakte, uebergangen = core.lade_presse(pfad)
             warnungen = []
-            if core.VERTEILER_PFAD.is_file():
-                v = core.lade_verteiler()
+            if mappe.is_file():
+                v = core.lade_verteiler(mappe)
                 neu, weg = core.abgleich(v, kontakte)
                 if neu:
                     self._log(f"{len(neu)} neue Pressekontakte aus Access "
@@ -576,12 +636,13 @@ class App(Tk):
                 speichern = bool(neu)
             else:
                 v = core.neuer_verteiler(kontakte)
-                self._log(f"Mappe {core.VERTEILER_PFAD.name} neu angelegt. "
+                self._log(f"Mappe {mappe.name} neu angelegt. "
                           f"{sum(e.eingeordnet for e in v.eintraege.values())} "
                           f"Kontakte haben Vorschläge aus den alten "
                           f"Access-Feldern Region/Fachgebiet bekommen — "
                           f"ungeprüft.")
                 speichern = True
+            historie = core.lade_historie(historie_pfad)
         except Exception as e:                              # noqa: BLE001
             self.config(cursor="")
             messagebox.showerror("Laden fehlgeschlagen", str(e))
@@ -595,11 +656,17 @@ class App(Tk):
             self._log(f"{uebergangen} Pressesätze übergangen (verzogen, "
                       f"verstorben o. Ä.).")
 
+        if not historie:
+            warnungen.append(
+                f"Keine {historie_pfad.name} in {historie_pfad.parent} "
+                f"gefunden. Ohne frühere Listen gibt es nur Vorschläge nach "
+                f"Gegend.")
         self.kontakte = kontakte
         self.nach_id = {k.access_id: k for k in kontakte}
         self.verteiler = v
-        self.mappe_stand = (core.VERTEILER_PFAD.stat().st_mtime
-                            if core.VERTEILER_PFAD.is_file() else None)
+        self._historie_setzen(historie)
+        self.mappe_stand = (mappe.stat().st_mtime
+                            if mappe.is_file() else None)
         self.ungespeichert = False
         self._sichere_config()
         if speichern:
@@ -616,7 +683,8 @@ class App(Tk):
         self._fuelle_einordnen()
         self._auswahl_neu()
         self._stand_neu()
-        self._log(f"{len(kontakte)} Pressekontakte geladen.")
+        self._log(f"{len(kontakte)} Pressekontakte und {len(historie)} frühere "
+                  f"Bücher geladen.")
 
     def _zeige_warnungen(self, warnungen: list[str]):
         if warnungen:
@@ -634,21 +702,17 @@ class App(Tk):
             return
         aktiv = [self.verteiler.eintraege[k.access_id] for k in self.kontakte
                  if k.access_id in self.verteiler.eintraege]
-        eingeordnet = sum(1 for e in aktiv if e.eingeordnet)
-        geprueft = sum(1 for e in aktiv if e.geprueft)
-        unsicher = sum(1 for e in aktiv if e.unsicher and not e.geprueft)
-        teile = [f"{len(aktiv)} Pressekontakte", f"{geprueft} geprüft"]
-        if unsicher:
-            teile.append(f"{unsicher} ungeprüft und unsicher")
-        teile.append(f"{len(aktiv) - eingeordnet} bekommen nie etwas")
-        self.stand.set(" · ".join(teile))
+        nie = sum(1 for k in self.kontakte
+                  if not self.gewaehlt_zahl[k.access_id])
+        self.stand.set(f"{len(aktiv)} Pressekontakte · {len(self.historie)} "
+                       f"frühere Bücher · {nie} Kontakte noch nie gewählt")
 
     # -- Speichern ----------------------------------------------------
 
     def _speichern(self) -> bool:
         """Die ganze Mappe schreiben — nach jeder Änderung, damit nichts
         verloren geht, wenn das Fenster einfach zugemacht wird."""
-        pfad = core.VERTEILER_PFAD
+        pfad = self._mappe_pfad()
         if (self.mappe_stand is not None and pfad.is_file()
                 and pfad.stat().st_mtime != self.mappe_stand):
             self.ungespeichert = True
@@ -672,7 +736,7 @@ class App(Tk):
         return True
 
     def _mappe_oeffnen(self):
-        if not core.VERTEILER_PFAD.is_file():
+        if not self._mappe_pfad().is_file():
             messagebox.showinfo("Noch keine Mappe",
                                 "Die Mappe entsteht beim ersten Laden.")
             return
@@ -681,13 +745,18 @@ class App(Tk):
             "Solange die Mappe in Excel offen ist, kann das Programm nicht "
             "speichern.\n\nWer in Excel etwas ändert: dort speichern, Excel "
             "schließen und hier auf „Laden“ klicken.")
-        _oeffne(core.VERTEILER_PFAD)
+        _oeffne(self._mappe_pfad())
 
     # -- Auswahl je Buch ----------------------------------------------
+
+    def _historie_setzen(self, historie: list[core.Buch]):
+        self.historie = historie
+        self.gewaehlt_zahl = Counter(i for b in historie for i in b.empfaenger)
 
     def _neues_buch(self):
         self.buch_titel.set("")
         self.buch_isbn.set("")
+        self.treffer_suche.set("")
         self.buch_regionen.leeren()
         self.buch_themen.leeren()
         self.abgewaehlt.clear()
@@ -699,83 +768,177 @@ class App(Tk):
             return
         regionen = self.buch_regionen.gewaehlt()
         themen = self.buch_themen.gewaehlt()
-        self.treffer = core.auswahl(self.verteiler, self.kontakte, regionen,
-                                    themen)
-        gefunden = {k.access_id for k, _ in self.treffer}
-        for i in sorted(self.hinzu - gefunden):
-            if i in self.nach_id:
-                self.treffer.append((self.nach_id[i], "von Hand"))
-        self.treffer.sort(key=lambda t: t[0].sortierung)
+        vs = core.vorschlag(regionen, themen, self.historie, self.verteiler,
+                            self.kontakte)
+        self.nachbarn = vs.nachbarn
+        self.treffer = vs.treffer
+        schon = {t.kontakt.access_id for t in self.treffer}
+        von_hand = [core.Treffer(self.nach_id[i], 0.0, 0, False, "von Hand")
+                    for i in sorted(self.hinzu - schon) if i in self.nach_id]
+        von_hand.sort(key=lambda t: t.kontakt.sortierung)
+        self.treffer = von_hand + self.treffer
 
-        sw = self.verteiler.schlagworte
-        mit = (core.erreicht_vom_buch(regionen, sw, core.REGION)
-               | core.erreicht_vom_buch(themen, sw, core.THEMA))
-        mit -= regionen | themen
         if not (regionen or themen):
-            self.erreicht.set("Links Regionen und Themen des Buchs ankreuzen. "
-                              "Ohne Schlagworte bekommen es nur die Kontakte "
-                              "mit „immer“.")
-        elif mit:
-            # Nach oben, nicht nach unten: Ein Buch zur Revolution 1848/49
-            # geht an die Geschichtsredaktion, nicht an die Kirchengeschichte.
-            self.erreicht.set(
-                "Außerdem bekommen es alle, die allgemeiner zuständig sind: "
-                + ", ".join(sorted(mit)) + ". Wer nur für ein anderes "
-                "Unterthema oder Teilgebiet eingetragen ist, bekommt es nicht.")
+            self.erreicht.set("Links Regionen und Themen des Buchs ankreuzen.")
+        elif not self.nachbarn:
+            self.erreicht.set("Kein ähnliches früheres Buch gefunden. Unten "
+                              "stehen nur Kontakte aus der Gegend, nichts ist "
+                              "vorangekreuzt.")
         else:
-            self.erreicht.set("")
+            prozent = round(core.SCHWELLE * 100)
+            self.erreicht.set(
+                f"Vorschlag aus den {len(self.nachbarn)} ähnlichsten Büchern: "
+                f"Angekreuzt ist, wer bei mindestens {prozent} % davon dabei "
+                f"war. Das trifft erfahrungsgemäß rund die Hälfte der "
+                f"richtigen Liste, die andere Hälfte steht oft weiter unten "
+                f"oder muss gesucht werden.")
+        self._fuelle_aehnlich()
+        self._fuelle_treffer()
+
+    def _fuelle_aehnlich(self):
+        baum = self.aehnlich_baum
+        baum.delete(*baum.get_children())
+        for _, b in self.nachbarn:
+            baum.insert("", "end", iid=str(b.nummer), values=(
+                b.titel, b.datum.strftime("%m/%Y"), len(b.empfaenger),
+                "; ".join(sorted(b.regionen)), "; ".join(sorted(b.themen))))
+
+    def _angekreuzt(self, t: core.Treffer) -> bool:
+        i = t.kontakt.access_id
+        return i in self.hinzu or (t.vorgeschlagen and i not in self.abgewaehlt)
+
+    def _such_text(self, k: core.Kontakt) -> str:
+        e = self.verteiler.eintraege.get(k.access_id)
+        return core.alphabetisch(" ".join(
+            (k.institution, k.abteilung, k.person, k.ort, k.mail, k.medium,
+             e.medienart if e else "", *(e.regionen if e else ()),
+             *(e.themen if e else ()))))
+
+    def _treffer_werte(self, t: core.Treffer) -> dict[str, str]:
+        k = t.kontakt
+        e = self.verteiler.eintraege.get(k.access_id)
+        return {"inst": k.institution, "abt": k.abteilung,
+                "quote": f"{round(100 * t.stimmen)} %" if t.stimmen else "",
+                "grund": t.warum, "ort": k.ort,
+                "mail": k.mail if k.mails else "", "person": k.person,
+                "medium": (e.medienart if e else "") or k.medium}
+
+    def _treffer_anzeige(self) -> list[core.Treffer]:
+        """Was die Liste zeigt: nach der Suche gefiltert, dann sortiert.
+
+        Beides ändert nur die Anzeige. Wer gerade ausgeblendet ist, bleibt
+        angekreuzt und geht mit, sonst könnte eine vergessene Suche still
+        Empfänger kosten.
+        """
+        worte = core.alphabetisch(self.treffer_suche.get()).split()
+
+        def passt(t: core.Treffer) -> bool:
+            text = self._such_text(t.kontakt)
+            return all(w in text for w in worte)
+
+        zeilen = [t for t in self.treffer if passt(t)] if worte else self.treffer
+        if not self.treffer_ordnung:
+            return zeilen
+        spalte, absteigend = self.treffer_ordnung
+        # Gleichstände alphabetisch: Die Sortierung danach ist stabil, auch
+        # absteigend.
+        zeilen = sorted(zeilen, key=lambda t: t.kontakt.sortierung)
+        if spalte == "sel":
+            return sorted(zeilen, key=self._angekreuzt, reverse=absteigend)
+        if spalte in ("quote", "grund"):
+            # Nach Stimmen, nicht nach dem Text: Neuere Bücher wiegen mehr,
+            # darum zählt „in 5 von 15“ nicht immer weniger als „in 6 von 15“.
+            return sorted(zeilen, key=lambda t: t.stimmen, reverse=absteigend)
+
+        def text(t):
+            return core.alphabetisch(self._treffer_werte(t)[spalte])
+
+        # Leere Felder immer nach hinten, auch bei Z–A: Sie sagen nichts aus.
+        return (sorted((t for t in zeilen if text(t)), key=text,
+                       reverse=absteigend)
+                + [t for t in zeilen if not text(t)])
+
+    def _treffer_sortieren(self, spalte: str):
+        """Erster Klick sortiert, der zweite dreht um, der dritte stellt die
+        Reihenfolge des Vorschlags wieder her. Haken und Quote beginnen mit
+        den Stärksten, alles andere bei A."""
+        start = spalte in ("sel", "quote", "grund")
+        ordnung = self.treffer_ordnung
+        if not ordnung or ordnung[0] != spalte:
+            self.treffer_ordnung = (spalte, start)
+        elif ordnung[1] == start:
+            self.treffer_ordnung = (spalte, not start)
+        else:
+            self.treffer_ordnung = None
+        for s_, titel in self.treffer_spalten.items():
+            pfeil = ""
+            if self.treffer_ordnung and self.treffer_ordnung[0] == s_:
+                pfeil = " ▼" if self.treffer_ordnung[1] else " ▲"
+            self.treffer_baum.heading(s_, text=titel + pfeil)
         self._fuelle_treffer()
 
     def _fuelle_treffer(self):
         baum = self.treffer_baum
         baum.delete(*baum.get_children())
-        for k, g in self.treffer:
-            e = self.verteiler.eintraege.get(k.access_id)
-            aus = k.access_id in self.abgewaehlt
-            if aus:
-                tags = ("aus",)
-            elif g == "von Hand":
-                tags = ("hand",)
-            elif e and not e.geprueft:
-                tags = ("ungeprueft",)
-            else:
-                tags = ()
-            if not e or e.geprueft or g == "von Hand":
-                vermerk = ""
-            else:
-                vermerk = "  (ungeprüft, unsicher)" if e.unsicher \
-                    else "  (ungeprüft)"
+        anzeige = self._treffer_anzeige()
+        for t in anzeige:
+            k = t.kontakt
+            w = self._treffer_werte(t)
+            an = self._angekreuzt(t)
+            tags = (("aus",) if not an
+                    else ("hand",) if k.access_id in self.hinzu else ())
             baum.insert("", "end", iid=str(k.access_id), tags=tags, values=(
-                HAKEN_AUS if aus else HAKEN_AN, k.institution, g + vermerk,
-                k.person, k.ort, k.mail if k.mails else "— nur Post —", k.abteilung,
-                k.medium))
+                HAKEN_AN if an else HAKEN_AUS, w["inst"], w["abt"], w["quote"],
+                w["grund"], w["ort"], w["mail"] or "— nur Post —", w["person"],
+                w["medium"]))
         gewaehlt = self._empfaenger()
         _, ohne, doppelt = core.mailadressen([k for k, _ in gewaehlt])
-        teile = [f"{len(gewaehlt)} Empfänger"]
-        if len(gewaehlt) != len(self.treffer):
-            teile.append(f"{len(self.treffer) - len(gewaehlt)} abgewählt")
+        teile = [f"{len(gewaehlt)} Empfänger angekreuzt"]
+        rest = len(self.treffer) - len(gewaehlt)
+        if rest:
+            teile.append(f"{rest} weitere zur Auswahl")
         if ohne:
             teile.append(f"{ohne} ohne E-Mail (nur Post)")
         if doppelt:
             teile.append(f"{doppelt} E-Mail-Adressen doppelt "
                          f"(werden einmal kopiert)")
+        if len(anzeige) < len(self.treffer):
+            teile.insert(0, f"Suche zeigt {len(anzeige)} von "
+                            f"{len(self.treffer)}")
         self.treffer_zahl.set(" · ".join(teile))
 
     def _empfaenger(self) -> list[tuple[core.Kontakt, str]]:
-        return [(k, g) for k, g in self.treffer
-                if k.access_id not in self.abgewaehlt]
+        return [(t.kontakt, t.warum) for t in self.treffer
+                if self._angekreuzt(t)]
 
     def _treffer_klick(self, event):
-        if self.treffer_baum.identify_column(event.x) != "#1":
+        # Überschriften müssen durch, auch die der Hakenspalte: Sie sortieren.
+        if (self.treffer_baum.identify_region(event.x, event.y) != "cell"
+                or self.treffer_baum.identify_column(event.x) != "#1"):
             return None
         iid = self.treffer_baum.identify_row(event.y)
         if iid:
             self._treffer_umschalten([int(iid)])
         return "break"
 
+    def _treffer_doppelklick(self, event):
+        # Zweimal schnell auf eine Überschrift ist Umsortieren, kein Öffnen.
+        if self.treffer_baum.identify_region(event.x, event.y) == "cell":
+            self._zum_einordnen()
+
     def _treffer_umschalten(self, ids: list[int]):
+        nach_id = {t.kontakt.access_id: t for t in self.treffer}
         for i in ids:
-            self.abgewaehlt ^= {i}
+            if i not in nach_id:
+                continue
+            if self._angekreuzt(nach_id[i]):
+                self.hinzu.discard(i)
+                if nach_id[i].vorgeschlagen:
+                    self.abgewaehlt.add(i)
+            else:
+                self.abgewaehlt.discard(i)
+                if not nach_id[i].vorgeschlagen:
+                    self.hinzu.add(i)
         auswahl = self.treffer_baum.selection()
         oben = self.treffer_baum.yview()[0]
         self._fuelle_treffer()
@@ -785,17 +948,35 @@ class App(Tk):
             self.treffer_baum.selection_set(vorhanden)
         return "break"
 
+    def _liste_uebernehmen(self):
+        """Die Liste eines früheren Buchs als Ausgangspunkt nehmen."""
+        auswahl = self.aehnlich_baum.selection()
+        if not auswahl:
+            messagebox.showinfo("Liste übernehmen",
+                                "Bitte zuerst oben ein Buch markieren.")
+            return
+        buch = next(b for _, b in self.nachbarn if str(b.nummer) == auswahl[0])
+        ids = {i for i in buch.empfaenger if i in self.nach_id}
+        self.abgewaehlt = {t.kontakt.access_id for t in self.treffer
+                           if t.vorgeschlagen} - ids
+        self.hinzu = ids - {t.kontakt.access_id for t in self.treffer
+                            if t.vorgeschlagen}
+        self._auswahl_neu()
+        weg = len(buch.empfaenger) - len(ids)
+        self._log(f"Liste von „{buch.titel}“ übernommen: {len(ids)} Kontakte"
+                  + (f", {weg} gibt es in Access nicht mehr." if weg else "."))
+
     def _hinzufuegen_dialog(self):
         if not self.verteiler:
             return
         fenster = Toplevel(self)
-        fenster.title("Kontakt von Hand hinzufügen")
+        fenster.title("Kontakte suchen und hinzufügen")
         fenster.geometry("900x520")
         fenster.transient(self)
 
         z = ttk.Frame(fenster, padding=8)
         z.pack(fill="x")
-        ttk.Label(z, text="suchen (Institution, Person, Ort, E-Mail):").pack(
+        ttk.Label(z, text="suchen (Medium, Person, Ort, Region, Thema):").pack(
             side="left")
         such = StringVar()
         eingabe = ttk.Entry(z, textvariable=such, width=40)
@@ -818,20 +999,18 @@ class App(Tk):
 
         def fuellen(*_):
             baum.delete(*baum.get_children())
-            text = such.get().strip().lower()
-            schon = {k.access_id for k, _ in self.treffer}
+            text = core.alphabetisch(such.get().strip())
+            schon = {k.access_id for k, _ in self._empfaenger()}
             for k in self.kontakte:
                 if k.access_id in schon:
                     continue
-                if text and text not in " ".join(
-                        (k.institution, k.abteilung, k.person, k.ort,
-                         k.mail)).lower():
+                if text and text not in self._such_text(k):
                     continue
                 baum.insert("", "end", iid=str(k.access_id), values=(
                     k.institution, k.person, k.ort, k.mail))
 
-        def hinzu(*_):
-            ids = [int(i) for i in baum.selection()]
+        def hinzu(*_, ids=None):
+            ids = ids or [int(i) for i in baum.selection()]
             if not ids:
                 return
             self.hinzu.update(ids)
@@ -840,73 +1019,151 @@ class App(Tk):
             fuellen()
             self._log(f"{len(ids)} Kontakt(e) von Hand hinzugefügt.")
 
+        def alle_hinzu():
+            # Südkurier, Schwarzwälder Bote und Schwäbische Zeitung gehen breit
+            # raus, meist an 40–46 % der Familie: „Südkurier“ suchen, alle
+            # nehmen, die übrigen wieder abwählen.
+            hinzu(ids=[int(i) for i in baum.get_children()])
+
         such.trace_add("write", fuellen)
         baum.bind("<Double-1>", hinzu)
         k = ttk.Frame(fenster, padding=8)
         k.pack(fill="x")
-        ttk.Button(k, text="Hinzufügen", command=hinzu).pack(side="left")
+        ttk.Button(k, text="Markierte hinzufügen", command=hinzu).pack(
+            side="left")
+        ttk.Button(k, text="Alle Treffer hinzufügen",
+                   command=alle_hinzu).pack(side="left", padx=6)
         ttk.Button(k, text="Schließen", command=fenster.destroy).pack(
             side="right")
         fuellen()
 
-    def _mails_kopieren(self):
-        empfaenger = self._empfaenger()
-        if not empfaenger:
-            messagebox.showinfo("Nichts zu kopieren", "Die Liste ist leer.")
-            return
-        text, ohne, doppelt = core.mailadressen([k for k, _ in empfaenger])
-        self.clipboard_clear()
-        self.clipboard_append(text)
-        anzahl = len(text.split("; ")) if text else 0
-        meldung = f"{anzahl} E-Mail-Adressen in die Zwischenablage kopiert."
-        if ohne:
-            meldung += (f" {ohne} Empfänger haben keine E-Mail — die gehen "
-                        f"nur per Post (stehen in der gespeicherten Liste).")
-        self._log(meldung)
-        messagebox.showinfo("Kopiert", meldung + "\n\nIn Outlook in das Feld "
-                                                 "„Bcc“ einfügen.")
+    def _ablage(self) -> Path:
+        gewaehlt = self.cfg.get("ablage")
+        return Path(gewaehlt) if gewaehlt else core.AUSGABE_ORDNER
 
-    def _liste_speichern(self):
+    def _mappe_pfad(self) -> Path:
+        return self._ablage() / core.DATEN_ORDNER / core.VERTEILER_PFAD.name
+
+    def _historie_pfad(self) -> Path:
+        return self._ablage() / core.DATEN_ORDNER / core.HISTORIE_PFAD.name
+
+    def _ablage_pruefen(self) -> Path | None:
+        """Die Ablage, oder None, wenn jetzt nicht gespeichert werden soll.
+
+        Nie still woandershin ausweichen: Eine Liste, die nur auf diesem
+        Rechner liegt, sucht im Verlag später niemand.
+        """
+        ordner = self._ablage()
+        if ordner.is_dir():
+            return ordner
+        if not messagebox.askyesno(
+                "Ablage nicht erreichbar",
+                f"Der Ordner auf dem NAS ist nicht erreichbar:\n{ordner}\n\n"
+                f"Dort liegen die Listen und die Pressehistorie. Besteht die "
+                f"Verbindung zum Netz? Dann einfach noch einmal versuchen, "
+                f"die Auswahl bleibt erhalten.\n\nStattdessen dauerhaft "
+                f"einen anderen Ordner wählen (etwa denselben über einen "
+                f"Laufwerksbuchstaben)?"):
+            return None
+        neu = filedialog.askdirectory(title="Ordner „Presselisten für "
+                                            "Rezensionsversand“ wählen")
+        if not neu:
+            return None
+        self.cfg["ablage"] = neu
+        self._sichere_config()
+        # Liegt dort noch keine Mappe, kommt die geladene mit: Sonst legte das
+        # nächste Laden eine leere an, und die Einordnungen wären weg.
+        if self.verteiler and not self._mappe_pfad().is_file():
+            self._speichern()
+        return Path(neu)
+
+    def _alles_ausgeben(self):
+        """Ein Klick für alles: Ordner mit allen Listen anlegen, die
+        E-Mail-Adressen in die Zwischenablage legen, die Liste in die Historie
+        aufnehmen und den Ordner öffnen."""
         empfaenger = self._empfaenger()
         if not empfaenger:
-            messagebox.showinfo("Nichts zu speichern", "Die Liste ist leer.")
+            messagebox.showinfo("Nichts auszugeben", "Die Liste ist leer.")
             return
         if not self.buch_titel.get().strip() and not messagebox.askyesno(
                 "Ohne Titel",
-                "Es ist kein Buchtitel eingetragen. Die Datei bekommt dann nur "
-                "das Datum als Namen. Trotzdem speichern?"):
+                "Es ist kein Buchtitel eingetragen. Der Ordner bekommt dann "
+                "nur das Datum als Namen. Trotzdem ausgeben?"):
             return
-        abgewaehlt = [(k, g) for k, g in self.treffer
-                      if k.access_id in self.abgewaehlt]
+        ablage = self._ablage_pruefen()
+        if ablage is None:
+            return
+        titel = self.buch_titel.get().strip()
+        isbn = self.buch_isbn.get().strip()
+        regionen = self.buch_regionen.gewaehlt()
+        themen = self.buch_themen.gewaehlt()
+        abgewaehlt = [(t.kontakt, t.warum) for t in self.treffer
+                      if t.kontakt.access_id in self.abgewaehlt]
         try:
-            ziel = core.speichere_versand(
-                self.buch_titel.get().strip(), self.buch_isbn.get().strip(),
-                self.buch_regionen.gewaehlt(), self.buch_themen.gewaehlt(),
-                empfaenger, abgewaehlt)
+            ziel = core.speichere_versand(titel, isbn, regionen, themen,
+                                          empfaenger, abgewaehlt, ablage)
         except OSError as e:
-            messagebox.showerror("Nicht gespeichert", str(e))
+            messagebox.showerror("Nicht ausgegeben", str(e))
             return
-        self._log(f"Gespeichert: {ziel}")
-        messagebox.showinfo("Gespeichert",
-                            f"{len(empfaenger)} Empfänger gespeichert in\n"
-                            f"{ziel}\n\nDas Blatt „Empfänger“ taugt direkt "
-                            f"als Datenquelle für den Serienbrief.")
+        self._log(f"Ausgegeben: {ziel}")
 
-    def _ordner_oeffnen(self):
-        if not core.AUSGABE_ORDNER.exists():
-            messagebox.showinfo("Noch nichts da",
-                                "Der Ordner entsteht beim ersten Speichern.")
-            return
+        # Dieselbe Reihenfolge wie in den Dateien, sonst stünde in der
+        # Zwischenablage womöglich eine andere Schreibweise einer doppelten
+        # Sammeladresse als in E-Mail-Adressen.txt.
+        kontakte = sorted((k for k, _ in empfaenger), key=lambda k: k.sortierung)
+        text, _, _ = core.mailadressen(kontakte)
+        self.clipboard_clear()
+        self.clipboard_append(text)
+
+        # Frisch einlesen statt die geladene Fassung schreiben: Jemand könnte
+        # die Historie inzwischen in Excel bearbeitet haben, etwa eine Liste
+        # gelöscht, die als Vorbild nichts taugte. Fehlt sie am Ort (gerade
+        # erst einen anderen Ordner gewählt), zieht die geladene mit um.
+        vermerk = "Die Liste zählt ab morgen für neue Vorschläge."
         try:
-            _oeffne(core.AUSGABE_ORDNER)
+            pfad = self._historie_pfad()
+            historie = (core.lade_historie(pfad) if pfad.is_file()
+                        else list(self.historie))
+            core.buch_merken(historie, titel or "(ohne Titel)", isbn, regionen,
+                             themen, [k.access_id for k in kontakte])
+            core.speichere_historie(historie, self.kontakte, pfad)
+            self._historie_setzen(historie)
+            self._stand_neu()
+        except Exception as e:                              # noqa: BLE001
+            vermerk = (f"Die Liste ist ausgegeben, aber nicht in die Historie "
+                       f"gekommen und zählt nicht für neue Vorschläge:\n{e}")
+            self._log(f"Historie nicht gespeichert: {e}")
+
+        adressen = len(core.einzelne_mails(kontakte))
+        anschriften = sum(1 for k in kontakte if k.hat_anschrift)
+        keiner = sum(1 for k in kontakte if not k.mails and not k.hat_anschrift)
+        mails = (f"Die {adressen} E-Mail-Adressen liegen schon in der "
+                 f"Zwischenablage: in Outlook in das Feld „Bcc“ einfügen."
+                 if adressen else "Niemand auf der Liste hat eine E-Mail-Adresse.")
+        warnung = (f"\n\n{keiner} Empfänger haben weder E-Mail noch "
+                   f"Anschrift und stehen nur in {core.DATEI_EMPFAENGER}."
+                   if keiner else "")
+        messagebox.showinfo(
+            "Fertig",
+            f"{len(empfaenger)} Empfänger, ausgegeben nach\n{ziel}\n\n"
+            f"{mails}\n\n"
+            f"Im Ordner, der sich gleich öffnet:\n"
+            f"• {core.DATEI_EMPFAENGER}: alle, mit Protokoll\n"
+            f"• {core.DATEI_MAIL}: {adressen} Adressen\n"
+            f"• {core.DATEI_POST}: {anschriften} Anschriften für Serienbrief "
+            f"und Etiketten\n"
+            f"• {core.DATEI_BCC}: die Adressen noch einmal für Bcc"
+            f"{warnung}\n\n{vermerk}")
+        # Erst nach der Meldung öffnen, sonst schiebt sich der Explorer davor.
+        try:
+            _oeffne(ziel)
         except Exception as e:                              # noqa: BLE001
             self._log(f"Ordner ließ sich nicht öffnen: {e}")
-            messagebox.showinfo("Ordner", str(core.AUSGABE_ORDNER))
 
     def _zum_einordnen(self):
         auswahl = self.treffer_baum.selection()
         if not auswahl:
-            messagebox.showinfo("Zuständigkeit bearbeiten",
+            messagebox.showinfo("Kontakt ansehen",
                                 "Bitte zuerst einen Kontakt in der Liste "
                                 "markieren.")
             return
@@ -919,11 +1176,9 @@ class App(Tk):
             self.ein_baum.selection_set(vorhanden)
             self.ein_baum.see(vorhanden[0])
 
-    # -- Einordnen ----------------------------------------------------
+    # -- Kontakte -----------------------------------------------------
 
     def _passt_ansicht(self, e: core.Eintrag) -> bool:
-        # „ungeprüft“ zeigt auch die leeren Vorschläge: „bekommt nie etwas“
-        # ist ebenfalls eine Einschätzung, die jemand bestätigen soll.
         ansicht = self.ansicht.get()
         if ansicht == "ungeprüft":
             return not e.geprueft
@@ -931,8 +1186,8 @@ class App(Tk):
             return not e.geprueft and e.unsicher
         if ansicht == "geprüft":
             return e.geprueft
-        if ansicht == "bekommt nie etwas":
-            return not e.eingeordnet
+        if ansicht == "nie gewählt":
+            return not self.gewaehlt_zahl[e.access_id]
         if ansicht == "immer":
             return e.immer
         return True
@@ -966,6 +1221,7 @@ class App(Tk):
             baum.insert("", "end", iid=str(k.access_id), tags=tags, values=(
                 k.institution, k.abteilung, k.ort, e.medienart or k.medium,
                 core.als_text(e.regionen, v), core.als_text(e.themen, v),
+                self.gewaehlt_zahl[k.access_id] or "",
                 "x" if e.immer else "", "x" if e.geprueft else ""))
             n += 1
         self.ein_zahl.set(f"{n} Kontakte")

@@ -1,187 +1,150 @@
 # Presseverteiler
 
-Wählt für ein neues Buch die Pressekontakte aus, die es bekommen sollen.
+Schlägt für ein neues Buch die Pressekontakte vor, die es bekommen sollen.
 Bisher sucht der Pressereferent sie je Buch von Hand aus der Access-Liste
 heraus. Das dauert rund 30 Minuten und geht leicht schief.
 
-**Stand: Prototyp.** Die Schlagworte und die Auswahlregel sind ein
-begründeter Vorschlag. Sie werden erst mit dem Pressereferenten festgezurrt
-(siehe *Offene Punkte*).
+**Stand: Prototyp.** Unter Linux geprüft, unter Windows noch nicht gebaut.
 
-## Wie es auswählt
+## Wie es vorschlägt
 
-Für jeden Pressekontakt ist festgehalten, wofür er zuständig ist: **Regionen**,
-**Themen** und gegebenenfalls **immer**. Für das Buch kreuzt man dieselben
-Schlagworte an. Ein Kontakt bekommt das Buch, wenn **jede ausgefüllte Achse
-passt**. Eine leere Achse zählt als „egal“.
+Beim Buch kreuzt man Regionen und Themen an. Das Programm sucht die 15
+ähnlichsten früheren Bücher aus der Historie. Deren Listen stimmen ab:
 
-| Kontakt eingetragen mit | bekommt |
-|---|---|
-| nur Regionen (Lokalzeitung) | alles aus diesen Regionen |
-| nur Themen (Eisenbahn-Fachblatt) | alles zu diesen Themen, egal woher |
-| Regionen und Themen | nur, was in beiden passt |
-| immer | jedes Buch |
-| nichts | nie etwas |
+* **Angekreuzt** ist, wer bei mindestens 30 % der ähnlichen Bücher dabei war
+  (gewichtet nach Ähnlichkeit und Alter der Liste).
+* **Grau darunter** stehen die übrigen Kontakte aus diesen Listen, sortiert nach
+  Stimmen, dazu Kontakte aus der Gegend ohne Vorgeschichte.
 
-Diese Verknüpfung (UND zwischen den Achsen, ODER innerhalb einer Achse,
-leer = egal) kann der AutoFilter von Excel nicht. Deshalb reicht eine reine
-Excel-Liste nicht aus.
+Oben stehen die ähnlichen Bücher selbst. Wer die Liste eines davon übernimmt,
+fängt mit genau dieser Liste an. Zwei Bücher derselben Reihe oder desselben Orts
+bekamen bisher oft dieselbe Liste.
 
-**Ober- und Teilgebiete.** Im Blatt *Schlagworte* steht, wozu ein
-Schlagwort gehört. Daraus folgt zweierlei:
+Jede gespeicherte Liste kommt in die Historie, ab dem nächsten Tag zählt sie für
+neue Vorschläge. Der Vorschlag lernt also mit.
 
-* Wer für ein Gebiet oder Thema zuständig ist, bekommt auch alles darunter.
-  Ein Buch über den Pfinzgau geht deshalb auch an alle, die für den
-  Landkreis Karlsruhe, die Region Karlsruhe, Baden oder Baden-Württemberg
-  eingetragen sind. Ein Buch zur Revolution 1848/49 geht an die
-  Geschichtsredaktionen, aber nicht an die für Kirchengeschichte.
-* Kreuzt man beim Buch eine **Region** an, sind ihre Teilgebiete gleich mit
-  angekreuzt: Landkreis Karlsruhe nimmt Kraichgau und Pfinzgau mit, denn das
-  Buch betrifft auch Bretten. Einzelne Teilgebiete lassen sich wieder
-  abwählen. Bei **Themen** gilt das nicht: Ein Geschichtsbuch ist nicht
-  automatisch Kirchengeschichte.
+Warum nicht nach Zuständigkeit je Kontakt? Das war der erste Entwurf, und die
+alten Listen haben ihn widerlegt: Er traf deutlich schlechter als eine feste
+Liste der 60 häufigsten Kontakte. Die Befunde stehen in
+[WIP_Presselisten-Auswertung.md](WIP_Presselisten-Auswertung.md).
 
-Ein Teilgebiet, das nur mitgenommen wurde, zieht seinerseits nichts nach
-oben. Der Kraichgau liegt auch im Landkreis Heilbronn. Ein Buch über den
-Landkreis Karlsruhe geht trotzdem nicht an die Redaktionen für Heilbronn
-oder Württemberg.
-
-Die Startliste der Schlagworte stammt aus den Kategorien des Webshops
-(Herkunft „Shop“). Dazu kommen Ergänzungen, die die Presse braucht und der
-Shop nicht hat (Herkunft „Ergänzung“): „Geschichte“ als Oberbegriff,
-„Pfalz“ neben „Kurpfalz“, Stadtkreise und fehlende Landkreise. Mit der
-ersten Einschätzung (November 2026) kamen die Gegenden dazu, in denen
-Lokalpresse sitzt, die bisher nur unter „Baden“, „Württemberg“ oder „Pfalz“
-gepasst hätte: Freiburg/Breisgau, Region Stuttgart, Tübingen, Reutlingen,
-Oberschwaben, Ulm, Südpfalz, Westpfalz, Rheinhessen, Unterfranken, Saarland
-u. a. Dazu kamen die Themen „Sport“ und „Architektur / Denkmalpflege“, die
-häufigsten Access-Fachgebiete ohne Shop-Kategorie.
-*Ortsgeschichte* hängt bewusst nicht unter *Geschichte*: Sonst bekäme jede
-Geschichtszeitschrift jede Ortschronik.
+**Was man erwarten darf** (blind geprüft an 89 Büchern ab 2025): Der Vorschlag
+trifft etwa die Hälfte der echten Liste, unter den ersten 100 stehen zwei Drittel,
+unter den ersten 150 drei Viertel. Er ersetzt das Prüfen also nicht. Mehr ist
+kaum zu erwarten, denn zwei Ausgaben derselben Zeitschrift stimmen untereinander
+noch weniger überein.
 
 ## Dateien
 
 | Datei | was | wer pflegt |
 |---|---|---|
-| Access-Export (xlsx) | Anschriften; die ganze Kundentabelle wie für den Mailinglisten-Abgleich | Access, das Tool liest nur |
-| `Presseverteiler.xlsx` | wer wofür zuständig ist, dazu die Schlagwortliste | das Tool; in Excel lesbar und notfalls von Hand änderbar |
-| `Presseversand/<Datum>_<ISBN>_<Titel>.xlsx` | je Buch die Empfänger (taugt als Serienbrief-Quelle) und ein Protokoll | das Tool |
-| `einschaetzung/` (nur im Repo-Ordner) | Pakete und Ergebnisse der ersten Einschätzung, Sicherung der Mappe davor | `einschaetzung.py` |
+| `_Presseverteiler/Access_Export.xlsx` | Anschriften; die ganze Kundentabelle wie für den Mailinglisten-Abgleich | Access, dorthin exportiert; das Tool liest nur |
+| `_Presseverteiler/Pressehistorie.xlsx` | wer welches Buch bekommen hat | das Tool; in Excel lesbar und von Hand änderbar |
+| `_Presseverteiler/Presseverteiler.xlsx` | Regionen und Themen je Kontakt, dazu die Schlagwortliste | das Tool; in Excel lesbar und von Hand änderbar |
+| `<Titel>/` | je Buch ein Ordner mit den Listen für E-Mail und Post und dem Protokoll | das Tool |
+| `config.json` neben der .exe | nur wenn ein Rechner einen anderen Export oder eine andere Ablage nimmt | das Tool, je Rechner |
 
-Alles liegt neben der .exe. Die Mappe enthält Namen und Zuständigkeiten von
-Journalisten und ist deshalb nicht eingecheckt.
+Alles außer der `config.json` liegt auf dem NAS unter
+`vr-intern/VR-Akquise/MK/Presse/Presselisten für Rezensionsversand`, bei den von
+Hand angelegten Listen seit 2020. Anders als bei den übrigen Tools liegen die Mappen
+nicht neben der .exe: Dort wären sie in der lokalen Kopie des Launchers
+ungesichert, und jeder Rechner lernte für sich. Ein neuer Rechner braucht deshalb
+nichts weiter, er klickt nur auf *Laden*. Ist das NAS nicht erreichbar, fragt das Tool beim Laden und
+beim Ausgeben nach und weicht nie still aus. Wer dann einen anderen Ordner wählt,
+etwa denselben über einen Laufwerksbuchstaben, dem merkt es ihn sich. Die Mappen
+nennen Journalisten und sind deshalb nicht eingecheckt.
+
+**Access-Export auffrischen:** In Access die *komplette Kundentabelle* (nicht die
+Mailing-Abfrage) nach Excel exportieren und `_Presseverteiler/Access_Export.xlsx`
+überschreiben. Wer im letzten Schritt des Assistenten *Exportschritte speichern*
+anhakt, kann das später unter *Externe Daten → Gespeicherte Exporte* mit einem
+Klick wiederholen. Neue Pressekontakte kennt das Tool erst nach dem nächsten
+Export und *Laden*. Vorgeschlagen werden sie erst, wenn er sie einmal über die
+Suche dazugenommen hat, weil der Vorschlag aus früheren Listen lernt.
 
 Als **Presse** gilt in Access, wer bei `Presse/ZS` „Presse“ oder „ZS“ stehen
 hat **oder** die Mailing-Kategorie `P` trägt. Die beiden Felder decken sich
 nicht ganz, und wer nur eines prüft, verliert Kontakte. Sätze mit einem
 Vermerk unter *Datensatz gelöscht* (verzogen, verstorben …) werden übergangen.
+Die 24 VIPs, die in Listen vorkommen, sind fast alle auch als Presse markiert.
 
 ## Ablauf
 
-1. **Einmalig:** Access-Export wählen und auf *Laden* klicken. Beim ersten
-   Mal legt das Tool die Mappe an. Die alten Access-Felder `Region 1–3` und
-   `Fachgebiet 1–3` werden, soweit eindeutig, als **ungeprüfte Vorschläge**
-   übernommen (im Aug. 2026: 923 von 1.903 Kontakten). Was nicht zu übersetzen
-   war, steht im Blatt *Altwerte aus Access*.
-2. **Einordnen:** Im Reiter *Einordnen* zuerst die Ansicht „ungeprüft und
-   unsicher“ wählen (rot), danach „ungeprüft“ (braun), und durchklicken.
-   Rechts stehen:
-   * die Begründung des Vorschlags („Lokalredaktion der BNN in Bretten“),
-   * die alten Access-Werte und die Bemerkungen. Dort stehen oft Regeln, die
-     es sonst nirgends gibt.
+1. **Laden** klicken. Den Access-Export, die Historie und die Mappe findet das Tool
+   auf dem NAS.
+2. **Je Buch:** Titel und ISBN eintragen, Regionen und Themen ankreuzen. Beide
+   sind wichtig: Ohne Regionen oder ohne Themen trifft der Vorschlag spürbar
+   schlechter.
+3. **Prüfen:** Die Liste von oben nach unten durchsehen. Mit dem Haken an- oder
+   abwählen. Die grauen Zeilen lohnen den Blick, die Hälfte der richtigen Liste
+   steht dort oder fehlt ganz. Ein Klick auf eine Spaltenüberschrift sortiert,
+   Texte nach dem Alphabet, *Quote* und *warum* nach der Stimmenzahl. Das Feld
+   *suchen* filtert beim Tippen. Beides ändert nur die Anzeige: Wer ausgeblendet
+   ist, bleibt angekreuzt.
+4. **Ergänzen:** *Kontakte suchen und hinzufügen*. Die Suche kennt auch Regionen
+   und Themen. Eine ganze Zeitungsfamilie geht mit „Südkurier“ suchen und *Alle
+   Treffer hinzufügen*.
+5. **Ausgeben:** *Fertig – alles ausgeben* erledigt alles auf einmal. Es legt
+   in der Ablage einen Ordner mit dem Buchtitel an, legt die E-Mail-Adressen in die
+   Zwischenablage (in Outlook unter **Bcc** einfügen), nimmt die Liste in die
+   Historie auf und öffnet den Ordner. Stehen bei einem Kontakt mehrere Adressen,
+   gehen alle mit, doppelte werden zusammengefasst. Am selben Tag ersetzt erneutes
+   Ausgeben die Listen. Gibt es den Titel von einem anderen Tag, bekommt der neue
+   Ordner das Datum, die alte Liste bleibt. Im Ordner liegen:
+     * `Empfänger.xlsx`: alle Empfänger, *Buch* und *Abgewählt* sind das Protokoll.
+     * `E-Mail.xlsx`: jede Adresse einmal, eine je Zeile.
+     * `E-Mail-Adressen.txt`: dieselben Adressen, fertig für das Feld **Bcc**.
+     * `Post.xlsx`: alle mit Anschrift, Quelle für Serienbrief und Etiketten. Die
+       Spalte *auch per E-Mail* zeigt, wer nur per Post erreichbar ist.
 
-   Regionen und Themen stehen nebeneinander, darunter Medienart und Ressort.
-   *Übernehmen* speichert sofort, markiert den Kontakt als geprüft und springt
-   zum nächsten. Ein Kontakt ohne Schlagworte bekommt nie etwas. Auch das ist
-   ein Vorschlag, den man bestätigt.
-3. **Je Buch:** Titel und ISBN eintragen, Regionen und Themen ankreuzen.
-   Die Liste prüfen: braun bedeutet *noch ungeprüft*, blau bedeutet *von Hand
-   hinzugefügt*. Mit dem Haken wählt man für dieses Buch ab. Dann:
-   * *E-Mail-Adressen kopieren* und in Outlook unter **Bcc** einfügen.
-     Stehen bei einem Kontakt mehrere Adressen, gehen alle mit. Doppelte
-     werden zusammengefasst.
-   * *Liste speichern* legt die Datei unter `Presseversand/` ab. Das
-     Blatt *Empfänger* dient als Quelle für Serienbrief oder Etiketten,
-     die Blätter *Buch* und *Abgewählt* sind das Protokoll.
+Der Reiter **Kontakte** ist keine Pflicht. Dort stehen Regionen, Themen, Medienart
+und Ressort je Kontakt als Suchhilfe, die Spalte *Listen* zeigt, wie oft jemand
+gewählt wurde, und die Ansicht „nie gewählt“ die Kontakte ohne Vorgeschichte.
 
-Wer die Mappe in Excel bearbeitet, muss dort speichern, Excel schließen und
-im Tool auf *Laden* klicken. Bemerkt das Tool beim Speichern, dass die Mappe
-seit dem Laden von außen geändert wurde, speichert es nicht, statt fremde
-Änderungen zu überschreiben.
+Wer eine Mappe in Excel bearbeitet, muss dort speichern, Excel schließen und im
+Tool auf *Laden* klicken.
 
-## Erste Einschätzung
+## Schlagworte
 
-Die Access-Felder ergaben nur für knapp die Hälfte der Kontakte einen
-Vorschlag, und der war grob. Deshalb wurde jeder Kontakt einmal von Agenten
-eingeschätzt, wie bei der Jubiläums-Recherche. Die Fragen dabei: Was ist das
-für ein Medium, wo erscheint es, worüber berichtet es? Das Ergebnis steht als
-**ungeprüfter** Vorschlag in der Mappe, mit Begründung, Medienart, Ressort
-und dem Vermerk „unsicher“.
-
-```
-python -m presseverteiler.einschaetzung pakete       # einschaetzung/paket_NN.md
-#   je Paket ein Agent nach einschaetzanleitung.md → ergebnis_NN.jsonl
-python -m presseverteiler.einschaetzung pruefen      # vollständig? Schlagworte gültig?
-python -m presseverteiler.einschaetzung uebernehmen  # in die Mappe, mit Sicherung
-```
-
-`uebernehmen` rührt geprüfte Einträge nicht an, gleicht das Blatt
-*Schlagworte* an die Startliste im Code an und legt vorher eine Sicherung der
-Mappe in `einschaetzung/` ab. Die Regeln, nach denen eingeschätzt wird, stehen
-in [einschaetzanleitung.md](einschaetzanleitung.md): engstes passendes
-Gebiet, Themen nur bei echter Beschränkung, „immer“ nur auf ausdrücklichen
-Wunsch. Die Anleitung sagt auch, dass die Access-Region oft eine alte
-Selektion ist („Odenwald“ beim Amtsblatt Mannheim).
-
-**Medienart und Ressort** werden erfasst, gehen aber noch nicht in die
-Auswahl ein. Sie werden erst dann ein Filter, wenn sich zeigt, dass der
-Pressereferent danach auswählt.
+Die Startliste stammt aus den Kategorien des Webshops (Herkunft „Shop“). Dazu
+kommen Ergänzungen, die der Shop nicht hat (Herkunft „Ergänzung“): „Geschichte“
+als Oberbegriff, „Pfalz“ neben „Kurpfalz“, Stadtkreise, fehlende Landkreise und
+die Gegenden, in denen Lokalpresse sitzt (Freiburg/Breisgau, Region Stuttgart,
+Südpfalz, Rheinhessen, Unterfranken u. a.). „gehört zu“ macht Bücher vergleichbar:
+Ein Buch über den Pfinzgau gilt auch als ähnlich zu Büchern über den Landkreis
+Karlsruhe. Kreuzt man beim Buch eine Region an, sind ihre Teilgebiete mit
+angekreuzt, verglichen wird aber nur das oberste Häkchen.
 
 ## Entwickeln
 
 ```
 python -m presseverteiler.main
 python -m presseverteiler.probelauf [mailing_list_updater/Access_Export.xlsx]
+python -m presseverteiler.blindtest [--abstimmen] [--ab 2023] [--buecher]
+python -m presseverteiler.historie_aufbauen [--ersetzen]
 pyinstaller presseverteiler/Presseverteiler.spec
 ```
 
-`probelauf.py` prüft die Auswahlregel gegen feste Sollwerte. Mit einem
-Access-Export legt es den Verteiler zusätzlich in einem temporären Ordner
-neu an und zählt Startwerte, Altwerte und Empfänger für drei Testbücher.
+* `probelauf.py` prüft den Vorschlag an erfundenen Daten gegen feste Sollwerte.
+* `blindtest.py` tut für jedes Buch so, als erschiene es gerade: Es kennt nur die
+  Listen von davor und wird erst danach mit der echten Liste verglichen.
+  `--abstimmen` schaut nur auf 2023–2024. Wer `NACHBARN`, `SCHWELLE` oder
+  `ALTERUNG_JAHRE` in `core.py` ändert, stellt sie dort ein und misst dann blind.
+* `historie_aufbauen.py` baut die Historie einmalig aus `training_data/` und den
+  Buch-Etiketten in `einschaetzung/lernen/`. Beides ist nicht eingecheckt.
+* `einschaetzung.py` und [einschaetzanleitung.md](einschaetzanleitung.md) sind die
+  Agenten-Einschätzung der Kontakte. Ihr Ergebnis ist nur noch Suchhilfe.
 
 ## Offene Punkte
 
-* Aus welcher Liste wählt der Pressereferent heute: aus der Access-Tabelle
-  oder aus einer eigenen Abfrage bzw. Datei?
-* Reichen die Shop-Kategorien? Kritisch sind die Ortsgeschichte (im Shop
-  alphabetisch und ohne Region) und fehlende Landkreise.
-* Wonach entscheidet er außer Region und Thema noch: Medium, Ressort,
-  Wünsche einzelner Redakteure?
-* Was braucht er nach der Auswahl: Mail, Serienbrief, Etiketten,
-  Rezensionsexemplare?
-* Wohin, wenn bei einem Kontakt mehrere Adressen stehen: alle (so ist es
-  jetzt) oder nur die erste?
-* Wählt er auch nach **Medienart oder Ressort** aus? Zum Beispiel bei der
-  RNZ nur die Kultur, Rundfunk nur bei Autoreninterviews. Beides ist erfasst
-  und müsste nur noch als Filter an die Auswahl.
-* **Rezensionsexemplar oder nur Pressemitteilung:** Wer bekommt ein Buch,
-  wer nur eine Mail?
-* **Wohnort des Autors:** Soll ihn das Buch als zweites Regionsfeld
-  bekommen? Darüber würden nur Lokalmedien ausgewählt, denn die Zeitung am
-  Wohnort berichtet auch über ein Buch, das woanders spielt.
-* **Gemeinde statt Kreis** für Amts- und Mitteilungsblätter: Die Ortschronik
-  Östringen gehört ins Amtsblatt Östringen, nicht in alle Amtsblätter des
-  Landkreises.
-* **Vorlauf:** Jahrbücher und Vierteljahreshefte brauchen die Meldung Monate
-  vorher. Muss das Programm daran erinnern?
-* **Wünsche nach Autor:** Einzelne Kontakte möchten laut Bemerkung alle
-  Bücher eines bestimmten Autors (Alpenverein Tübingen, Württemberg
-  Reporter). Das lässt sich mit Region und Thema nicht abbilden.
-* **Mehrere Leute je Redaktion:** Mit der Einschätzung bekäme die
-  Ortsgeschichte Östringen 227 Empfänger, darunter 33 beim SWR und
-  15 bei der RNZ. Schreibt er wirklich alle an, oder je Medium nur das
-  passende Ressort?
-* **Später:** aus alten Selektionen lernen (Shop-Kategorien per ISBN
-  gegen die damaligen Empfänger abgleichen) und die Schlagworte eines Buchs
-  aus dem Shop vorbelegen. Sobald es Versandprotokolle gibt, lässt sich auch
-  festhalten, wer tatsächlich berichtet hat.
+* Warum unterscheiden sich Listen derselben Reihe so stark: Absicht oder Zufall?
+  Wenn Absicht, fehlt dem Vorschlag noch ein Kriterium.
+* Was bedeuten `Direktversand` und die gelben Zeilen in den alten Listen?
+* **Rezensionsexemplar oder nur Pressemitteilung:** Wer bekommt ein Buch, wer
+  nur eine Mail? Das Tool unterscheidet das nicht.
+* **Wohnort des Autors:** Lokalzeitungen dort berichten oft auch über ein Buch,
+  das woanders spielt.
+* **Wünsche nach Autor:** Einzelne Kontakte möchten laut Bemerkung alle Bücher
+  eines Autors (Alpenverein Tübingen, Württemberg Reporter).
+* Regionen und Themen aus dem Shop vorbelegen (per ISBN).
+* Sollen die 802 nie gewählten Kontakte aus der Suche verschwinden?

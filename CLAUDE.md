@@ -12,7 +12,9 @@ mühsam herausfindet.
   Schlamperei. Nicht „aufräumen“ und eine gemeinsame Bibliothek daraus machen.
 * Muster je Tool: `core.py` (reine Logik, keine UI) / `app.py` (Tkinter) /
   `main.py` / `<Name>.spec`. Laufzeitdaten (`config.json`, Ausgabeordner) liegen
-  direkt neben der .exe, nicht in einem `data/`-Unterordner.
+  direkt neben der .exe, nicht in einem `data/`-Unterordner. Ausnahme:
+  `presseverteiler` legt Historie und Mappe aufs NAS (Begründung in seinem
+  `core.py`), nicht zurückbauen.
 * Kommentare erklären das **Warum**, besonders bei den Eigenheiten von Photoshop,
   Shopware und den Druckvorlagen. Diese Begründungen nicht wegkürzen — sie sind
   der Grund, warum der Code so aussieht.
@@ -36,3 +38,6 @@ mühsam herausfindet.
   — freigestelltes CMYK-TIF zum 3D-Mockup **und** der nicht gefundene
   Artikeldaten-Share. Enthält die gemessenen Befunde (woher der weiße Strich an
   der Buchkante kommt, welche Ebenen die Spiegelung sind) und die offenen Punkte.
+* [`presseverteiler/WIP_Presselisten-Auswertung.md`](presseverteiler/WIP_Presselisten-Auswertung.md)
+  — was 349 alte Presselisten über die echte Auswahl zeigen und wie der Vorschlag
+  aus ähnlichen Büchern blind abschneidet. Vor Änderungen am Vorschlag lesen.

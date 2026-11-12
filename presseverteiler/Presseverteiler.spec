@@ -15,9 +15,10 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    # probelauf.py und einschaetzung.py sind reine Entwicklungshilfe und
-    # gehören nicht in die .exe.
-    excludes=['presseverteiler.probelauf', 'presseverteiler.einschaetzung'],
+    # Entwicklerskripte gehören nicht in die .exe.
+    excludes=['presseverteiler.probelauf', 'presseverteiler.einschaetzung',
+              'presseverteiler.historie_aufbauen',
+              'presseverteiler.blindtest'],
     noarchive=False,
     optimize=0,
 )
