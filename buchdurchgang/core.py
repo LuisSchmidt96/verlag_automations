@@ -437,6 +437,10 @@ def pruefe_paar(pdf_pfad, xml_pfad, cfg: dict) -> dict:
             f"PDF und ONIX gehören nicht zusammen:\n\n"
             f"    Umschlag-PDF   {isbn_pdf}\n"
             f"    ONIX-XML       {felder['isbn13']}  ({felder['titel']})")
+    # Beteiligte, die Shop, PI und BI nicht setzen oder nicht beugen können
+    # (unbekannte Rolle, Körperschaft ohne Dativ-Eintrag). Beide Werkzeuge
+    # lesen dieselbe ONIX, also gilt der Hinweis für alle drei Ausgaben.
+    warnungen.extend(felder.get("hinweise") or [])
 
     reg = cp.finde_schnittlinien(doc, ccfg)
     gemessen = cp.front_masse_cm(reg)

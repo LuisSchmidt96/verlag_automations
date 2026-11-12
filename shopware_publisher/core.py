@@ -198,6 +198,16 @@ DEFAULT_CONFIG = {
         "PB": "Broschur",
         "BZ": "Leinen",
     },
+    # Beugung nach „Hrsg. von“: Name der Körperschaft -> Dativform samt
+    # Artikel („Hrsg. vom Psychiatrischen Zentrum …“). Aus den Daten nicht
+    # abzuleiten, deshalb eine Tabelle — dieselbe wie im pi_bi_generator.
+    # Sie wächst beim Verlag und wird bei Updates nur ergänzt (_migriere).
+    "koerperschaft_dativ": {
+        "Deutsche Waldenservereinigung e.V. Ötisheim-Schönenberg":
+            "der Deutschen Waldenservereinigung e.V. Ötisheim-Schönenberg",
+        "Psychiatrisches Zentrum Nordbaden (PZN)":
+            "dem Psychiatrischen Zentrum Nordbaden (PZN)",
+    },
     "last_input_dir": "",
 
     # --- Gewichtsschätzung -------------------------------------------------
@@ -259,6 +269,12 @@ def _migriere(cfg: dict) -> dict:
             vorgabe = DEFAULT_CONFIG["umgebungen"].get(name) or {}
             if vorgabe.get("shop_url"):
                 umg["shop_url"] = vorgabe["shop_url"]
+
+    # Die Dativ-Tabelle gehört dem Verlag — nur ergänzen, was fehlt, sonst
+    # wären eigene Einträge nach einem Update weg.
+    tabelle = cfg.setdefault("koerperschaft_dativ", {})
+    for k, v in DEFAULT_CONFIG["koerperschaft_dativ"].items():
+        tabelle.setdefault(k, v)
     return cfg
 
 
@@ -619,7 +635,9 @@ def _kontributoren(product, rolle: str) -> list[dict]:
         return []
     beitraege = []
     for c in dd.findall("contributor"):
-        if _txt(c.find("b035")) != rolle:
+        # ONIX erlaubt mehrere Rollen je Person — nur die erste anzusehen,
+        # ließe die zweite unbemerkt fallen.
+        if rolle not in _rollen(c):
             continue
         seq = _txt(c.find("b034"))
         # b047 = Körperschaft ("Stiftung Geißstraße"). Die hat keinen Vor- und
@@ -646,8 +664,105 @@ def _kontributoren(product, rolle: str) -> list[dict]:
     return [n for _, n in sorted(beitraege, key=lambda x: x[0])]
 
 
+def _rollen(contributor) -> list[str]:
+    return [_txt(r) for r in contributor.findall("b035")]
+
+
 def _namen(kontributoren: list[dict]) -> list[str]:
     return [k["name"] for k in kontributoren]
+
+
+# Weitere Beteiligte (ONIX-Liste 17) -> Satzanfang in der Beschreibung.
+# Bisher fielen sie stillschweigend weg; im Shop stehen sie so: „Hrsg. vom
+# Nationalpark Schwarzwald. Fotografien von Burkhard Riegels.“ (Wälderstimmen).
+# A08 (Fotograf als Urheber) und A13 (Fotos von) landen im selben Satz.
+#
+# Dieselbe Tabelle steht im pi_bi_generator (bewusste Dopplung, siehe
+# CLAUDE.md) — wer hier eine Rolle ergänzt, sollte dort nachziehen.
+NEBENROLLEN = {
+    "A23": "Mit einem Vorwort von",
+    "A15": "Mit einer Einführung von",
+    "A24": "Mit einer Einleitung von",
+    "A14": "Texte von",
+    "A08": "Fotografien von",
+    "A13": "Fotografien von",
+    "A12": "Illustrationen von",
+    "A35": "Zeichnungen von",
+    "A39": "Karten von",
+    "B06": "Übersetzt von",
+    "A19": "Mit einem Nachwort von",
+}
+
+# Autor, Herausgeber und „Beiträge von“ verteilt lade_buchfelder eigens.
+_HAUPTROLLEN = ("A01", "B01", "A32")
+
+
+def _nebenrollen_saetze(product) -> list[str]:
+    """['Fotografien von Burkhard Riegels.', 'Übersetzt von Gregor Brand.']"""
+    saetze: dict[str, list[str]] = {}
+    for code, anfang in NEBENROLLEN.items():
+        for k in _kontributoren(product, code):
+            namen = saetze.setdefault(anfang, [])
+            if k["name"] not in namen:
+                namen.append(k["name"])
+    return [f"{anfang} {_join_und(namen)}." for anfang, namen in saetze.items()]
+
+
+def _unbekannte_rollen(product) -> list[str]:
+    """['Katrin Hopstock (B15)', …] — Rollen, die das Werkzeug nicht setzt."""
+    dd = product.find("descriptivedetail")
+    if dd is None:
+        return []
+    bekannt = set(_HAUPTROLLEN) | set(NEBENROLLEN)
+    offen = []
+    for c in dd.findall("contributor"):
+        for rolle in _rollen(c):
+            if rolle and rolle not in bekannt:
+                name = _txt(c.find("b047")) or _txt(c.find("b036")) or "?"
+                offen.append(f"{name} ({rolle})")
+    return offen
+
+
+def _von_dativ(koerperschaften: list[str], cfg: dict) -> tuple[str, list[str]]:
+    """('vom Psychiatrischen Zentrum …', [ungebeugte Namen]).
+
+    Artikel und Beugung stehen in koerperschaft_dativ; fehlt ein Name dort,
+    bleibt er ungebeugt und wird zurückgemeldet — geraten wird nicht.
+    „von dem“ zieht der Shop zu „vom“ zusammen (Spaziergang im Park).
+    """
+    dativ = cfg.get("koerperschaft_dativ", DEFAULT_CONFIG["koerperschaft_dativ"])
+    gebeugt, fehlend = [], []
+    for k in koerperschaften:
+        if k in dativ:
+            gebeugt.append(dativ[k])
+        else:
+            gebeugt.append(k)
+            fehlend.append(k)
+    text = "von " + _join_und(gebeugt)
+    if text.startswith("von dem "):
+        text = "vom " + text[len("von dem "):]
+    return text, fehlend
+
+
+def _format_zusatz(hoehe: float, breite: float) -> str:
+    """„im repräsentativen Großformat“ / „im handlichen Taschenformat“.
+
+    Vorgabe des Verlags (12.11.2026): höchstens 12,5 cm breit ->
+    Taschenformat, breiter als 17 ODER höher als 24 cm -> Großformat, alles
+    dazwischen ohne Zusatz. Beim Taschenformat zählt nur die Breite (PZN-
+    Führer, 12 x 22 cm: „Klappenbroschur im handl. Taschenformat“ im Shop).
+    Das „attraktive quadratische Format“ des Bestands schreibt der Verlag
+    nicht mehr — ein 21 x 21 ist jetzt Großformat. Gleiche Regel wie im
+    pi_bi_generator.
+
+    Das Taschenformat wird zuerst geprüft, sonst würde ein schmales, hohes
+    Buch (12 x 25) über seine Höhe zum Großformat.
+    """
+    if breite and breite <= 12.5:
+        return "im handlichen Taschenformat"
+    if breite > 17 or hoehe > 24:
+        return "im repräsentativen Großformat"
+    return ""
 
 
 _UMLAUTE = {"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss",
@@ -874,6 +989,42 @@ def lade_buchfelder(xml_pfad, cfg: dict | None = None) -> dict:
 
     herausgeber = _kontributoren(product, "B01")
     autoren = _kontributoren(product, "A01")
+    beitraeger = _namen(_kontributoren(product, "A32"))
+    hinweise: list[str] = [
+        f"{x} steht im VLB mit einer Rolle, die das Werkzeug nicht setzt — "
+        f"bitte von Hand in die Beschreibung." for x in _unbekannte_rollen(product)]
+
+    # Wer steht im Autorfeld und vorn in der Zitatzeile? Bisher immer die
+    # Herausgeber, und JEDER Autor (A01) wurde zum „Mit Beiträgen von“ — das
+    # passt nur zum Sammelband. Beim PZN-Führer (Autor A01 + Körperschaft
+    # B01) wurde so aus „Hansi Rau“ (so im Shop) „Psychiatrisches Zentrum
+    # Nordbaden (PZN) (Hrsg.)“ und „Mit Beiträgen von Hansi Rau.“
+    #
+    # Daher drei Fälle, wie im pi_bi_generator:
+    # * Personen als Herausgeber -> Sammelband: alle Herausgeber vorn
+    #   („(Hrsg.)“), die Autoren als „Mit Beiträgen von“.
+    # * sonst Autoren -> Autorenbuch: die Autoren vorn, eine herausgebende
+    #   Körperschaft als „Hrsg. vom …“ unter der Zitatzeile. Eine Reihenzeile
+    #   wie in PI/BI gibt es im Shop nicht.
+    # * nur Körperschaften -> sie vorn („(Hrsg.)“).
+    personen_hrsg = [k for k in herausgeber if not k.get("koerperschaft")]
+    koerperschaften = [k for k in herausgeber if k.get("koerperschaft")]
+    hrsg_satz = ""
+    if personen_hrsg or not autoren:
+        haupt_teile, haupt_ist_hrsg = herausgeber, bool(herausgeber)
+        beitraege = _namen(autoren) + beitraeger
+    else:
+        haupt_teile, haupt_ist_hrsg = autoren, False
+        beitraege = beitraeger
+        if koerperschaften:
+            von, fehlend = _von_dativ(_namen(koerperschaften), cfg)
+            hrsg_satz = f"Hrsg. {von}."
+            hinweise += [f"Körperschaft {k!r} steht nicht in koerperschaft_dativ "
+                         f"(config.json) — hinter „Hrsg. von“ fehlt die Beugung."
+                         for k in fehlend]
+    # „Hrsg. vom Nationalpark Schwarzwald. Fotografien von Burkhard Riegels.“
+    # — Körperschaft und weitere Beteiligte in einer Zeile, so im Shop.
+    weitere_zeile = " ".join(s for s in [hrsg_satz] + _nebenrollen_saetze(product) if s)
 
     seiten = _txt(dd.find("extent/b219")) if dd is not None else ""
     # "448 Seiten mit 390 Farb- und Schwarz-Weiß-Abbildungen, fester Einband."
@@ -941,6 +1092,8 @@ def lade_buchfelder(xml_pfad, cfg: dict | None = None) -> dict:
             elif feld != "gewicht_kg" and einheit == "mm":
                 w = w / 10.0                    # Shopware-Felder sind cm-Werte
             masse[feld] = w
+    format_zusatz = _format_zusatz(masse.get("hoehe_cm", 0.0),
+                                   masse.get("breite_cm", 0.0))
 
     cover_url = ""
     for sr in product.findall("collateraldetail/supportingresource"):
@@ -965,12 +1118,20 @@ def lade_buchfelder(xml_pfad, cfg: dict | None = None) -> dict:
         "herausgeber": _namen(herausgeber),
         "autoren_teile": autoren,          # inkl. Vor-/Nachname (für Autor-Link)
         "herausgeber_teile": herausgeber,
+        # Wer vorn steht (Autorfeld, Zitatzeile, Kategorie) — siehe oben
+        "haupt_teile": haupt_teile,
+        "haupt_ist_hrsg": haupt_ist_hrsg,
+        "hrsg_koerperschaften_teile": [] if haupt_ist_hrsg else koerperschaften,
+        "beitraege": beitraege,            # „Mit Beiträgen von …“
+        "weitere_zeile": weitere_zeile,
+        "hinweise": hinweise,
         "seiten": seiten,
         "abbildungen": abbildungen,
         "abbildungsart": abbildungsart,
         "schlagworte": schlagworte,
         "warengruppe": warengruppe,
         "einband": einband,
+        "format_zusatz": format_zusatz,    # „im handlichen Taschenformat“
         "verlag": verlag,
         "preis_brutto": preis_brutto,
         "waehrung": waehrung,
@@ -1181,16 +1342,21 @@ def baue_beschreibung(f: dict) -> str:
     if absaetze:
         bloecke.append("<br>\n<br>\n".join(absaetze))
 
-    # Mitautoren als eigener Absatz — die Herausgeber stehen in der Zitatzeile
-    if f.get("autoren"):
+    # Mitautoren eines Sammelbands als eigener Absatz — die Herausgeber
+    # stehen in der Zitatzeile. Bei Autorenbüchern ist das leer (siehe
+    # lade_buchfelder), dort steht der Autor selbst in der Zitatzeile.
+    if f.get("beitraege"):
         bloecke.append(html.escape(
-            "Mit Beiträgen von " + _join_und(f["autoren"]) + "."))
+            "Mit Beiträgen von " + _join_und(f["beitraege"]) + "."))
 
     zeilen: list[str] = []
 
-    # Zitatzeile: "Beitragende, Titel. Untertitel."
-    beitragende = f.get("herausgeber") or f.get("autoren") or []
-    zitat = ", ".join(beitragende)
+    # Zitatzeile: "Beitragende, Titel. Untertitel." Herausgeber mit Komma
+    # („Heiko Brohm, Harald Stockert, Die GBG …“), Autoren mit „und“
+    # („Bernd-Jürgen Seitz und Heiko Haumann, Die Landschaft …“) — beides so
+    # im Shop.
+    namen = _namen(f.get("haupt_teile") or [])
+    zitat = ", ".join(namen) if f.get("haupt_ist_hrsg") else _join_und(namen)
     if f.get("titel"):
         zitat = (zitat + ", " if zitat else "") + f["titel"] + "."
     if f.get("untertitel"):
@@ -1198,15 +1364,21 @@ def baue_beschreibung(f: dict) -> str:
     if zitat:
         zeilen.append(zitat)
 
+    # „Hrsg. vom Nationalpark Schwarzwald. Fotografien von Burkhard Riegels.“
+    if f.get("weitere_zeile"):
+        zeilen.append(f["weitere_zeile"])
+
     # Umfangzeile: "448 Seiten mit 390 Farb- und Schwarz-Weiß-Abbildungen,
-    # fester Einband." Ohne Abbildungsangabe fällt der mittlere Teil weg.
+    # fester Einband im repräsentativen Großformat." Ohne Abbildungsangabe
+    # fällt der mittlere Teil weg.
     umfang = ""
     if f.get("seiten"):
         umfang = f"{f['seiten']} Seiten"
         if f.get("abbildungen") and f.get("abbildungsart"):
             umfang += f" mit {f['abbildungen']} {f['abbildungsart']}"
-    if f.get("einband"):
-        umfang = (umfang + ", " if umfang else "") + f["einband"]
+    einband = " ".join(t for t in (f.get("einband"), f.get("format_zusatz")) if t)
+    if einband:
+        umfang = (umfang + ", " if umfang else "") + einband
     if umfang:
         zeilen.append(umfang + ".")
 
@@ -1257,17 +1429,18 @@ def baue_customfields(f: dict, cfg: dict) -> dict:
     if teile and schluessel.get("format"):
         cf[schluessel["format"]] = ", ".join(teile)
 
-    # Autor-Feld: die HERAUSGEBER (mit Link, " / "-getrennt, "(Hrsg.)") — so wie
-    # im Bestand. Die eigentlichen Autoren sind nur Mitautoren und gehören hier
-    # NICHT rein (die stehen in der Beschreibung). Ohne Herausgeber (rein
-    # autorschaftliches Buch) steht hier der/die Autor(en).
+    # Autor-Feld: wer vorn steht (siehe lade_buchfelder) — mit Link,
+    # " / "-getrennt, bei Herausgebern mit "(Hrsg.)". So im Bestand:
+    # „Brohm / Stockert (Hrsg.)“, „Mirjam Nast / Hubert Klausmann“, „Hansi
+    # Rau“. Die Mitautoren eines Sammelbands gehören hier NICHT rein (die
+    # stehen in der Beschreibung). Früher wurden Autoren mit Komma getrennt;
+    # die geprüften Bestandsprodukte (Nast/Klausmann, Faißt/Riegels) haben
+    # den Schrägstrich.
     basis = cfg.get("autoren_basis_url", DEFAULT_CONFIG["autoren_basis_url"])
-    if f.get("herausgeber_teile") and schluessel.get("autor_link"):
-        links = " / ".join(autor_link(k, basis) for k in f["herausgeber_teile"])
-        cf[schluessel["autor_link"]] = links + " (Hrsg.)"
-    elif f.get("autoren_teile") and schluessel.get("autor_link"):
-        cf[schluessel["autor_link"]] = ", ".join(
-            autor_link(k, basis) for k in f["autoren_teile"])
+    if f.get("haupt_teile") and schluessel.get("autor_link"):
+        links = " / ".join(autor_link(k, basis) for k in f["haupt_teile"])
+        cf[schluessel["autor_link"]] = (links + " (Hrsg.)"
+                                        if f.get("haupt_ist_hrsg") else links)
     return cf
 
 
@@ -1476,7 +1649,11 @@ def kategorie_vorschlaege(f: dict, suche, cfg: dict | None = None,
     Mehrdeutiges wird bewusst nicht geraten: passen mehrere Kategorien nur über
     den Nachnamen, wird keine vorgeschlagen.
     """
-    beteiligte = f.get("herausgeber_teile") or f.get("autoren_teile") or []
+    # Wer vorn steht, dazu die herausgebende Körperschaft eines Autorenbuchs
+    # — die wurde bisher vorgeschlagen (als vermeintlicher Herausgeber) und
+    # soll nicht still wegfallen, nur weil jetzt der Autor vorn steht.
+    beteiligte = ((f.get("haupt_teile") or [])
+                  + (f.get("hrsg_koerperschaften_teile") or []))
     treffer: list[dict] = []
     fehlend: list[str] = []
     gesehen: set[str] = set()

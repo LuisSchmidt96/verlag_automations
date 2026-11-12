@@ -771,6 +771,10 @@ class App(Tk):
         if self._kat_fehlend:
             zeilen.append("               ⚠ ohne eigene Kategorie: "
                           + ", ".join(self._kat_fehlend))
+        # Beteiligte, die das Werkzeug nicht setzen oder nicht beugen kann —
+        # sonst fehlen sie in der Beschreibung, ohne dass es einer merkt.
+        for hinweis in f.get("hinweise") or []:
+            zeilen.append(f"⚠ {hinweis}")
         zeilen.append("")
         if b.get("cover"):
             zeilen.append(f"Titelbild      {Path(b['cover']).name}")

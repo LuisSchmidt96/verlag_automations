@@ -45,6 +45,37 @@ Zwei Eigenheiten, die man sonst wieder „korrigiert“:
 * **Reihe und Band stehen nirgends** im Shop, auch nicht im Namen. Der
   Untertitel steht in der Zitatzeile und im Untertitelfeld.
 
+### Wer vorn steht — Autor oder Herausgeber
+
+Autorfeld (attr2), Zitatzeile und Kategorievorschlag hängen daran, wer das
+Buch „macht“. Früher galt: Herausgeber vorn, **jeder** Autor als „Mit
+Beiträgen von“ — das passt nur zum Sammelband. Bei einem Autorenbuch mit
+herausgebender Körperschaft (PZN-Führer) wurde so der Autor zum Beiträger und
+die Körperschaft zum Herausgeber. Jetzt, wie im `pi_bi_generator`:
+
+| Im VLB | Autorfeld | Zitatzeile / darunter |
+|--------|-----------|-----------------------|
+| Personen als Herausgeber (B01) | `Brohm / Stockert (Hrsg.)` | `Heiko Brohm, Harald Stockert, Titel.` · Autoren (A01) als „Mit Beiträgen von …“ |
+| Autoren (A01), keine Personen-Hrsg. | `Mirjam Nast / Hubert Klausmann` | `Bernd-Jürgen Seitz und Heiko Haumann, Titel.` · Körperschaft als `Hrsg. vom …` |
+| nur Körperschaft(en) | `Stiftung Geißstraße (Hrsg.)` | `Stiftung Geißstraße, Titel.` |
+
+Weitere Beteiligte stehen in derselben Zeile wie „Hrsg. vom …“ — so im Shop:
+`Hrsg. vom Nationalpark Schwarzwald. Fotografien von Burkhard Riegels.` Die
+Rollen und ihr Wortlaut stehen in `NEBENROLLEN` (Vorwort, Einführung,
+Einleitung, Texte, Fotografien, Illustrationen, Zeichnungen, Karten,
+Übersetzung, Nachwort). Eine Rolle, die dort fehlt, setzt das Werkzeug nicht,
+**meldet** sie aber in der Vorschau.
+
+`koerperschaft_dativ` in der `config.json` hält die Beugung hinter „Hrsg. von“
+(`"dem Psychiatrischen Zentrum Nordbaden (PZN)"`; „von dem“ wird zu „vom“). Fehlt
+ein Name, steht er ungebeugt da und die Vorschau sagt es. Dieselbe Tabelle
+steht im `pi_bi_generator` — ein Eintrag gehört in beide.
+
+Die Umfangzeile bekommt hinter dem Einband das Format: höchstens 12,5 cm breit
+→ „im handlichen Taschenformat“ (nur die Breite zählt), sonst breiter als 17
+**oder** höher als 24 cm → „im repräsentativen Großformat“. Das „attraktive
+quadratische Format“ des Bestands schreibt der Verlag nicht mehr.
+
 **Idempotent:** Die Produkt-ID wird fest aus der ISBN abgeleitet. Ein zweiter
 Lauf zum selben Buch **aktualisiert** das Produkt — es entsteht kein Duplikat.
 
